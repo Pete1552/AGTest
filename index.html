@@ -80,9 +80,18 @@
     border-radius: var(--radius);
     transition: background 90ms ease;
   }
-  .cell.filled { box-shadow: inset 0 -3px 0 rgba(0,0,0,0.25); }
+  .cell.filled {
+    box-shadow: inset 0 3px 0 rgba(255,255,255,0.16), inset 0 -3px 0 rgba(0,0,0,0.28);
+  }
   .cell.preview { outline: 2px dashed rgba(255,255,255,0.35); outline-offset: -3px; }
   .cell.preview-bad { outline: 2px dashed rgba(255,90,90,0.5); outline-offset: -3px; }
+  .cell.will-clear { box-shadow: inset 0 0 0 3px rgba(255,255,255,0.5); filter: brightness(1.15); }
+  .cell.pop-in { animation: popIn 190ms ease; }
+  @keyframes popIn {
+    0% { transform: scale(0.5); }
+    60% { transform: scale(1.1); }
+    100% { transform: scale(1); }
+  }
   .cell.clearing { animation: pop 220ms ease forwards; }
   @keyframes pop {
     0% { transform: scale(1); }
@@ -110,13 +119,17 @@
   }
   .piece:active { cursor: grabbing; }
   .piece.used { opacity: 0; pointer-events: none; }
-  .pcell { width: 20px; height: 20px; border-radius: 5px; box-shadow: inset 0 -2px 0 rgba(0,0,0,0.25); }
+  .piece.stuck { opacity: 0.3; filter: saturate(0.4); }
+  .pcell { width: 20px; height: 20px; border-radius: 5px;
+    box-shadow: inset 0 2px 0 rgba(255,255,255,0.16), inset 0 -2px 0 rgba(0,0,0,0.25); }
   .pcell.blank { background: transparent !important; box-shadow: none; }
   #drag-ghost {
     position: fixed; left: 0; top: 0; pointer-events: none; z-index: 50;
-    display: grid; gap: 4px; opacity: 0.92; transform: translate(-9999px,-9999px);
+    display: grid; gap: 4px; opacity: 0.95; transform: translate(-9999px,-9999px);
+    filter: drop-shadow(0 8px 14px rgba(0,0,0,0.4));
   }
-  #drag-ghost .gcell { border-radius: 8px; box-shadow: inset 0 -3px 0 rgba(0,0,0,0.25); }
+  #drag-ghost .gcell { border-radius: 8px;
+    box-shadow: inset 0 3px 0 rgba(255,255,255,0.18), inset 0 -3px 0 rgba(0,0,0,0.28); }
   .footer { margin-top: auto; padding-top: 18px; text-align: center; color: var(--muted); font-size: 12px; }
   .footer button {
     background: var(--grid); color: var(--ink); border: none; padding: 9px 16px;
@@ -136,7 +149,8 @@
   }
   .modal h2 { margin: 0 0 6px; font-size: 24px; }
   .modal p { color: var(--muted); margin: 0 0 18px; font-size: 14px; }
-  .modal .final { font-size: 40px; font-weight: 800; margin: 8px 0 4px; }
+  .modal .final { font-size: 40px; font-weight: 800; margin: 8px 0 0; }
+  .modal .final-best { color: var(--muted); font-size: 13px; margin: 2px 0 0; min-height: 16px; }
   .modal button {
     background: var(--accent); color: #06231e; border: none; padding: 12px 26px;
     border-radius: 999px; font-size: 15px; font-weight: 700; cursor: pointer; width: 100%;
@@ -205,6 +219,7 @@
   <div class="modal">
     <h2>No moves left</h2>
     <div class="final" id="final-score">0</div>
+    <div class="final-best" id="final-best"></div>
     <p id="final-msg">Nice run.</p>
     <button id="play-again">Play again</button>
     <button id="share" class="share">Share your score</button>
@@ -405,7 +420,8 @@
     tray.forEach((piece, idx) => {
       const { rows, cols } = shapeBounds(piece.shape);
       const el = document.createElement("div");
-      el.className = "piece" + (piece.used ? " used" : "");
+      const stuck = !piece.used && !canPlaceShapeAnywhere(piece.shape);
+      el.className = "piece" + (piece.used ? " used" : (stuck ? " stuck" : ""));
       el.style.gridTemplateColumns = `repeat(${cols}, 20px)`;
       el.style.gridTemplateRows = `repeat(${rows}, 20px)`;
       const filledSet = new Set(piece.shape.map(([r, c]) => r + "," + c));
@@ -435,26 +451,63 @@
     return true;
   }
 
+  function canPlaceShapeAnywhere(shape) {
+    for (let r = 0; r < SIZE; r++)
+      for (let c = 0; c < SIZE; c++)
+        if (canPlace(shape, r, c)) return true;
+    return false;
+  }
+
   function anyMoveAvailable() {
     for (const piece of tray) {
       if (piece.used) continue;
-      for (let r = 0; r < SIZE; r++)
-        for (let c = 0; c < SIZE; c++)
-          if (canPlace(piece.shape, r, c)) return true;
+      if (canPlaceShapeAnywhere(piece.shape)) return true;
     }
     return false;
+  }
+
+  // Which rows/cols would be full if this shape were placed at row,col.
+  function linesIfPlaced(shape, row, col) {
+    const added = new Set(shape.map(([dr, dc]) => (row + dr) + "," + (col + dc)));
+    const filled = (r, c) => board[r][c] || added.has(r + "," + c);
+    const rows = [], cols = [];
+    for (let r = 0; r < SIZE; r++) {
+      let f = true;
+      for (let c = 0; c < SIZE; c++) if (!filled(r, c)) { f = false; break; }
+      if (f) rows.push(r);
+    }
+    for (let c = 0; c < SIZE; c++) {
+      let f = true;
+      for (let r = 0; r < SIZE; r++) if (!filled(r, c)) { f = false; break; }
+      if (f) cols.push(c);
+    }
+    return { rows, cols };
   }
 
   function placePiece(idx, row, col) {
     const piece = tray[idx];
     if (piece.used || !canPlace(piece.shape, row, col)) return false;
-    for (const [dr, dc] of piece.shape) board[row + dr][col + dc] = piece.color;
+    const placed = [];
+    for (const [dr, dc] of piece.shape) {
+      board[row + dr][col + dc] = piece.color;
+      placed.push([row + dr, col + dc]);
+    }
     score += piece.shape.length;
     piece.used = true;
     sfxPlace();
     buzz(8);
 
     const cleared = clearLines();
+
+    // Pop-in animation for freshly placed cells that aren't being cleared.
+    placed.forEach(([r, c]) => {
+      const el = cellEls[r][c];
+      if (!el.classList.contains("clearing")) {
+        el.classList.add("pop-in");
+        setTimeout(() => el.classList.remove("pop-in"), 200);
+      }
+    });
+
     if (cleared > 0) {
       combo += 1;
       const lineBonus = cleared * 10 + (cleared - 1) * 10;
@@ -472,7 +525,13 @@
     else renderTray();
     renderBoard();
     updateScore();
-    if (!anyMoveAvailable()) gameOver();
+    // If lines are clearing, wait for the board to settle before judging game over,
+    // since the freed space may open up new moves.
+    if (cleared > 0) {
+      setTimeout(() => { if (!anyMoveAvailable()) gameOver(); }, 240);
+    } else if (!anyMoveAvailable()) {
+      gameOver();
+    }
     return true;
   }
 
@@ -505,13 +564,28 @@
         cellEls[r][c].classList.remove("clearing");
       });
       renderBoard();
+      renderTray(); // freed space may un-stick remaining pieces
     }, 220);
 
     return cleared;
   }
 
+  let shownScore = 0, scoreAnim = null;
+  function renderScoreNumber(target) {
+    if (scoreAnim) cancelAnimationFrame(scoreAnim);
+    const start = shownScore, t0 = performance.now(), dur = 280;
+    function step(now) {
+      const k = Math.min(1, (now - t0) / dur);
+      shownScore = Math.round(start + (target - start) * k);
+      scoreEl.textContent = shownScore;
+      if (k < 1) scoreAnim = requestAnimationFrame(step);
+      else { shownScore = target; scoreEl.textContent = target; }
+    }
+    scoreAnim = requestAnimationFrame(step);
+  }
+
   function updateScore() {
-    scoreEl.textContent = score;
+    renderScoreNumber(score);
     if (mode === "endless") {
       if (score > best) {
         best = score;
@@ -568,6 +642,8 @@
     }
 
     document.getElementById("final-score").textContent = score;
+    document.getElementById("final-best").textContent =
+      (mode === "daily") ? "Today's best · " + dailyData.best : "Best · " + best;
     let msg;
     if (newBest) msg = "New best! 🎉";
     else if (streakMsg) msg = streakMsg;
@@ -672,7 +748,7 @@
   function clearPreview() {
     for (let r = 0; r < SIZE; r++)
       for (let c = 0; c < SIZE; c++)
-        cellEls[r][c].classList.remove("preview", "preview-bad");
+        cellEls[r][c].classList.remove("preview", "preview-bad", "will-clear");
   }
 
   function onMove(e) {
@@ -686,6 +762,12 @@
       const r = row + dr, c = col + dc;
       if (r >= 0 && r < SIZE && c >= 0 && c < SIZE)
         cellEls[r][c].classList.add(ok ? "preview" : "preview-bad");
+    }
+    // Highlight any line that would clear if dropped here.
+    if (ok) {
+      const { rows, cols } = linesIfPlaced(drag.piece.shape, row, col);
+      rows.forEach(r => { for (let c = 0; c < SIZE; c++) cellEls[r][c].classList.add("will-clear"); });
+      cols.forEach(c => { for (let r = 0; r < SIZE; r++) cellEls[r][c].classList.add("will-clear"); });
     }
   }
 
@@ -711,6 +793,7 @@
     board = Array.from({ length: SIZE }, () => Array(SIZE).fill(null));
     score = 0;
     combo = 0;
+    shownScore = 0;
     buildBoard();
     renderBoard();
     refillTray();
