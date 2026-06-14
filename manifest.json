@@ -1,0 +1,13 @@
+{
+  "name": "Calm Blocks",
+  "short_name": "Calm Blocks",
+  "description": "A block puzzle with no ads, ever.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#11151c",
+  "theme_color": "#11151c",
+  "icons": [
+    { "src": "icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
