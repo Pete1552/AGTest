@@ -130,6 +130,26 @@
     border-radius: 999px; font-size: 15px; font-weight: 700; cursor: pointer; width: 100%;
   }
   .modal button:active { transform: translateY(1px); }
+  .modal .share {
+    background: var(--grid); color: var(--ink); margin-top: 10px;
+  }
+  .footer .controls { display: flex; gap: 10px; justify-content: center; margin-bottom: 12px; }
+  #mute { background: var(--grid); color: var(--ink); border: none; padding: 9px 14px;
+    border-radius: 999px; font-size: 14px; cursor: pointer; }
+  #mute:active { transform: translateY(1px); }
+  #fx-layer { position: absolute; inset: 0; pointer-events: none; z-index: 20; overflow: visible; }
+  .float-popup {
+    position: absolute; transform: translate(-50%, -50%);
+    font-weight: 800; color: #fff; text-shadow: 0 2px 8px rgba(0,0,0,0.5);
+    white-space: nowrap; animation: floatUp 850ms ease-out forwards;
+  }
+  .float-popup.big { font-size: 30px; }
+  .float-popup.combo { color: var(--accent); font-size: 22px; }
+  @keyframes floatUp {
+    0% { opacity: 0; transform: translate(-50%, -30%) scale(0.6); }
+    20% { opacity: 1; transform: translate(-50%, -55%) scale(1.05); }
+    100% { opacity: 0; transform: translate(-50%, -130%) scale(1); }
+  }
 </style>
 </head>
 <body>
@@ -150,11 +170,14 @@
     </div>
   </div>
 
-  <div id="board"></div>
+  <div id="board"><div id="fx-layer"></div></div>
   <div id="tray"></div>
 
   <div class="footer">
-    <button id="restart">New game</button>
+    <div class="controls">
+      <button id="restart">New game</button>
+      <button id="mute" aria-label="Toggle sound">🔊</button>
+    </div>
     <div>No ads. No pop-ups. No nags. Just the game.</div>
   </div>
 </div>
@@ -167,6 +190,7 @@
     <div class="final" id="final-score">0</div>
     <p id="final-msg">Nice run.</p>
     <button id="play-again">Play again</button>
+    <button id="share" class="share">Share your score</button>
   </div>
 </div>
 
@@ -205,19 +229,71 @@
   let board = [];           // SIZE x SIZE of color string or null
   let tray = [];            // {shape, color, used}
   let score = 0;
+  let combo = 0;            // consecutive placements that cleared lines
   let best = Number(localStorage.getItem("calmblocks_best") || 0);
+  let muted = localStorage.getItem("calmblocks_muted") === "1";
 
   const boardEl = document.getElementById("board");
+  const fxLayer = document.getElementById("fx-layer");
   const trayEl = document.getElementById("tray");
   const scoreEl = document.getElementById("score");
   const bestEl = document.getElementById("best");
   const ghost = document.getElementById("drag-ghost");
   const overlay = document.getElementById("overlay");
+  const muteBtn = document.getElementById("mute");
 
   let cellEls = [];
 
+  // ---- Sound (synthesized, no asset files) ----
+  let audioCtx = null;
+  function ensureAudio() {
+    if (!audioCtx) {
+      try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+      catch (e) { audioCtx = null; }
+    }
+    if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+  }
+  function tone(freq, dur, type, gain) {
+    if (muted || !audioCtx) return;
+    const osc = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    osc.type = type || "sine";
+    osc.frequency.value = freq;
+    g.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(gain || 0.12, audioCtx.currentTime + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + dur);
+    osc.connect(g); g.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + dur + 0.02);
+  }
+  function sfxPlace() { tone(220, 0.08, "triangle", 0.08); }
+  function sfxClear(level) {
+    const base = 520;
+    for (let i = 0; i < Math.min(level, 4); i++) {
+      setTimeout(() => tone(base + i * 140, 0.16, "sine", 0.12), i * 70);
+    }
+  }
+  function sfxGameOver() {
+    [330, 247, 196].forEach((f, i) => setTimeout(() => tone(f, 0.3, "sine", 0.1), i * 140));
+  }
+  function buzz(ms) {
+    if (!muted && navigator.vibrate) { try { navigator.vibrate(ms); } catch (e) {} }
+  }
+
+  function popup(text, cls, topPct) {
+    const el = document.createElement("div");
+    el.className = "float-popup" + (cls ? " " + cls : "");
+    el.textContent = text;
+    el.style.left = "50%";
+    el.style.top = (topPct || 44) + "%";
+    fxLayer.appendChild(el);
+    setTimeout(() => el.remove(), 900);
+  }
+
   function buildBoard() {
     boardEl.innerHTML = "";
+    boardEl.appendChild(fxLayer);
+    fxLayer.innerHTML = "";
     cellEls = [];
     for (let r = 0; r < SIZE; r++) {
       cellEls[r] = [];
@@ -315,7 +391,23 @@
     for (const [dr, dc] of piece.shape) board[row + dr][col + dc] = piece.color;
     score += piece.shape.length;
     piece.used = true;
-    clearLines();
+    sfxPlace();
+    buzz(8);
+
+    const cleared = clearLines();
+    if (cleared > 0) {
+      combo += 1;
+      const lineBonus = cleared * 10 + (cleared - 1) * 10;
+      const comboBonus = (combo - 1) * 15;
+      score += lineBonus + comboBonus;
+      sfxClear(cleared);
+      buzz(cleared > 1 ? [18, 40, 28] : 22);
+      popup("+" + (lineBonus + comboBonus), "big", 48);
+      if (combo > 1) popup("Combo x" + combo, "combo", 33);
+    } else {
+      combo = 0;
+    }
+
     if (tray.every(p => p.used)) refillTray();
     else renderTray();
     renderBoard();
@@ -324,6 +416,7 @@
     return true;
   }
 
+  // Clears any full rows/columns, animates them, and returns the number cleared.
   function clearLines() {
     const fullRows = [], fullCols = [];
     for (let r = 0; r < SIZE; r++)
@@ -334,7 +427,7 @@
       if (full) fullCols.push(c);
     }
     const cleared = fullRows.length + fullCols.length;
-    if (cleared === 0) return;
+    if (cleared === 0) return 0;
 
     const toClear = new Set();
     fullRows.forEach(r => { for (let c = 0; c < SIZE; c++) toClear.add(r + "," + c); });
@@ -345,9 +438,6 @@
       cellEls[r][c].classList.add("clearing");
     });
 
-    // Bonus scoring: more lines at once = more points.
-    score += cleared * 10 + (cleared - 1) * 10;
-
     setTimeout(() => {
       toClear.forEach(key => {
         const [r, c] = key.split(",").map(Number);
@@ -356,6 +446,8 @@
       });
       renderBoard();
     }, 220);
+
+    return cleared;
   }
 
   function updateScore() {
@@ -368,10 +460,31 @@
   }
 
   function gameOver() {
+    combo = 0;
+    sfxGameOver();
+    buzz([30, 60, 40]);
     document.getElementById("final-score").textContent = score;
     const msgs = ["Nice run.", "Clean game.", "Well played.", "No ads in sight."];
     document.getElementById("final-msg").textContent = msgs[Math.floor(Math.random() * msgs.length)];
     overlay.classList.add("show");
+  }
+
+  async function shareScore() {
+    const text = "I scored " + score + " on Calm Blocks — a block puzzle with no ads. Try it:";
+    const url = "https://pete1552.github.io/AGTest/";
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: "Calm Blocks", text, url });
+        return;
+      }
+    } catch (e) { return; }
+    try {
+      await navigator.clipboard.writeText(text + " " + url);
+      const btn = document.getElementById("share");
+      const old = btn.textContent;
+      btn.textContent = "Copied!";
+      setTimeout(() => { btn.textContent = old; }, 1500);
+    } catch (e) {}
   }
 
   // ---- Drag & drop ----
@@ -382,6 +495,7 @@
       const piece = tray[idx];
       if (piece.used) return;
       e.preventDefault();
+      ensureAudio();
       const { rows, cols } = shapeBounds(piece.shape);
       drag = { idx, piece, rows, cols, lastValid: null };
       buildGhost(piece);
@@ -477,6 +591,7 @@
   function newGame() {
     board = Array.from({ length: SIZE }, () => Array(SIZE).fill(null));
     score = 0;
+    combo = 0;
     buildBoard();
     renderBoard();
     refillTray();
@@ -484,9 +599,19 @@
     overlay.classList.remove("show");
   }
 
+  function updateMuteBtn() { muteBtn.textContent = muted ? "🔇" : "🔊"; }
+
+  muteBtn.addEventListener("click", () => {
+    muted = !muted;
+    localStorage.setItem("calmblocks_muted", muted ? "1" : "0");
+    updateMuteBtn();
+    if (!muted) { ensureAudio(); sfxPlace(); }
+  });
   document.getElementById("restart").addEventListener("click", newGame);
   document.getElementById("play-again").addEventListener("click", newGame);
+  document.getElementById("share").addEventListener("click", shareScore);
   bestEl.textContent = best;
+  updateMuteBtn();
   newGame();
 })();
 </script>
