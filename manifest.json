@@ -1,6 +1,6 @@
 {
-  "name": "Calm Blocks",
-  "short_name": "Calm Blocks",
+  "name": "Tranquil Blocks",
+  "short_name": "Tranquil",
   "description": "A block puzzle with no ads, ever.",
   "start_url": "./index.html",
   "display": "standalone",

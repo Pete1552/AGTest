@@ -1,4 +1,4 @@
-# Calm Blocks
+# Tranquil Blocks
 
 A clean, ad-free take on the classic block-puzzle game (the "wood block" / block-blast
 style that's everywhere on mobile — but without the constant ads and pop-ups).

@@ -7,10 +7,10 @@
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-<meta name="apple-mobile-web-app-title" content="Calm Blocks" />
+<meta name="apple-mobile-web-app-title" content="Tranquil" />
 <link rel="apple-touch-icon" href="icon.png" />
 <link rel="manifest" href="manifest.json" />
-<title>Calm Blocks — a block puzzle with no ads, ever</title>
+<title>Tranquil Blocks — a block puzzle with no ads, ever</title>
 <style>
   :root {
     --bg: #11151c;
@@ -155,7 +155,7 @@
 <body>
 <div class="wrap">
   <header>
-    <h1>Calm Blocks</h1>
+    <h1>Tranquil Blocks</h1>
     <p class="tagline">A block puzzle that <span class="no-ads">never interrupts you</span>.</p>
   </header>
 
@@ -230,8 +230,8 @@
   let tray = [];            // {shape, color, used}
   let score = 0;
   let combo = 0;            // consecutive placements that cleared lines
-  let best = Number(localStorage.getItem("calmblocks_best") || 0);
-  let muted = localStorage.getItem("calmblocks_muted") === "1";
+  let best = Number(localStorage.getItem("tranquilblocks_best") || 0);
+  let muted = localStorage.getItem("tranquilblocks_muted") === "1";
 
   const boardEl = document.getElementById("board");
   const fxLayer = document.getElementById("fx-layer");
@@ -454,7 +454,7 @@
     scoreEl.textContent = score;
     if (score > best) {
       best = score;
-      localStorage.setItem("calmblocks_best", String(best));
+      localStorage.setItem("tranquilblocks_best", String(best));
     }
     bestEl.textContent = best;
   }
@@ -470,11 +470,11 @@
   }
 
   async function shareScore() {
-    const text = "I scored " + score + " on Calm Blocks — a block puzzle with no ads. Try it:";
+    const text = "I scored " + score + " on Tranquil Blocks — a block puzzle with no ads. Try it:";
     const url = "https://pete1552.github.io/AGTest/";
     try {
       if (navigator.share) {
-        await navigator.share({ title: "Calm Blocks", text, url });
+        await navigator.share({ title: "Tranquil Blocks", text, url });
         return;
       }
     } catch (e) { return; }
@@ -603,7 +603,7 @@
 
   muteBtn.addEventListener("click", () => {
     muted = !muted;
-    localStorage.setItem("calmblocks_muted", muted ? "1" : "0");
+    localStorage.setItem("tranquilblocks_muted", muted ? "1" : "0");
     updateMuteBtn();
     if (!muted) { ensureAudio(); sfxPlace(); }
   });
