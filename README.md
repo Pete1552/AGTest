@@ -33,3 +33,5 @@ models:
 - Daily challenge / shareable score
 - Package for the App Store / Play Store
 - Light, tasteful monetization per the model above
+
+<!-- public deploy -->
