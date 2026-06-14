@@ -752,6 +752,8 @@
 
   // ---- Drag & drop ----
   let drag = null;
+  const LIFT = 52;       // px the piece floats above the finger
+  const SNAP = 1;        // cell radius the drop will forgive / snap within
 
   function attachDrag(el, idx) {
     el.addEventListener("pointerdown", (e) => {
@@ -803,7 +805,7 @@
     const w = drag.cols * cell + (drag.cols - 1) * 4;
     const h = drag.rows * cell + (drag.rows - 1) * 4;
     // Float the piece a bit above the finger so it's visible on touch.
-    ghost.style.transform = `translate(${x - w / 2}px, ${y - h / 2 - 44}px)`;
+    ghost.style.transform = `translate(${x - w / 2}px, ${y - h / 2 - LIFT}px)`;
   }
 
   function boardAnchorFrom(x, y) {
@@ -812,12 +814,29 @@
     const cell = (rect.width - pad * 2 - gap * (SIZE - 1)) / SIZE;
     const step = cell + gap;
     // Pointer is offset upward (matching the ghost lift) for placement intent.
-    const py = y - 44;
+    const py = y - LIFT;
     const relX = x - rect.left - pad;
     const relY = py - rect.top - pad;
-    const centerCol = relX / step - drag.cols / 2 + 0.5;
-    const centerRow = relY / step - drag.rows / 2 + 0.5;
-    return { row: Math.round(centerRow), col: Math.round(centerCol) };
+    const fc = relX / step - drag.cols / 2 + 0.5;
+    const fr = relY / step - drag.rows / 2 + 0.5;
+    return { fr, fc };
+  }
+
+  // Find the nearest spot the piece actually fits, within a tolerance of a few
+  // cells, so a slightly-off drop still lands where the player intended.
+  function bestAnchor(shape, fr, fc) {
+    const baseR = Math.round(fr), baseC = Math.round(fc);
+    let best = null, bestD = Infinity;
+    for (let dr = -SNAP; dr <= SNAP; dr++) {
+      for (let dc = -SNAP; dc <= SNAP; dc++) {
+        const r = baseR + dr, c = baseC + dc;
+        if (canPlace(shape, r, c)) {
+          const d = (r - fr) * (r - fr) + (c - fc) * (c - fc);
+          if (d < bestD) { bestD = d; best = { row: r, col: c }; }
+        }
+      }
+    }
+    return best;
   }
 
   function clearPreview() {
@@ -829,10 +848,13 @@
   function onMove(e) {
     if (!drag) return;
     moveGhost(e.clientX, e.clientY);
-    const { row, col } = boardAnchorFrom(e.clientX, e.clientY);
+    const { fr, fc } = boardAnchorFrom(e.clientX, e.clientY);
     clearPreview();
-    const ok = canPlace(drag.piece.shape, row, col);
-    drag.lastValid = ok ? { row, col } : null;
+    const anchor = bestAnchor(drag.piece.shape, fr, fc);
+    drag.lastValid = anchor;
+    const row = anchor ? anchor.row : Math.round(fr);
+    const col = anchor ? anchor.col : Math.round(fc);
+    const ok = !!anchor;
     for (const [dr, dc] of drag.piece.shape) {
       const r = row + dr, c = col + dc;
       if (r >= 0 && r < SIZE && c >= 0 && c < SIZE)
