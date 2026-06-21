@@ -286,7 +286,8 @@
     // cost to buy the 2nd..5th machine / warehouse (index 0 = the 2nd one)
     MACHINE_COSTS: [6, 9, 12, 15],
     WAREHOUSE_COSTS: [5, 8, 11, 14],
-    PRICE_MIN: 1, PRICE_MAX: 4,  // factory-store price range
+    PRICE_MIN: 1, PRICE_MAX: 4,  // factory-store price range (producer sets)
+    HARBOUR_PRICE_MIN: 2, HARBOUR_PRICE_MAX: 6, // harbour-store resale range (buyer sets)
     UNION_FEE: 1,                // paid to right-hand neighbour, per container produced
     LOAN_AMOUNT: 10,
     LOAN_INTEREST: 1,
@@ -337,9 +338,9 @@
       cash: CFG.START_CASH,
       machines: [startColor],          // colours of machines owned
       warehouses: CFG.START_WAREHOUSES,
-      factory: [],                     // [{color, price}]  goods produced, for sale to others
-      harbour: [],                     // [color]           goods bought from others, staging
-      ship: [],                        // [color]           loaded, awaiting a voyage
+      factory: [],                     // [{color, price}]  produced goods (price 1-4), sold to rivals -> their harbour
+      harbour: [],                     // [{color, price}]  goods bought from rivals' factories (price 2-6), sold to rivals -> their ship
+      ship: [],                        // [color]           goods bought from rivals' harbours, awaiting a voyage
       island: [],                      // [color]           delivered, scored at end
       loans: 0,
       valueCard: null,                 // {color: value}
@@ -510,45 +511,74 @@
     logMsg(p.name + " builds a warehouse (-" + cost + ").");
   }
 
-  // BUY CONTAINERS (from another player's factory store) --------------
-  function sellersFor(p) {
+  // BUYING — you may never buy from your own dock. Two purchase routes:
+  //   (A) a rival's FACTORY store  -> your HARBOUR  (you set a 2-6 resale price)
+  //   (B) a rival's HARBOUR store  -> your SHIP
+  function minPrice(items) {
+    return items.length ? Math.min.apply(null, items.map(function (f) { return f.price; })) : Infinity;
+  }
+  function factorySellersFor(p) {
     return G.players.filter(function (o) { return o.id !== p.id && o.factory.length > 0; });
   }
-  function canBuy(p) {
-    return harbourCap(p) - p.harbour.length > 0 && sellersFor(p).length > 0 &&
-      p.cash >= Math.min.apply(null, sellersFor(p).map(function (s) {
-        return Math.min.apply(null, s.factory.map(function (f) { return f.price; }));
-      }));
+  function harbourSellersFor(p) {
+    return G.players.filter(function (o) { return o.id !== p.id && o.harbour.length > 0; });
   }
-  // picks: array of {sellerId, color, price} entries to buy
-  function executeBuy(p, picks) {
+  function cheapestFrom(sellers, key) {
+    return Math.min.apply(null, sellers.map(function (s) { return minPrice(s[key]); }));
+  }
+
+  // (A) buy from rivals' factory stores into your harbour, at a resale price you choose
+  function canBuyToHarbour(p) {
+    var sellers = factorySellersFor(p);
+    return harbourCap(p) - p.harbour.length > 0 && sellers.length > 0 &&
+      p.cash >= cheapestFrom(sellers, "factory");
+  }
+  // picks: [{sellerId, color, price}] referencing factory items; resale = chosen 2-6 price
+  function executeBuyToHarbour(p, picks, resale) {
     var spent = 0, byseller = {};
     picks.forEach(function (pk) {
       var seller = G.players[pk.sellerId];
-      // remove one matching item from seller.factory
       for (var i = 0; i < seller.factory.length; i++) {
         if (seller.factory[i].color === pk.color && seller.factory[i].price === pk.price) {
           seller.factory.splice(i, 1); break;
         }
       }
-      p.harbour.push(pk.color);
+      p.harbour.push({ color: pk.color, price: resale });
       p.cash -= pk.price; seller.cash += pk.price; spent += pk.price;
       byseller[seller.id] = (byseller[seller.id] || 0) + 1;
     });
     var who = Object.keys(byseller).map(function (id) {
       return byseller[id] + " from " + G.players[id].name;
     }).join(", ");
-    logMsg(p.name + " buys " + picks.length + " container(s) [" + who + "] for " + spent + ".");
+    logMsg(p.name + " buys " + picks.length + " into harbour [" + who + "] for " + spent +
+      ", reselling @ " + resale + ".");
   }
 
-  // LOAD SHIP (harbour -> ship) --------------------------------------
-  function canLoad(p) { return p.harbour.length > 0 && p.ship.length < CFG.SHIP_CAP; }
-  function loadShip(p, colors) {
-    colors.forEach(function (c) {
-      var i = p.harbour.indexOf(c);
-      if (i >= 0 && p.ship.length < CFG.SHIP_CAP) { p.harbour.splice(i, 1); p.ship.push(c); }
+  // (B) buy from rivals' harbour stores directly onto your ship
+  function canBuyToShip(p) {
+    var sellers = harbourSellersFor(p);
+    return p.ship.length < CFG.SHIP_CAP && sellers.length > 0 &&
+      p.cash >= cheapestFrom(sellers, "harbour");
+  }
+  // picks: [{sellerId, color, price}] referencing harbour items
+  function executeBuyToShip(p, picks) {
+    var spent = 0, byseller = {};
+    picks.forEach(function (pk) {
+      if (p.ship.length >= CFG.SHIP_CAP) return;
+      var seller = G.players[pk.sellerId];
+      for (var i = 0; i < seller.harbour.length; i++) {
+        if (seller.harbour[i].color === pk.color && seller.harbour[i].price === pk.price) {
+          seller.harbour.splice(i, 1); break;
+        }
+      }
+      p.ship.push(pk.color);
+      p.cash -= pk.price; seller.cash += pk.price; spent += pk.price;
+      byseller[seller.id] = (byseller[seller.id] || 0) + 1;
     });
-    logMsg(p.name + " loads " + colors.length + " container(s) onto the ship.");
+    var who = Object.keys(byseller).map(function (id) {
+      return byseller[id] + " from " + G.players[id].name;
+    }).join(", ");
+    logMsg(p.name + " loads " + picks.length + " onto the ship [" + who + "] for " + spent + ".");
   }
 
   // LOANS (free, not an action) --------------------------------------
@@ -723,38 +753,30 @@
 
   // returns true if an action was taken
   function aiChooseAction(p) {
-    // 0. opportunistic loan if cash is very tight and useful buys exist
-    // 1. If ship is full enough, or end is near, sail.
+    // 1. If the ship is worth sailing, sail it to the island.
     var shipWorth = sum(p.ship, function (c) { return aiColorWorth(p, c); });
     if (p.ship.length >= 4 || (p.ship.length >= 2 && (G.endTriggered || shipWorth >= 12))) {
       startVoyage(p);
       return true; // voyage handles end of turn
     }
-    // 2. Load ship if we have harbour goods and ship room.
-    if (canLoad(p) && p.ship.length < CFG.SHIP_CAP) {
-      var room = CFG.SHIP_CAP - p.ship.length;
-      // load the most valuable harbour goods first
-      var order = p.harbour.slice().sort(function (a, b) { return aiColorWorth(p, b) - aiColorWorth(p, a); });
-      var toLoad = order.slice(0, room);
-      if (toLoad.length >= Math.min(room, 2) || p.harbour.length >= harbourCap(p) - 1 || G.endTriggered) {
-        loadShip(p, toLoad);
-        spendAction(); return true;
-      }
-    }
-    // 3. Buy cheap containers we value, into the harbour.
-    var buy = aiPlanBuy(p);
-    if (buy && buy.length) {
-      executeBuy(p, buy);
+    // 2. Fill the ship by buying from rivals' harbours (the only way to load a ship).
+    var shipBuy = aiPlanBuyToShip(p);
+    if (shipBuy && shipBuy.length) {
+      executeBuyToShip(p, shipBuy);
       spendAction(); return true;
     }
-    // 4. Produce, to earn from others buying our goods.
+    // 3. Stock our harbour for resale: buy cheap rival production, mark it up.
+    var harbourBuy = aiPlanBuyToHarbour(p);
+    if (harbourBuy && harbourBuy.picks.length) {
+      executeBuyToHarbour(p, harbourBuy.picks, harbourBuy.resale);
+      spendAction(); return true;
+    }
+    // 4. Produce, to earn when rivals buy our goods.
     if (canProduce(p)) {
-      // price: aim mid-low so rivals actually buy; a little higher if supply scarce
-      var price = 2;
-      doProduce(p, price);
+      doProduce(p, 2);
       spendAction(); return true;
     }
-    // 5. Expand: warehouse if our harbour is the bottleneck, else a machine.
+    // 5. Expand: warehouse if our harbour is the bottleneck, else an extra machine.
     if (canBuildWarehouse(p) && p.harbour.length >= harbourCap(p) && p.cash >= nextWarehouseCost(p) + 4) {
       buildWarehouse(p); spendAction(); return true;
     }
@@ -764,30 +786,55 @@
       buildMachine(p, avail[Math.floor(Math.random() * avail.length)]);
       spendAction(); return true;
     }
-    // 6. As a fallback, if we have any harbour goods, load them; else produce even at a loss-leader.
-    if (canLoad(p)) { loadShip(p, p.harbour.slice(0, CFG.SHIP_CAP - p.ship.length)); spendAction(); return true; }
+    // 6. Fallbacks: take a slim ship deal, or produce at a loss-leader to keep goods flowing.
+    if (canBuyToShip(p)) { var any = aiPlanBuyToShip(p, true); if (any.length) { executeBuyToShip(p, any); spendAction(); return true; } }
     if (canProduce(p)) { doProduce(p, 1); spendAction(); return true; }
     return false;
   }
 
-  function aiPlanBuy(p) {
-    var room = harbourCap(p) - p.harbour.length;
-    if (room <= 0) return null;
-    // gather all purchasable items, cheapest & most-valuable first
+  // Plan purchases from rivals' HARBOUR stores onto our ship.
+  function aiPlanBuyToShip(p, loose) {
+    var room = CFG.SHIP_CAP - p.ship.length;
+    if (room <= 0) return [];
     var items = [];
-    sellersFor(p).forEach(function (s) {
-      s.factory.forEach(function (f) {
-        items.push({ sellerId: s.id, color: f.color, price: f.price, worth: aiColorWorth(p, f.color) });
+    harbourSellersFor(p).forEach(function (s) {
+      s.harbour.forEach(function (h) {
+        items.push({ sellerId: s.id, color: h.color, price: h.price,
+          worth: aiColorWorth(p, h.color) + 3 }); // +3: containers on the ship are worth carrying
       });
     });
-    // good deal = worth (island ~value) minus price is positive-ish; harbour also gives +2 later
-    items = items.filter(function (it) { return it.worth + 2 - it.price >= 1; });
+    // a deal is worth it if the eventual value exceeds the price (loose mode just wants cargo)
+    items = items.filter(function (it) { return loose ? it.price <= p.cash : (it.worth - it.price) >= 1; });
     items.sort(function (a, b) { return (b.worth - b.price) - (a.worth - a.price); });
     var picks = [], budget = p.cash;
     for (var i = 0; i < items.length && picks.length < room; i++) {
       if (budget >= items[i].price) { picks.push(items[i]); budget -= items[i].price; }
     }
-    return picks.length ? picks : null;
+    return picks;
+  }
+
+  // Plan purchases from rivals' FACTORY stores into our harbour, choosing a resale markup.
+  function aiPlanBuyToHarbour(p) {
+    var room = harbourCap(p) - p.harbour.length;
+    if (room <= 0) return null;
+    var items = [];
+    factorySellersFor(p).forEach(function (s) {
+      s.factory.forEach(function (f) {
+        items.push({ sellerId: s.id, color: f.color, price: f.price });
+      });
+    });
+    // only speculate on cheap goods we can resell at a profit
+    items = items.filter(function (it) { return it.price <= 2 && p.cash >= it.price; });
+    items.sort(function (a, b) { return a.price - b.price; });
+    var picks = [], budget = p.cash;
+    for (var i = 0; i < items.length && picks.length < room; i++) {
+      if (budget >= items[i].price + 2) { picks.push(items[i]); budget -= items[i].price; }
+    }
+    if (!picks.length) return null;
+    // resale price: a markup over what we paid, clamped to the legal 2-6 band
+    var paidMax = Math.max.apply(null, picks.map(function (x) { return x.price; }));
+    var resale = Math.min(CFG.HARBOUR_PRICE_MAX, Math.max(CFG.HARBOUR_PRICE_MIN, paidMax + 2));
+    return { picks: picks, resale: resale };
   }
 
   function aiBid(p, lot) {
@@ -888,9 +935,9 @@
       seat.appendChild(mrow);
 
       seat.appendChild(zoneRow("Factory store (" + p.factory.length + "/" + factoryCap(p) + ")",
-        factoryChips(p.factory), "for sale to rivals"));
+        factoryChips(p.factory), "sell to rivals → harbour"));
       seat.appendChild(zoneRow("Harbour store (" + p.harbour.length + "/" + harbourCap(p) + ")",
-        zoneChips(p.harbour), "+2 ea"));
+        factoryChips(p.harbour), "sell to rivals → ship · +2 ea"));
       seat.appendChild(zoneRow("Ship (" + p.ship.length + "/" + CFG.SHIP_CAP + ")",
         zoneChips(p.ship), "+3 ea"));
       seat.appendChild(zoneRow("Island (" + p.island.length + ")", zoneChips(p.island), "scored"));
@@ -937,8 +984,8 @@
     }
 
     bar.appendChild(actBtn("Produce", canProduce(p), function () { openProduce(p); }, "primary"));
-    bar.appendChild(actBtn("Buy goods", canBuy(p), function () { openBuy(p); }));
-    bar.appendChild(actBtn("Load ship", canLoad(p), function () { openLoad(p); }));
+    bar.appendChild(actBtn("Buy → harbour", canBuyToHarbour(p), function () { openBuyToHarbour(p); }));
+    bar.appendChild(actBtn("Buy → ship", canBuyToShip(p), function () { openBuyToShip(p); }));
     bar.appendChild(actBtn("Sail to island ⛴", p.ship.length > 0, function () { confirmSail(p); }));
     bar.appendChild(actBtn("Build", canBuildMachine(p) || canBuildWarehouse(p), function () { openBuild(p); }));
 
@@ -1022,15 +1069,12 @@
     });
   }
 
-  // ---- Buy modal ----
-  function openBuy(p) {
-    var room = harbourCap(p) - p.harbour.length;
-    var sellers = sellersFor(p);
-    // build a flat list of buyable groups
+  // shared helper: collapse a list of {color,price} across sellers into buyable groups
+  function buyableGroups(sellers, key) {
     var groups = [];
     sellers.forEach(function (s) {
       var g = {};
-      s.factory.forEach(function (f) {
+      s[key].forEach(function (f) {
         var k = f.color + "@" + f.price;
         g[k] = g[k] || { sellerId: s.id, sellerName: s.name, color: f.color, price: f.price, avail: 0 };
         g[k].avail++;
@@ -1038,46 +1082,63 @@
       Object.keys(g).forEach(function (k) { groups.push(g[k]); });
     });
     groups.sort(function (a, b) { return a.price - b.price || a.sellerName.localeCompare(b.sellerName); });
+    return groups;
+  }
 
-    var rows = groups.map(function (g, idx) {
-      return '<div class="row" data-i="' + idx + '">' +
-        '<div>' + chipHTML(g.color, true) + '</div>' +
-        '<div class="grow"><b>' + g.color + '</b> @ <span class="mono">' + g.price + '</span> ' +
-        '<span class="hint">from ' + g.sellerName + ' (' + g.avail + ' avail)</span></div>' +
-        '<div class="stepper"><button data-dec="' + idx + '">−</button>' +
-        '<span class="v" id="q' + idx + '">0</span><button data-inc="' + idx + '">+</button></div>' +
-      '</div>';
-    }).join("");
+  function buyGroupRow(g, idx) {
+    return '<div class="row">' +
+      '<div>' + chipHTML(g.color, true) + '</div>' +
+      '<div class="grow"><b>' + g.color + '</b> @ <span class="mono">' + g.price + '</span> ' +
+      '<span class="hint">from ' + g.sellerName + ' (' + g.avail + ' avail)</span></div>' +
+      '<div class="stepper"><button data-dec="' + idx + '">−</button>' +
+      '<span class="v" id="q' + idx + '">0</span><button data-inc="' + idx + '">+</button></div>' +
+    '</div>';
+  }
 
+  // ---- Buy → harbour (from rivals' factory stores; you set a resale price) ----
+  function openBuyToHarbour(p) {
+    var room = harbourCap(p) - p.harbour.length;
+    var groups = buyableGroups(factorySellersFor(p), "factory");
+    var rows = groups.map(buyGroupRow).join("");
+    var prices = "";
+    for (var v = CFG.HARBOUR_PRICE_MIN; v <= CFG.HARBOUR_PRICE_MAX; v++) {
+      prices += '<button data-p="' + v + '"' + (v === 4 ? ' class="sel"' : "") + ">" + v + "</button>";
+    }
     openModal(
-      '<div class="m-head"><h2>Buy containers</h2><p>Buy from rivals’ factory stores into your harbour. ' +
-        'Harbour space: <b id="room">' + room + '</b> · Cash: <b class="money">' + p.cash + '</b></p></div>' +
-      '<div class="m-body">' + (groups.length ? rows : '<p class="hint">No one has goods for sale.</p>') +
-        '<div class="row"><div class="grow">Total</div><div class="totals money" id="btot">0</div></div>' +
+      '<div class="m-head"><h2>Buy → harbour</h2><p>Buy rivals’ production into your harbour, then resell it to ' +
+        'other shippers. Harbour space: <b id="room">' + room + '</b> · Cash: <b class="money">' + p.cash + '</b></p></div>' +
+      '<div class="m-body">' + (groups.length ? rows : '<p class="hint">No rival has production for sale.</p>') +
+        '<div class="row"><div class="grow">Your resale price (rivals buy from you at this)</div>' +
+          '<div class="price-pick" id="pp">' + prices + '</div></div>' +
+        '<div class="row"><div class="grow">Total cost</div><div class="totals money" id="btot">0</div></div>' +
       '</div>' +
       '<div class="m-foot"><button class="btn ghost" id="m-cancel">Cancel</button>' +
         '<button class="btn primary" id="m-ok" disabled>Buy</button></div>'
     );
-
     var qty = groups.map(function () { return 0; });
+    var resale = 4;
     function refresh() {
       var picked = sum(qty), cost = 0;
       groups.forEach(function (g, i) { cost += qty[i] * g.price; });
       $("btot").textContent = cost;
       $("room").textContent = room - picked;
-      var ok = picked > 0 && picked <= room && cost <= p.cash;
-      $("m-ok").disabled = !ok;
+      $("m-ok").disabled = !(picked > 0 && picked <= room && cost <= p.cash);
     }
+    $("pp").addEventListener("click", function (e) {
+      if (e.target.dataset.p) {
+        resale = +e.target.dataset.p;
+        Array.prototype.forEach.call($("pp").children, function (b) { b.classList.toggle("sel", +b.dataset.p === resale); });
+      }
+    });
     $("modal").addEventListener("click", function (e) {
       var inc = e.target.dataset.inc, dec = e.target.dataset.dec;
-      if (inc != null) {
-        var i = +inc, picked = sum(qty);
-        if (qty[i] < groups[i].avail && picked < room) {
-          // also check affordability
-          var cost = 0; groups.forEach(function (g, k) { cost += qty[k] * g.price; });
-          if (cost + groups[i].price <= p.cash) { qty[i]++; $("q" + i).textContent = qty[i]; refresh(); }
+      if (inc != null && groups[+inc]) {
+        var i = +inc, picked = sum(qty), cost = 0;
+        groups.forEach(function (g, k) { cost += qty[k] * g.price; });
+        if (qty[i] < groups[i].avail && picked < room && cost + groups[i].price <= p.cash) {
+          qty[i]++; $("q" + i).textContent = qty[i]; refresh();
         }
-      } else if (dec != null) {
+      } else if (dec != null && groups[+dec]) {
         var j = +dec; if (qty[j] > 0) { qty[j]--; $("q" + j).textContent = qty[j]; refresh(); }
       }
     });
@@ -1088,51 +1149,52 @@
         for (var k = 0; k < qty[i]; k++) picks.push({ sellerId: g.sellerId, color: g.color, price: g.price });
       });
       closeModal();
-      if (picks.length) { executeBuy(p, picks); spendAction(); }
+      if (picks.length) { executeBuyToHarbour(p, picks, resale); spendAction(); }
     });
   }
 
-  // ---- Load modal ----
-  function openLoad(p) {
+  // ---- Buy → ship (from rivals' harbour stores) ----
+  function openBuyToShip(p) {
     var room = CFG.SHIP_CAP - p.ship.length;
-    var counts = countBy(p.harbour);
-    var colors = CFG.COLORS.filter(function (c) { return counts[c]; });
-    var rows = colors.map(function (c, idx) {
-      return '<div class="row">' +
-        '<div>' + chipHTML(c, true) + '</div>' +
-        '<div class="grow"><b>' + c + '</b> <span class="hint">(' + counts[c] + ' in harbour)</span></div>' +
-        '<div class="stepper"><button data-dec="' + c + '">−</button>' +
-        '<span class="v" id="lq_' + c + '">0</span><button data-inc="' + c + '">+</button></div>' +
-      '</div>';
-    }).join("");
+    var groups = buyableGroups(harbourSellersFor(p), "harbour");
+    var rows = groups.map(buyGroupRow).join("");
     openModal(
-      '<div class="m-head"><h2>Load ship</h2><p>Move goods from your harbour onto the ship. ' +
-        'Ship room: <b id="lroom">' + room + '</b></p></div>' +
-      '<div class="m-body">' + (colors.length ? rows : '<p class="hint">Harbour is empty.</p>') + '</div>' +
+      '<div class="m-head"><h2>Buy → ship</h2><p>Load your ship by buying from rivals’ harbour stores ' +
+        '(the only way to fill a ship). Ship room: <b id="room">' + room + '</b> · Cash: <b class="money">' + p.cash + '</b></p></div>' +
+      '<div class="m-body">' + (groups.length ? rows : '<p class="hint">No rival has harbour goods for sale.</p>') +
+        '<div class="row"><div class="grow">Total cost</div><div class="totals money" id="btot">0</div></div>' +
+      '</div>' +
       '<div class="m-foot"><button class="btn ghost" id="m-cancel">Cancel</button>' +
-        '<button class="btn primary" id="m-ok" disabled>Load</button></div>'
+        '<button class="btn primary" id="m-ok" disabled>Load ship</button></div>'
     );
-    var q = {}; colors.forEach(function (c) { q[c] = 0; });
+    var qty = groups.map(function () { return 0; });
     function refresh() {
-      var picked = sum(colors.map(function (c) { return q[c]; }));
-      $("lroom").textContent = room - picked;
-      $("m-ok").disabled = picked <= 0;
+      var picked = sum(qty), cost = 0;
+      groups.forEach(function (g, i) { cost += qty[i] * g.price; });
+      $("btot").textContent = cost;
+      $("room").textContent = room - picked;
+      $("m-ok").disabled = !(picked > 0 && picked <= room && cost <= p.cash);
     }
     $("modal").addEventListener("click", function (e) {
       var inc = e.target.dataset.inc, dec = e.target.dataset.dec;
-      if (inc) {
-        var picked = sum(colors.map(function (c) { return q[c]; }));
-        if (q[inc] < counts[inc] && picked < room) { q[inc]++; $("lq_" + inc).textContent = q[inc]; refresh(); }
-      } else if (dec) {
-        if (q[dec] > 0) { q[dec]--; $("lq_" + dec).textContent = q[dec]; refresh(); }
+      if (inc != null && groups[+inc]) {
+        var i = +inc, picked = sum(qty), cost = 0;
+        groups.forEach(function (g, k) { cost += qty[k] * g.price; });
+        if (qty[i] < groups[i].avail && picked < room && cost + groups[i].price <= p.cash) {
+          qty[i]++; $("q" + i).textContent = qty[i]; refresh();
+        }
+      } else if (dec != null && groups[+dec]) {
+        var j = +dec; if (qty[j] > 0) { qty[j]--; $("q" + j).textContent = qty[j]; refresh(); }
       }
     });
     $("m-cancel").addEventListener("click", closeModal);
     $("m-ok").addEventListener("click", function () {
-      var list = [];
-      colors.forEach(function (c) { for (var k = 0; k < q[c]; k++) list.push(c); });
+      var picks = [];
+      groups.forEach(function (g, i) {
+        for (var k = 0; k < qty[i]; k++) picks.push({ sellerId: g.sellerId, color: g.color, price: g.price });
+      });
       closeModal();
-      if (list.length) { loadShip(p, list); spendAction(); }
+      if (picks.length) { executeBuyToShip(p, picks); spendAction(); }
     });
   }
 
@@ -1300,11 +1362,16 @@
   function rulesHTML() {
     return '<ul>' +
       '<li><b>Goal:</b> finish with the highest net worth (cash + island goods by your value card + $2/harbour + $3/ship − $10/loan).</li>' +
-      '<li><b>Each turn</b> take <b>' + CFG.ACTIONS_PER_TURN + ' actions</b> (in any mix): Produce, Buy goods, Load ship, Build, or Sail.</li>' +
+      '<li><b>Each turn</b> take <b>' + CFG.ACTIONS_PER_TURN + ' actions</b> (in any mix): Produce, Buy → harbour, Buy → ship, Build, or Sail.</li>' +
+      '<li><b>The chain — and you may never buy from your own dock:</b> every container is sold to a <i>different</i> player at each step. ' +
+        'Factory store → a rival buys it into <i>their</i> harbour → another rival buys it onto <i>their</i> ship → it sails to the island.</li>' +
       '<li><b>Produce:</b> one container per machine into your factory store, priced ' + CFG.PRICE_MIN + '–' + CFG.PRICE_MAX +
         '. You pay a $' + CFG.UNION_FEE + '/container union fee to the player on your right.</li>' +
-      '<li><b>Buy goods:</b> buy from a <i>rival’s</i> factory store into your harbour. You can never buy your own production — that’s the whole economy.</li>' +
-      '<li><b>Load &amp; Sail:</b> load up to ' + CFG.SHIP_CAP + ' goods onto your ship, then sail to the island. Sailing ends your turn and triggers a <b>sealed-bid auction</b>.</li>' +
+      '<li><b>Buy → harbour:</b> buy from a <i>rival’s</i> factory store into your harbour, then set your own resale price (' +
+        CFG.HARBOUR_PRICE_MIN + '–' + CFG.HARBOUR_PRICE_MAX + ') for shippers to pay you.</li>' +
+      '<li><b>Buy → ship:</b> the only way to load a ship is to buy from a <i>rival’s</i> harbour store (up to ' + CFG.SHIP_CAP +
+        ' aboard). You never load your own harbour onto your own ship.</li>' +
+      '<li><b>Sail:</b> send your laden ship to the island. Sailing ends your turn and triggers a <b>sealed-bid auction</b>.</li>' +
       '<li><b>Auction:</b> every rival makes one hidden bid. You then <b>sell</b> to the top bidder (you receive the bid <i>plus</i> an equal government subsidy; goods go to their island) or <b>keep</b> the goods (you pay the bid to the bank; goods go to your island).</li>' +
       '<li><b>Loans:</b> take up to ' + CFG.MAX_LOANS + ' loans of $' + CFG.LOAN_AMOUNT + ' anytime (not an action); pay $' + CFG.LOAN_INTEREST + ' interest each at the start of your turn.</li>' +
       '<li><b>Value card (secret):</b> one premium colour scores ' + CFG.PREMIUM_FULL + ' if you hold all five colours on your island, otherwise ' + CFG.PREMIUM_PARTIAL + '; the others score fixed amounts.</li>' +
