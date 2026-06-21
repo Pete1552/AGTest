@@ -1,0 +1,1346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="theme-color" content="#f4f5f7" />
+<title>Container — a virtual shipping economy</title>
+<style>
+  :root {
+    --bg: #eef0f3;
+    --panel: #ffffff;
+    --ink: #1c2530;
+    --muted: #67727f;
+    --line: #d4d9e0;
+    --line-strong: #b9c1cc;
+    --accent: #2d6cdf;
+    --accent-ink: #ffffff;
+    --good: #1f9d57;
+    --bad: #d23c3c;
+    --warn: #c9821a;
+    --chip-orange: #e8833a;
+    --chip-brown: #8a5a2b;
+    --chip-black: #313640;
+    --chip-white: #f3f5f8;
+    --chip-green: #4faa55;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body {
+    background: var(--bg); color: var(--ink); font-family: var(--sans);
+    font-size: 14px; line-height: 1.4;
+    display: flex; flex-direction: column; min-height: 100%;
+  }
+  button { font-family: var(--sans); cursor: pointer; }
+  .mono { font-family: var(--mono); }
+  .money::before { content: "$"; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* ---- Top bar ---- */
+  header.topbar {
+    display: flex; align-items: center; gap: 12px;
+    padding: 8px 14px; background: var(--panel);
+    border-bottom: 1px solid var(--line-strong);
+    position: sticky; top: 0; z-index: 30;
+  }
+  header.topbar .back { font-size: 13px; color: var(--muted); }
+  header.topbar h1 { font-size: 16px; margin: 0; letter-spacing: 0.4px; font-weight: 700; }
+  header.topbar .spacer { flex: 1; }
+  .status-pill {
+    font-family: var(--mono); font-size: 12px; color: var(--muted);
+    background: var(--bg); border: 1px solid var(--line);
+    padding: 4px 9px; border-radius: 6px; white-space: nowrap;
+  }
+  .status-pill b { color: var(--ink); }
+
+  /* ---- Layout ---- */
+  .app { flex: 1; display: flex; min-height: 0; }
+  .main { flex: 1; min-width: 0; overflow-y: auto; padding: 12px; }
+  .side {
+    width: 290px; border-left: 1px solid var(--line-strong); background: var(--panel);
+    display: flex; flex-direction: column; min-height: 0;
+  }
+  .side h3 {
+    margin: 0; padding: 9px 12px; font-size: 12px; text-transform: uppercase;
+    letter-spacing: 0.8px; color: var(--muted); border-bottom: 1px solid var(--line);
+  }
+  #log { flex: 1; overflow-y: auto; padding: 8px 12px; font-size: 12.5px; }
+  #log .entry { padding: 3px 0; border-bottom: 1px dotted var(--line); }
+  #log .entry.sys { color: var(--muted); }
+  #log .entry.big { color: var(--accent); font-weight: 600; }
+
+  /* ---- Player tableaus ---- */
+  .seats { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); }
+  .seat {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    padding: 10px 12px;
+  }
+  .seat.active { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(45,108,223,0.18); }
+  .seat .seat-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 7px; }
+  .seat .pname { font-weight: 700; font-size: 15px; }
+  .seat .ptag { font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; }
+  .seat .pcash { margin-left: auto; font-family: var(--mono); font-weight: 700; }
+  .seat .pcash.low { color: var(--bad); }
+  .zone { margin: 5px 0; }
+  .zone .zlabel {
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--muted);
+    display: flex; justify-content: space-between; margin-bottom: 2px;
+  }
+  .zline { display: flex; flex-wrap: wrap; gap: 3px; min-height: 18px; align-items: center; }
+  .machines-row { display: flex; flex-wrap: wrap; gap: 4px; }
+  .mach {
+    display: inline-flex; align-items: center; gap: 4px; font-size: 11px;
+    border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px 1px 3px; color: var(--muted);
+  }
+
+  /* container chips */
+  .chip {
+    width: 16px; height: 13px; border-radius: 2px; border: 1px solid rgba(0,0,0,0.28);
+    display: inline-block; position: relative; flex: none;
+  }
+  .chip.lg { width: 20px; height: 16px; }
+  .chip.orange { background: var(--chip-orange); }
+  .chip.brown  { background: var(--chip-brown); }
+  .chip.black  { background: var(--chip-black); }
+  .chip.white  { background: var(--chip-white); }
+  .chip.green  { background: var(--chip-green); }
+  .stack { display: inline-flex; align-items: center; gap: 2px; margin-right: 4px; }
+  .stack .cnt { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+  .fs-group {
+    display: inline-flex; align-items: center; gap: 3px; border: 1px solid var(--line);
+    border-radius: 5px; padding: 1px 5px; margin: 0 3px 3px 0; background: var(--bg);
+  }
+  .fs-group .pr { font-family: var(--mono); font-size: 11px; font-weight: 700; }
+  .muted-empty { color: var(--line-strong); font-size: 12px; }
+
+  /* ---- Action bar ---- */
+  .actionbar {
+    background: var(--panel); border-top: 1px solid var(--line-strong);
+    padding: 9px 12px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  }
+  .actionbar .turn-info { font-size: 13px; margin-right: 4px; }
+  .actionbar .turn-info b { color: var(--accent); }
+  .acts-left { font-family: var(--mono); }
+  .btn {
+    border: 1px solid var(--line-strong); background: var(--panel); color: var(--ink);
+    padding: 7px 13px; border-radius: 6px; font-size: 13px; font-weight: 600;
+  }
+  .btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  .btn:disabled { opacity: 0.42; cursor: not-allowed; }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .btn.primary:hover:not(:disabled) { color: var(--accent-ink); filter: brightness(1.07); }
+  .btn.ghost { border-color: var(--line); color: var(--muted); }
+  .btn.danger { border-color: var(--bad); color: var(--bad); }
+  .btn.sm { padding: 4px 9px; font-size: 12px; }
+  .spacer { flex: 1; }
+
+  /* ---- Modal ---- */
+  .overlay {
+    position: fixed; inset: 0; background: rgba(20,28,38,0.55); z-index: 100;
+    display: none; align-items: center; justify-content: center; padding: 16px;
+  }
+  .overlay.show { display: flex; }
+  .modal {
+    background: var(--panel); border-radius: 10px; width: 100%; max-width: 540px;
+    max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+  }
+  .modal .m-head { padding: 14px 18px; border-bottom: 1px solid var(--line); }
+  .modal .m-head h2 { margin: 0; font-size: 17px; }
+  .modal .m-head p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+  .modal .m-body { padding: 14px 18px; }
+  .modal .m-foot { padding: 12px 18px; border-top: 1px solid var(--line); display: flex; gap: 8px; justify-content: flex-end; }
+  .row { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line); }
+  .row:last-child { border-bottom: none; }
+  .row .grow { flex: 1; }
+  .stepper { display: inline-flex; align-items: center; border: 1px solid var(--line-strong); border-radius: 6px; overflow: hidden; }
+  .stepper button { border: none; background: var(--bg); width: 30px; height: 30px; font-size: 16px; }
+  .stepper button:hover { background: var(--line); }
+  .stepper .v { width: 34px; text-align: center; font-family: var(--mono); }
+  .price-pick button {
+    width: 38px; height: 36px; margin-right: 6px; border: 1px solid var(--line-strong);
+    background: var(--bg); border-radius: 6px; font-family: var(--mono); font-weight: 700;
+  }
+  .price-pick button.sel { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .bid-input {
+    width: 110px; font-family: var(--mono); font-size: 22px; text-align: center;
+    padding: 8px; border: 1px solid var(--line-strong); border-radius: 8px;
+  }
+  .seg { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 6px; overflow: hidden; }
+  .seg button { border: none; background: var(--panel); padding: 6px 12px; font-size: 13px; }
+  .seg button.sel { background: var(--accent); color: #fff; }
+  .hint { color: var(--muted); font-size: 12.5px; }
+  .warnbox { background: #fff7e8; border: 1px solid #f0d49a; color: #8a5a12; padding: 8px 10px; border-radius: 6px; font-size: 12.5px; }
+  .totals { font-family: var(--mono); font-weight: 700; }
+
+  /* ---- Setup / scoreboard screens ---- */
+  .screen { max-width: 720px; margin: 0 auto; padding: 22px 16px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; margin-bottom: 16px; }
+  .card h2 { margin: 0 0 4px; font-size: 18px; }
+  .card .sub { color: var(--muted); margin: 0 0 14px; font-size: 13px; }
+  .seat-cfg { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--line); }
+  .seat-cfg input[type=text] { flex: 1; padding: 7px 9px; border: 1px solid var(--line-strong); border-radius: 6px; font-size: 14px; }
+  .seat-cfg .swatch { width: 20px; height: 16px; border-radius: 3px; border: 1px solid rgba(0,0,0,0.25); }
+  .num-pick button { width: 40px; height: 40px; border: 1px solid var(--line-strong); background: var(--bg); border-radius: 8px; margin-right: 8px; font-weight: 700; font-size: 16px; }
+  .num-pick button.sel { background: var(--accent); color: #fff; border-color: var(--accent); }
+  table.score { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.score th, table.score td { padding: 7px 8px; text-align: right; border-bottom: 1px solid var(--line); }
+  table.score th:first-child, table.score td:first-child { text-align: left; }
+  table.score tr.win td { background: #eaf6ee; font-weight: 700; }
+  table.score td.net { font-family: var(--mono); font-weight: 700; }
+  details.rules { margin-top: 6px; }
+  details.rules summary { cursor: pointer; color: var(--accent); font-size: 13px; }
+  details.rules .body { font-size: 13px; color: var(--ink); padding: 8px 2px; }
+  details.rules .body li { margin: 4px 0; }
+  .hidden { display: none !important; }
+  @media (max-width: 760px) {
+    .side { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <a class="back" href="index.html">← Games</a>
+  <h1>CONTAINER</h1>
+  <span class="status-pill" id="status-pill">Setup</span>
+  <div class="spacer"></div>
+  <button class="btn ghost sm" id="show-log-btn">Log</button>
+  <button class="btn ghost sm" id="rules-btn">Rules</button>
+  <button class="btn ghost sm" id="new-btn">New game</button>
+</header>
+
+<!-- ============ SETUP SCREEN ============ -->
+<div id="setup" class="screen">
+  <div class="card">
+    <h2>New game of Container</h2>
+    <p class="sub">A fully player-driven shipping economy. Produce goods, buy from your rivals, sail to the
+      island, and outbid the table. Most net worth at the end wins.</p>
+
+    <div style="margin:10px 0 4px;font-weight:600;">Number of players</div>
+    <div class="num-pick" id="num-pick"></div>
+
+    <div style="margin:16px 0 4px;font-weight:600;">Seats</div>
+    <div id="seat-cfgs"></div>
+    <p class="hint" style="margin-top:8px;">Each seat can be a human (hotseat — pass the device) or an AI.
+      Everyone is dealt a secret value card and a different starting factory.</p>
+
+    <details class="rules">
+      <summary>How to play (full rules)</summary>
+      <div class="body" id="rules-body"></div>
+    </details>
+
+    <div style="margin-top:16px;">
+      <button class="btn primary" id="start-btn">Start game</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ GAME SCREEN ============ -->
+<div id="game" class="app hidden">
+  <div style="flex:1; display:flex; flex-direction:column; min-width:0;">
+    <div class="main"><div class="seats" id="seats"></div></div>
+    <div class="actionbar" id="actionbar"></div>
+  </div>
+  <aside class="side">
+    <h3>Game log</h3>
+    <div id="log"></div>
+  </aside>
+</div>
+
+<!-- ============ GAME OVER SCREEN ============ -->
+<div id="gameover" class="screen hidden">
+  <div class="card">
+    <h2>Final reckoning</h2>
+    <p class="sub" id="go-sub"></p>
+    <table class="score" id="score-table"></table>
+    <div style="margin-top:16px; display:flex; gap:8px;">
+      <button class="btn primary" id="go-again">New game</button>
+      <a class="btn ghost" href="index.html" style="text-decoration:none;display:inline-flex;align-items:center;">Back to games</a>
+    </div>
+  </div>
+</div>
+
+<!-- generic modal mount -->
+<div class="overlay" id="overlay"><div class="modal" id="modal"></div></div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ------------------------------------------------------------------
+  //  CONFIG  — every tunable rule value lives here.
+  // ------------------------------------------------------------------
+  var CFG = {
+    COLORS: ["orange", "brown", "black", "white", "green"],
+    SUPPLY_PER_COLOR: 20,        // containers of each colour in the bank
+    SHIP_CAP: 5,
+    FACTORY_CAP_PER_MACHINE: 2,  // factory-store capacity = machines * this
+    HARBOUR_CAP_PER_WAREHOUSE: 2,// harbour-store capacity = warehouses * this
+    MAX_MACHINES: 5,
+    MAX_WAREHOUSES: 5,
+    START_CASH: 18,
+    START_WAREHOUSES: 1,
+    // cost to buy the 2nd..5th machine / warehouse (index 0 = the 2nd one)
+    MACHINE_COSTS: [6, 9, 12, 15],
+    WAREHOUSE_COSTS: [5, 8, 11, 14],
+    PRICE_MIN: 1, PRICE_MAX: 4,  // factory-store price range
+    UNION_FEE: 1,                // paid to right-hand neighbour, per container produced
+    LOAN_AMOUNT: 10,
+    LOAN_INTEREST: 1,
+    MAX_LOANS: 2,
+    ACTIONS_PER_TURN: 2,
+    ENDGAME_DEPLETED_COLORS: 2,  // game ends once this many colours hit zero in the bank
+    PREMIUM_FULL: 10,            // premium colour worth this if you hold all 5 colours...
+    PREMIUM_PARTIAL: 5,          // ...otherwise this
+    // the non-premium colour values dealt out on a value card
+    OTHER_VALUES: [6, 5, 4, 3]
+  };
+
+  var COLOR_HEX = {
+    orange: "#e8833a", brown: "#8a5a2b", black: "#313640", white: "#f3f5f8", green: "#4faa55"
+  };
+
+  // ------------------------------------------------------------------
+  //  small utilities
+  // ------------------------------------------------------------------
+  function $(id) { return document.getElementById(id); }
+  function el(tag, cls, html) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (html != null) e.innerHTML = html;
+    return e;
+  }
+  function shuffle(a) {
+    for (var i = a.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var t = a[i]; a[i] = a[j]; a[j] = t;
+    }
+    return a;
+  }
+  function countBy(arr) {
+    var m = {}; arr.forEach(function (c) { m[c] = (m[c] || 0) + 1; }); return m;
+  }
+  function sum(arr, f) { return arr.reduce(function (s, x) { return s + (f ? f(x) : x); }, 0); }
+  function chipHTML(color, lg) { return '<span class="chip ' + color + (lg ? ' lg' : '') + '" title="' + color + '"></span>'; }
+
+  // ------------------------------------------------------------------
+  //  GAME STATE
+  // ------------------------------------------------------------------
+  var G = null;  // current game
+
+  function makePlayer(id, name, isAI, startColor) {
+    return {
+      id: id, name: name, isAI: isAI,
+      cash: CFG.START_CASH,
+      machines: [startColor],          // colours of machines owned
+      warehouses: CFG.START_WAREHOUSES,
+      factory: [],                     // [{color, price}]  goods produced, for sale to others
+      harbour: [],                     // [color]           goods bought from others, staging
+      ship: [],                        // [color]           loaded, awaiting a voyage
+      island: [],                      // [color]           delivered, scored at end
+      loans: 0,
+      valueCard: null,                 // {color: value}
+      premiumColor: null
+    };
+  }
+
+  function dealValueCards(players) {
+    // Each card: one premium colour (worth 10/5) plus the four others valued from OTHER_VALUES.
+    var premiums = shuffle(CFG.COLORS.slice());
+    players.forEach(function (p, i) {
+      var premium = premiums[i % premiums.length];
+      var others = shuffle(CFG.COLORS.filter(function (c) { return c !== premium; }));
+      var card = {};
+      card[premium] = CFG.PREMIUM_FULL; // marker; resolved at scoring against the all-five rule
+      others.forEach(function (c, k) { card[c] = CFG.OTHER_VALUES[k]; });
+      p.valueCard = card;
+      p.premiumColor = premium;
+    });
+  }
+
+  function newGame(seatCfgs) {
+    var startColors = shuffle(CFG.COLORS.slice());
+    var players = seatCfgs.map(function (s, i) {
+      return makePlayer(i, s.name, s.isAI, startColors[i % startColors.length]);
+    });
+    dealValueCards(players);
+    var supply = {};
+    CFG.COLORS.forEach(function (c) { supply[c] = CFG.SUPPLY_PER_COLOR; });
+    G = {
+      players: players,
+      supply: supply,
+      loansAvailable: CFG.MAX_LOANS * players.length,
+      current: 0,
+      startPlayer: 0,
+      actionsLeft: CFG.ACTIONS_PER_TURN,
+      endTriggered: false,
+      phase: "play",
+      busy: false,
+      actedThisTurn: false,
+      passStreak: 0,
+      log: []
+    };
+    logMsg("Game start — " + players.length + " players. Each holds a secret value card.", "sys");
+    showScreen("game");
+    startTurn(0, true);
+  }
+
+  // ------------------------------------------------------------------
+  //  derived helpers
+  // ------------------------------------------------------------------
+  function factoryCap(p) { return p.machines.length * CFG.FACTORY_CAP_PER_MACHINE; }
+  function harbourCap(p) { return p.warehouses * CFG.HARBOUR_CAP_PER_WAREHOUSE; }
+  function rightNeighbour(idx) { return G.players[(idx + 1) % G.players.length]; }
+  function cur() { return G.players[G.current]; }
+  function depletedColors() { return CFG.COLORS.filter(function (c) { return G.supply[c] <= 0; }).length; }
+  function nextMachineCost(p) { return CFG.MACHINE_COSTS[p.machines.length - 1]; }
+  function nextWarehouseCost(p) { return CFG.WAREHOUSE_COSTS[p.warehouses - 1]; }
+
+  function logMsg(msg, cls) {
+    G.log.push({ msg: msg, cls: cls || "" });
+    if (G.log.length > 120) G.log.shift();
+    renderLog();
+  }
+
+  // ------------------------------------------------------------------
+  //  TURN FLOW
+  // ------------------------------------------------------------------
+  function startTurn(idx, silent) {
+    G.current = idx;
+    G.actionsLeft = CFG.ACTIONS_PER_TURN;
+    G.actedThisTurn = false;
+    var p = G.players[idx];
+    // pay interest on outstanding loans
+    if (p.loans > 0) {
+      var due = p.loans * CFG.LOAN_INTEREST;
+      // auto-borrow if they can't cover interest and a loan slot is free
+      while (p.cash < due && p.loans < CFG.MAX_LOANS && G.loansAvailable > 0) {
+        takeLoan(p, true);
+      }
+      var paid = Math.min(p.cash, due);
+      p.cash -= paid;
+      logMsg(p.name + " pays " + paid + " interest on " + p.loans + " loan(s).", "sys");
+    }
+    if (!silent) logMsg("— " + p.name + "'s turn —", "sys");
+    render();
+    if (p.isAI) {
+      setTimeout(function () { runAITurn(); }, 600);
+    }
+  }
+
+  function spendAction(n) {
+    G.actedThisTurn = true;
+    G.actionsLeft -= (n || 1);
+    if (G.actionsLeft <= 0) endTurn();
+    else render();
+  }
+
+  function endTurn() {
+    // track no-progress turns so a fully-passive table can't deadlock forever
+    G.passStreak = G.actedThisTurn ? 0 : (G.passStreak + 1);
+    // check end-game condition
+    if (!G.endTriggered && depletedColors() >= CFG.ENDGAME_DEPLETED_COLORS) {
+      G.endTriggered = true;
+      logMsg("Two colours are exhausted — the final round is underway!", "big");
+    }
+    // deadlock safeguard: a whole round with nobody taking an action ends the game
+    if (G.passStreak >= G.players.length) {
+      logMsg("No one can make further progress — the game is called.", "big");
+      return finishGame();
+    }
+    var next = (G.current + 1) % G.players.length;
+    if (G.endTriggered && next === G.startPlayer) {
+      return finishGame();
+    }
+    startTurn(next);
+  }
+
+  // ------------------------------------------------------------------
+  //  ACTIONS
+  // ------------------------------------------------------------------
+  // PRODUCE -----------------------------------------------------------
+  function canProduce(p) {
+    if (p.machines.length === 0) return false;
+    if (p.factory.length >= factoryCap(p)) return false;
+    return p.machines.some(function (c) { return G.supply[c] > 0; });
+  }
+  function doProduce(p, price) {
+    var made = [];
+    var space = factoryCap(p) - p.factory.length;
+    p.machines.forEach(function (c) {
+      if (space <= 0) return;
+      if (G.supply[c] > 0) {
+        G.supply[c]--; space--;
+        p.factory.push({ color: c, price: price });
+        made.push(c);
+      }
+    });
+    if (made.length === 0) return false;
+    // union fee to the right-hand neighbour
+    var fee = made.length * CFG.UNION_FEE;
+    var nb = rightNeighbour(p.id);
+    var actuallyPaid = Math.min(p.cash, fee);
+    p.cash -= actuallyPaid;
+    if (nb.id !== p.id) nb.cash += actuallyPaid;
+    logMsg(p.name + " produces " + made.length + " container(s) @ " + price +
+      " (union fee " + actuallyPaid + " to " + nb.name + ").");
+    return true;
+  }
+
+  // BUILD -------------------------------------------------------------
+  function canBuildMachine(p) {
+    return p.machines.length < CFG.MAX_MACHINES &&
+      p.machines.length < CFG.COLORS.length &&
+      p.cash >= nextMachineCost(p);
+  }
+  function canBuildWarehouse(p) {
+    return p.warehouses < CFG.MAX_WAREHOUSES && p.cash >= nextWarehouseCost(p);
+  }
+  function buildMachine(p, color) {
+    var cost = nextMachineCost(p);
+    p.cash -= cost; p.machines.push(color);
+    logMsg(p.name + " builds a " + color + " machine (-" + cost + ").");
+  }
+  function buildWarehouse(p) {
+    var cost = nextWarehouseCost(p);
+    p.cash -= cost; p.warehouses++;
+    logMsg(p.name + " builds a warehouse (-" + cost + ").");
+  }
+
+  // BUY CONTAINERS (from another player's factory store) --------------
+  function sellersFor(p) {
+    return G.players.filter(function (o) { return o.id !== p.id && o.factory.length > 0; });
+  }
+  function canBuy(p) {
+    return harbourCap(p) - p.harbour.length > 0 && sellersFor(p).length > 0 &&
+      p.cash >= Math.min.apply(null, sellersFor(p).map(function (s) {
+        return Math.min.apply(null, s.factory.map(function (f) { return f.price; }));
+      }));
+  }
+  // picks: array of {sellerId, color, price} entries to buy
+  function executeBuy(p, picks) {
+    var spent = 0, byseller = {};
+    picks.forEach(function (pk) {
+      var seller = G.players[pk.sellerId];
+      // remove one matching item from seller.factory
+      for (var i = 0; i < seller.factory.length; i++) {
+        if (seller.factory[i].color === pk.color && seller.factory[i].price === pk.price) {
+          seller.factory.splice(i, 1); break;
+        }
+      }
+      p.harbour.push(pk.color);
+      p.cash -= pk.price; seller.cash += pk.price; spent += pk.price;
+      byseller[seller.id] = (byseller[seller.id] || 0) + 1;
+    });
+    var who = Object.keys(byseller).map(function (id) {
+      return byseller[id] + " from " + G.players[id].name;
+    }).join(", ");
+    logMsg(p.name + " buys " + picks.length + " container(s) [" + who + "] for " + spent + ".");
+  }
+
+  // LOAD SHIP (harbour -> ship) --------------------------------------
+  function canLoad(p) { return p.harbour.length > 0 && p.ship.length < CFG.SHIP_CAP; }
+  function loadShip(p, colors) {
+    colors.forEach(function (c) {
+      var i = p.harbour.indexOf(c);
+      if (i >= 0 && p.ship.length < CFG.SHIP_CAP) { p.harbour.splice(i, 1); p.ship.push(c); }
+    });
+    logMsg(p.name + " loads " + colors.length + " container(s) onto the ship.");
+  }
+
+  // LOANS (free, not an action) --------------------------------------
+  function canTakeLoan(p) { return p.loans < CFG.MAX_LOANS && G.loansAvailable > 0; }
+  function takeLoan(p, silent) {
+    if (!canTakeLoan(p)) return;
+    p.loans++; G.loansAvailable--; p.cash += CFG.LOAN_AMOUNT;
+    if (!silent) logMsg(p.name + " takes a loan (+" + CFG.LOAN_AMOUNT + ").");
+  }
+  function canRepayLoan(p) { return p.loans > 0 && p.cash >= CFG.LOAN_AMOUNT; }
+  function repayLoan(p) {
+    if (!canRepayLoan(p)) return;
+    p.loans--; G.loansAvailable++; p.cash -= CFG.LOAN_AMOUNT;
+    logMsg(p.name + " repays a loan (-" + CFG.LOAN_AMOUNT + ").");
+  }
+
+  // ------------------------------------------------------------------
+  //  THE ISLAND AUCTION
+  // ------------------------------------------------------------------
+  // sailor sails with a ship full of containers; everyone else bids sealed.
+  function startVoyage(sailor) {
+    var lot = sailor.ship.slice();
+    G.actedThisTurn = true;
+    logMsg(sailor.name + " sails to the island with " + lot.length + " container(s)!", "big");
+    G.busy = true; render();
+    collectBids(sailor, lot, function (bids) {
+      resolveAuction(sailor, lot, bids);
+    });
+  }
+
+  // gather a sealed bid from each other player (humans prompted one by one)
+  function collectBids(sailor, lot, done) {
+    var others = G.players.filter(function (p) { return p.id !== sailor.id; });
+    var bids = [];
+    var i = 0;
+    function nextBidder() {
+      if (i >= others.length) return done(bids);
+      var p = others[i++];
+      if (p.isAI) {
+        var b = aiBid(p, lot);
+        bids.push({ player: p, amount: b });
+        nextBidder();
+      } else {
+        promptBid(p, lot, function (amount) {
+          bids.push({ player: p, amount: amount });
+          nextBidder();
+        });
+      }
+    }
+    nextBidder();
+  }
+
+  function resolveAuction(sailor, lot, bids) {
+    // highest bid wins; ties broken by turn order after the sailor
+    bids.sort(function (a, b) {
+      if (b.amount !== a.amount) return b.amount - a.amount;
+      return seatDistance(sailor.id, a.player.id) - seatDistance(sailor.id, b.player.id);
+    });
+    var high = bids[0];
+    logMsg("Bids — " + bids.map(function (b) { return b.player.name + ": " + b.amount; }).join(", "), "sys");
+
+    function applyOutcome(choice) {
+      var bid = high.amount;
+      if (choice === "sell") {
+        // buyer pays bid to sailor; bank matches (government subsidy); goods to buyer's island
+        high.player.cash -= bid;
+        sailor.cash += bid * 2;
+        lot.forEach(function (c) { high.player.island.push(c); });
+        logMsg(sailor.name + " SELLS the lot to " + high.player.name + " for " + bid +
+          " + " + bid + " government subsidy (= " + (bid * 2) + ").", "big");
+      } else {
+        // sailor keeps goods, pays bid to the bank
+        sailor.cash -= bid;
+        lot.forEach(function (c) { sailor.island.push(c); });
+        logMsg(sailor.name + " KEEPS the lot, paying " + bid + " to the bank.", "big");
+      }
+      sailor.ship = [];
+      G.busy = false;
+      // sailing ends the turn immediately
+      render();
+      setTimeout(endTurn, 300);
+    }
+
+    if (sailor.isAI) {
+      var choice = aiSellOrKeep(sailor, lot, high.amount);
+      setTimeout(function () { applyOutcome(choice); }, 700);
+    } else {
+      promptSellOrKeep(sailor, lot, high, applyOutcome);
+    }
+  }
+
+  function seatDistance(fromId, toId) {
+    var n = G.players.length;
+    return (toId - fromId + n) % n;
+  }
+
+  // ------------------------------------------------------------------
+  //  SCORING / END GAME
+  // ------------------------------------------------------------------
+  function colorValue(p, color, hasAllFive) {
+    if (color === p.premiumColor) return hasAllFive ? CFG.PREMIUM_FULL : CFG.PREMIUM_PARTIAL;
+    return p.valueCard[color];
+  }
+
+  function scorePlayer(p) {
+    // 1. discard all of the colour you hold most of (ties -> discard the cheapest, best for you)
+    var island = p.island.slice();
+    var counts = countBy(island);
+    var maxN = 0;
+    CFG.COLORS.forEach(function (c) { if ((counts[c] || 0) > maxN) maxN = counts[c] || 0; });
+    var discardColor = null;
+    if (maxN > 0) {
+      var tied = CFG.COLORS.filter(function (c) { return (counts[c] || 0) === maxN; });
+      // among ties, discard the one worth least (assume all-five for the comparison)
+      tied.sort(function (a, b) { return colorValue(p, a, true) - colorValue(p, b, true); });
+      discardColor = tied[0];
+      island = island.filter(function (c) { return c !== discardColor; });
+    }
+    // 2. does the player hold all five colours after the discard?
+    var remaining = countBy(island);
+    var hasAllFive = CFG.COLORS.every(function (c) { return (remaining[c] || 0) > 0; });
+    // 3. value the island
+    var islandVal = sum(island, function (c) { return colorValue(p, c, hasAllFive); });
+    var harbourVal = p.harbour.length * 2;
+    var shipVal = p.ship.length * 3;
+    var loanDebt = p.loans * CFG.LOAN_AMOUNT;
+    var net = p.cash + islandVal + harbourVal + shipVal - loanDebt;
+    return {
+      player: p, discardColor: discardColor, hasAllFive: hasAllFive,
+      cash: p.cash, islandVal: islandVal, harbourVal: harbourVal, shipVal: shipVal,
+      loanDebt: loanDebt, net: net, islandKept: island.length
+    };
+  }
+
+  function finishGame() {
+    G.phase = "gameover";
+    var results = G.players.map(scorePlayer);
+    results.sort(function (a, b) { return b.net - a.net; });
+    renderScoreboard(results);
+    showScreen("gameover");
+  }
+
+  // ==================================================================
+  //  AI
+  // ==================================================================
+  // Heuristic value of acquiring a container of `color` for player p, ignoring the all-five bonus.
+  function aiColorWorth(p, color) {
+    // its eventual island value, lightly — premium counted partial since all-five is hard
+    return color === p.premiumColor ? CFG.PREMIUM_PARTIAL : p.valueCard[color];
+  }
+
+  function runAITurn() {
+    if (G.phase !== "play") return;
+    var p = cur();
+    aiStep(p);
+  }
+
+  function aiStep(p) {
+    // bail out if a stale timer fires after the turn already moved on
+    if (G.current !== p.id || G.actionsLeft <= 0 || G.phase !== "play" || G.busy) return;
+    var acted = aiChooseAction(p);
+    if (!acted) {
+      // nothing worth doing — pass remaining actions
+      logMsg(p.name + " passes.", "sys");
+      return endTurn();
+    }
+    // schedule next action after a short beat (if turn not already ended by sailing)
+    if (G.phase === "play" && !G.busy && G.actionsLeft > 0 && G.current === p.id) {
+      setTimeout(function () { aiStep(p); }, 650);
+    }
+  }
+
+  // returns true if an action was taken
+  function aiChooseAction(p) {
+    // 0. opportunistic loan if cash is very tight and useful buys exist
+    // 1. If ship is full enough, or end is near, sail.
+    var shipWorth = sum(p.ship, function (c) { return aiColorWorth(p, c); });
+    if (p.ship.length >= 4 || (p.ship.length >= 2 && (G.endTriggered || shipWorth >= 12))) {
+      startVoyage(p);
+      return true; // voyage handles end of turn
+    }
+    // 2. Load ship if we have harbour goods and ship room.
+    if (canLoad(p) && p.ship.length < CFG.SHIP_CAP) {
+      var room = CFG.SHIP_CAP - p.ship.length;
+      // load the most valuable harbour goods first
+      var order = p.harbour.slice().sort(function (a, b) { return aiColorWorth(p, b) - aiColorWorth(p, a); });
+      var toLoad = order.slice(0, room);
+      if (toLoad.length >= Math.min(room, 2) || p.harbour.length >= harbourCap(p) - 1 || G.endTriggered) {
+        loadShip(p, toLoad);
+        spendAction(); return true;
+      }
+    }
+    // 3. Buy cheap containers we value, into the harbour.
+    var buy = aiPlanBuy(p);
+    if (buy && buy.length) {
+      executeBuy(p, buy);
+      spendAction(); return true;
+    }
+    // 4. Produce, to earn from others buying our goods.
+    if (canProduce(p)) {
+      // price: aim mid-low so rivals actually buy; a little higher if supply scarce
+      var price = 2;
+      doProduce(p, price);
+      spendAction(); return true;
+    }
+    // 5. Expand: warehouse if our harbour is the bottleneck, else a machine.
+    if (canBuildWarehouse(p) && p.harbour.length >= harbourCap(p) && p.cash >= nextWarehouseCost(p) + 4) {
+      buildWarehouse(p); spendAction(); return true;
+    }
+    if (canBuildMachine(p) && p.cash >= nextMachineCost(p) + 6 && p.machines.length < 3) {
+      var have = {}; p.machines.forEach(function (c) { have[c] = 1; });
+      var avail = CFG.COLORS.filter(function (c) { return !have[c]; });
+      buildMachine(p, avail[Math.floor(Math.random() * avail.length)]);
+      spendAction(); return true;
+    }
+    // 6. As a fallback, if we have any harbour goods, load them; else produce even at a loss-leader.
+    if (canLoad(p)) { loadShip(p, p.harbour.slice(0, CFG.SHIP_CAP - p.ship.length)); spendAction(); return true; }
+    if (canProduce(p)) { doProduce(p, 1); spendAction(); return true; }
+    return false;
+  }
+
+  function aiPlanBuy(p) {
+    var room = harbourCap(p) - p.harbour.length;
+    if (room <= 0) return null;
+    // gather all purchasable items, cheapest & most-valuable first
+    var items = [];
+    sellersFor(p).forEach(function (s) {
+      s.factory.forEach(function (f) {
+        items.push({ sellerId: s.id, color: f.color, price: f.price, worth: aiColorWorth(p, f.color) });
+      });
+    });
+    // good deal = worth (island ~value) minus price is positive-ish; harbour also gives +2 later
+    items = items.filter(function (it) { return it.worth + 2 - it.price >= 1; });
+    items.sort(function (a, b) { return (b.worth - b.price) - (a.worth - a.price); });
+    var picks = [], budget = p.cash;
+    for (var i = 0; i < items.length && picks.length < room; i++) {
+      if (budget >= items[i].price) { picks.push(items[i]); budget -= items[i].price; }
+    }
+    return picks.length ? picks : null;
+  }
+
+  function aiBid(p, lot) {
+    // estimate the lot's island worth to me, bid a fraction, capped by cash
+    var worth = sum(lot, function (c) { return aiColorWorth(p, c); });
+    // diversity nudge: colours I'm missing on my island are extra useful
+    var mine = countBy(p.island);
+    var bonus = 0;
+    lot.forEach(function (c) { if (!mine[c]) bonus += 1; });
+    var target = Math.round((worth + bonus) * 0.55);
+    target = Math.max(0, Math.min(target, p.cash));
+    // don't bid more than the goods could be worth at face
+    return Math.min(target, worth);
+  }
+
+  function aiSellOrKeep(sailor, lot, bid) {
+    // keep value: island worth to me (partial premium) minus bid paid to bank
+    var mine = countBy(sailor.island);
+    var keepWorth = sum(lot, function (c) {
+      var w = aiColorWorth(sailor, c);
+      if (!mine[c]) w += 1; // diversity
+      return w;
+    }) - bid;
+    var sellWorth = bid * 2; // cash from buyer + subsidy
+    return sellWorth >= keepWorth ? "sell" : "keep";
+  }
+
+  // ==================================================================
+  //  RENDERING
+  // ==================================================================
+  function showScreen(name) {
+    ["setup", "game", "gameover"].forEach(function (s) {
+      $(s).classList.toggle("hidden", s !== name);
+    });
+    $("status-pill").textContent = name === "game" ? "" : (name === "gameover" ? "Game over" : "Setup");
+  }
+
+  function render() {
+    if (!G) return;
+    renderStatus();
+    renderSeats();
+    renderActionBar();
+  }
+
+  function renderStatus() {
+    var p = cur();
+    var dep = depletedColors();
+    var pill = $("status-pill");
+    pill.innerHTML = "Turn: <b>" + p.name + "</b> · actions " +
+      '<span class="acts-left">' + G.actionsLeft + "/" + CFG.ACTIONS_PER_TURN + "</span>" +
+      (G.endTriggered ? " · <b style='color:#c9821a'>FINAL ROUND</b>" : (dep ? " · " + dep + " colour depleted" : ""));
+  }
+
+  function zoneChips(arr) {
+    if (!arr.length) return '<span class="muted-empty">—</span>';
+    var counts = countBy(arr);
+    return CFG.COLORS.filter(function (c) { return counts[c]; }).map(function (c) {
+      return '<span class="stack">' + chipHTML(c) + '<span class="cnt">' + counts[c] + '</span></span>';
+    }).join("");
+  }
+
+  function factoryChips(factory) {
+    if (!factory.length) return '<span class="muted-empty">—</span>';
+    // group by color+price
+    var groups = {};
+    factory.forEach(function (f) {
+      var k = f.color + "@" + f.price;
+      groups[k] = groups[k] || { color: f.color, price: f.price, n: 0 };
+      groups[k].n++;
+    });
+    return Object.keys(groups).map(function (k) {
+      var g = groups[k];
+      return '<span class="fs-group">' + chipHTML(g.color) +
+        '<span class="cnt">x' + g.n + '</span><span class="pr">@' + g.price + '</span></span>';
+    }).join("");
+  }
+
+  function renderSeats() {
+    var wrap = $("seats"); wrap.innerHTML = "";
+    G.players.forEach(function (p) {
+      var seat = el("div", "seat" + (p.id === G.current ? " active" : ""));
+      var head = el("div", "seat-head");
+      head.innerHTML = '<span class="pname">' + p.name + "</span>" +
+        '<span class="ptag">' + (p.isAI ? "AI" : "Human") + "</span>" +
+        (p.loans ? '<span class="ptag" title="loans">🏦 ' + p.loans + "</span>" : "") +
+        '<span class="pcash mono ' + (p.cash < 3 ? "low" : "") + ' money">' + p.cash + "</span>";
+      seat.appendChild(head);
+
+      // machines
+      var mrow = el("div", "zone");
+      mrow.innerHTML = '<div class="zlabel"><span>Machines (' + p.machines.length + "/" + CFG.MAX_MACHINES +
+        ") · Warehouses " + p.warehouses + "/" + CFG.MAX_WAREHOUSES + "</span></div>";
+      var mline = el("div", "machines-row");
+      p.machines.forEach(function (c) {
+        mline.innerHTML += '<span class="mach">' + chipHTML(c) + (c) + "</span>";
+      });
+      mrow.appendChild(mline);
+      seat.appendChild(mrow);
+
+      seat.appendChild(zoneRow("Factory store (" + p.factory.length + "/" + factoryCap(p) + ")",
+        factoryChips(p.factory), "for sale to rivals"));
+      seat.appendChild(zoneRow("Harbour store (" + p.harbour.length + "/" + harbourCap(p) + ")",
+        zoneChips(p.harbour), "+2 ea"));
+      seat.appendChild(zoneRow("Ship (" + p.ship.length + "/" + CFG.SHIP_CAP + ")",
+        zoneChips(p.ship), "+3 ea"));
+      seat.appendChild(zoneRow("Island (" + p.island.length + ")", zoneChips(p.island), "scored"));
+
+      // value card — only reveal for the local human whose turn it is (kept secret otherwise)
+      var reveal = (!p.isAI && p.id === G.current);
+      var vc = el("div", "zone");
+      vc.innerHTML = '<div class="zlabel"><span>Value card</span><span>' +
+        (reveal ? "premium: " + p.premiumColor : "secret") + "</span></div>";
+      if (reveal) {
+        var line = el("div", "zline");
+        line.innerHTML = CFG.COLORS.map(function (c) {
+          var v = c === p.premiumColor ? CFG.PREMIUM_FULL + "/" + CFG.PREMIUM_PARTIAL : p.valueCard[c];
+          return '<span class="fs-group">' + chipHTML(c) + '<span class="pr">' + v + "</span></span>";
+        }).join("");
+        vc.appendChild(line);
+      }
+      seat.appendChild(vc);
+
+      wrap.appendChild(seat);
+    });
+  }
+
+  function zoneRow(label, chipsHTML, note) {
+    var z = el("div", "zone");
+    z.innerHTML = '<div class="zlabel"><span>' + label + "</span><span>" + (note || "") + "</span></div>" +
+      '<div class="zline">' + chipsHTML + "</div>";
+    return z;
+  }
+
+  function renderActionBar() {
+    var bar = $("actionbar"); bar.innerHTML = "";
+    var p = cur();
+
+    var info = el("div", "turn-info");
+    info.innerHTML = "<b>" + p.name + "</b> — " + G.actionsLeft + " action" + (G.actionsLeft === 1 ? "" : "s") + " left";
+    bar.appendChild(info);
+
+    if (p.isAI || G.busy) {
+      var t = el("span", "hint");
+      t.textContent = G.busy ? "Resolving…" : "AI is thinking…";
+      bar.appendChild(t);
+      return;
+    }
+
+    bar.appendChild(actBtn("Produce", canProduce(p), function () { openProduce(p); }, "primary"));
+    bar.appendChild(actBtn("Buy goods", canBuy(p), function () { openBuy(p); }));
+    bar.appendChild(actBtn("Load ship", canLoad(p), function () { openLoad(p); }));
+    bar.appendChild(actBtn("Sail to island ⛴", p.ship.length > 0, function () { confirmSail(p); }));
+    bar.appendChild(actBtn("Build", canBuildMachine(p) || canBuildWarehouse(p), function () { openBuild(p); }));
+
+    var sp = el("div", "spacer"); bar.appendChild(sp);
+
+    bar.appendChild(actBtn("Take loan (+" + CFG.LOAN_AMOUNT + ")", canTakeLoan(p), function () {
+      takeLoan(p); render();
+    }, "ghost sm"));
+    if (p.loans > 0) {
+      bar.appendChild(actBtn("Repay loan", canRepayLoan(p), function () { repayLoan(p); render(); }, "ghost sm"));
+    }
+    bar.appendChild(actBtn("End turn", true, function () { endTurn(); }, "ghost"));
+  }
+
+  function actBtn(label, enabled, onClick, extra) {
+    var b = el("button", "btn " + (extra || ""), label);
+    b.disabled = !enabled;
+    if (enabled) b.addEventListener("click", onClick);
+    return b;
+  }
+
+  function renderLog() {
+    var box = $("log"); if (!box) return;
+    box.innerHTML = "";
+    G.log.slice().reverse().forEach(function (e) {
+      box.appendChild(el("div", "entry " + e.cls, e.msg));
+    });
+  }
+
+  // ==================================================================
+  //  MODALS
+  // ==================================================================
+  function openModal(html) {
+    // Replace the modal node with a fresh clone so delegated listeners from a
+    // previous modal don't accumulate on the persistent element.
+    var old = $("modal");
+    var fresh = old.cloneNode(false);
+    fresh.innerHTML = html;
+    old.parentNode.replaceChild(fresh, old);
+    $("overlay").classList.add("show");
+  }
+  function closeModal() { $("overlay").classList.remove("show"); }
+
+  $("overlay").addEventListener("click", function (e) {
+    if (e.target === $("overlay")) closeModal();
+  });
+
+  // ---- Produce modal ----
+  function openProduce(p) {
+    var space = factoryCap(p) - p.factory.length;
+    var willMake = p.machines.filter(function (c) { return G.supply[c] > 0; });
+    willMake = willMake.slice(0, space);
+    var chips = willMake.map(function (c) { return chipHTML(c, true); }).join(" ");
+    var prices = "";
+    for (var v = CFG.PRICE_MIN; v <= CFG.PRICE_MAX; v++) {
+      prices += '<button data-p="' + v + '"' + (v === 2 ? ' class="sel"' : "") + ">" + v + "</button>";
+    }
+    openModal(
+      '<div class="m-head"><h2>Produce containers</h2><p>One per machine, into your factory store. ' +
+      'You pay a union fee of ' + CFG.UNION_FEE + '/container to ' + rightNeighbour(p.id).name + '.</p></div>' +
+      '<div class="m-body">' +
+        '<div class="row"><div class="grow">Will produce (' + willMake.length + ')</div><div>' + (chips || "—") + '</div></div>' +
+        '<div class="row"><div class="grow">Sale price (rivals buy at this)</div><div class="price-pick" id="pp">' + prices + '</div></div>' +
+        '<p class="hint">Lower prices sell faster; higher prices earn more — if anyone buys.</p>' +
+      '</div>' +
+      '<div class="m-foot"><button class="btn ghost" id="m-cancel">Cancel</button>' +
+        '<button class="btn primary" id="m-ok"' + (willMake.length ? "" : " disabled") + '>Produce</button></div>'
+    );
+    var price = 2;
+    $("pp").addEventListener("click", function (e) {
+      if (e.target.dataset.p) {
+        price = +e.target.dataset.p;
+        Array.prototype.forEach.call($("pp").children, function (b) { b.classList.toggle("sel", +b.dataset.p === price); });
+      }
+    });
+    $("m-cancel").addEventListener("click", closeModal);
+    $("m-ok").addEventListener("click", function () {
+      closeModal();
+      if (doProduce(p, price)) spendAction();
+      else render();
+    });
+  }
+
+  // ---- Buy modal ----
+  function openBuy(p) {
+    var room = harbourCap(p) - p.harbour.length;
+    var sellers = sellersFor(p);
+    // build a flat list of buyable groups
+    var groups = [];
+    sellers.forEach(function (s) {
+      var g = {};
+      s.factory.forEach(function (f) {
+        var k = f.color + "@" + f.price;
+        g[k] = g[k] || { sellerId: s.id, sellerName: s.name, color: f.color, price: f.price, avail: 0 };
+        g[k].avail++;
+      });
+      Object.keys(g).forEach(function (k) { groups.push(g[k]); });
+    });
+    groups.sort(function (a, b) { return a.price - b.price || a.sellerName.localeCompare(b.sellerName); });
+
+    var rows = groups.map(function (g, idx) {
+      return '<div class="row" data-i="' + idx + '">' +
+        '<div>' + chipHTML(g.color, true) + '</div>' +
+        '<div class="grow"><b>' + g.color + '</b> @ <span class="mono">' + g.price + '</span> ' +
+        '<span class="hint">from ' + g.sellerName + ' (' + g.avail + ' avail)</span></div>' +
+        '<div class="stepper"><button data-dec="' + idx + '">−</button>' +
+        '<span class="v" id="q' + idx + '">0</span><button data-inc="' + idx + '">+</button></div>' +
+      '</div>';
+    }).join("");
+
+    openModal(
+      '<div class="m-head"><h2>Buy containers</h2><p>Buy from rivals’ factory stores into your harbour. ' +
+        'Harbour space: <b id="room">' + room + '</b> · Cash: <b class="money">' + p.cash + '</b></p></div>' +
+      '<div class="m-body">' + (groups.length ? rows : '<p class="hint">No one has goods for sale.</p>') +
+        '<div class="row"><div class="grow">Total</div><div class="totals money" id="btot">0</div></div>' +
+      '</div>' +
+      '<div class="m-foot"><button class="btn ghost" id="m-cancel">Cancel</button>' +
+        '<button class="btn primary" id="m-ok" disabled>Buy</button></div>'
+    );
+
+    var qty = groups.map(function () { return 0; });
+    function refresh() {
+      var picked = sum(qty), cost = 0;
+      groups.forEach(function (g, i) { cost += qty[i] * g.price; });
+      $("btot").textContent = cost;
+      $("room").textContent = room - picked;
+      var ok = picked > 0 && picked <= room && cost <= p.cash;
+      $("m-ok").disabled = !ok;
+    }
+    $("modal").addEventListener("click", function (e) {
+      var inc = e.target.dataset.inc, dec = e.target.dataset.dec;
+      if (inc != null) {
+        var i = +inc, picked = sum(qty);
+        if (qty[i] < groups[i].avail && picked < room) {
+          // also check affordability
+          var cost = 0; groups.forEach(function (g, k) { cost += qty[k] * g.price; });
+          if (cost + groups[i].price <= p.cash) { qty[i]++; $("q" + i).textContent = qty[i]; refresh(); }
+        }
+      } else if (dec != null) {
+        var j = +dec; if (qty[j] > 0) { qty[j]--; $("q" + j).textContent = qty[j]; refresh(); }
+      }
+    });
+    $("m-cancel").addEventListener("click", closeModal);
+    $("m-ok").addEventListener("click", function () {
+      var picks = [];
+      groups.forEach(function (g, i) {
+        for (var k = 0; k < qty[i]; k++) picks.push({ sellerId: g.sellerId, color: g.color, price: g.price });
+      });
+      closeModal();
+      if (picks.length) { executeBuy(p, picks); spendAction(); }
+    });
+  }
+
+  // ---- Load modal ----
+  function openLoad(p) {
+    var room = CFG.SHIP_CAP - p.ship.length;
+    var counts = countBy(p.harbour);
+    var colors = CFG.COLORS.filter(function (c) { return counts[c]; });
+    var rows = colors.map(function (c, idx) {
+      return '<div class="row">' +
+        '<div>' + chipHTML(c, true) + '</div>' +
+        '<div class="grow"><b>' + c + '</b> <span class="hint">(' + counts[c] + ' in harbour)</span></div>' +
+        '<div class="stepper"><button data-dec="' + c + '">−</button>' +
+        '<span class="v" id="lq_' + c + '">0</span><button data-inc="' + c + '">+</button></div>' +
+      '</div>';
+    }).join("");
+    openModal(
+      '<div class="m-head"><h2>Load ship</h2><p>Move goods from your harbour onto the ship. ' +
+        'Ship room: <b id="lroom">' + room + '</b></p></div>' +
+      '<div class="m-body">' + (colors.length ? rows : '<p class="hint">Harbour is empty.</p>') + '</div>' +
+      '<div class="m-foot"><button class="btn ghost" id="m-cancel">Cancel</button>' +
+        '<button class="btn primary" id="m-ok" disabled>Load</button></div>'
+    );
+    var q = {}; colors.forEach(function (c) { q[c] = 0; });
+    function refresh() {
+      var picked = sum(colors.map(function (c) { return q[c]; }));
+      $("lroom").textContent = room - picked;
+      $("m-ok").disabled = picked <= 0;
+    }
+    $("modal").addEventListener("click", function (e) {
+      var inc = e.target.dataset.inc, dec = e.target.dataset.dec;
+      if (inc) {
+        var picked = sum(colors.map(function (c) { return q[c]; }));
+        if (q[inc] < counts[inc] && picked < room) { q[inc]++; $("lq_" + inc).textContent = q[inc]; refresh(); }
+      } else if (dec) {
+        if (q[dec] > 0) { q[dec]--; $("lq_" + dec).textContent = q[dec]; refresh(); }
+      }
+    });
+    $("m-cancel").addEventListener("click", closeModal);
+    $("m-ok").addEventListener("click", function () {
+      var list = [];
+      colors.forEach(function (c) { for (var k = 0; k < q[c]; k++) list.push(c); });
+      closeModal();
+      if (list.length) { loadShip(p, list); spendAction(); }
+    });
+  }
+
+  // ---- Build modal ----
+  function openBuild(p) {
+    var mCost = nextMachineCost(p), wCost = nextWarehouseCost(p);
+    var have = {}; p.machines.forEach(function (c) { have[c] = 1; });
+    var avail = CFG.COLORS.filter(function (c) { return !have[c]; });
+    var colorBtns = avail.map(function (c) {
+      return '<button class="btn sm" data-color="' + c + '">' + chipHTML(c) + " " + c + "</button>";
+    }).join(" ");
+    openModal(
+      '<div class="m-head"><h2>Build</h2><p>Expand capacity. Cash: <b class="money">' + p.cash + '</b></p></div>' +
+      '<div class="m-body">' +
+        '<div class="row"><div class="grow"><b>New machine</b> ' +
+          (p.machines.length >= CFG.MAX_MACHINES || !avail.length ? '<span class="hint">— at max</span>' :
+            '<span class="hint">cost ' + (mCost == null ? "—" : mCost) + '. Pick a colour:</span><div style="margin-top:6px;">' + colorBtns + '</div>') +
+        '</div></div>' +
+        '<div class="row"><div class="grow"><b>New warehouse</b> ' +
+          (p.warehouses >= CFG.MAX_WAREHOUSES ? '<span class="hint">— at max</span>' :
+            '<span class="hint">cost ' + (wCost == null ? "—" : wCost) + ' (harbour +' + CFG.HARBOUR_CAP_PER_WAREHOUSE + ')</span>') +
+          '</div>' +
+          (p.warehouses < CFG.MAX_WAREHOUSES ?
+            '<button class="btn primary sm" id="bw"' + (p.cash >= wCost ? "" : " disabled") + '>Build (' + wCost + ')</button>' : "") +
+        '</div>' +
+      '</div>' +
+      '<div class="m-foot"><button class="btn ghost" id="m-cancel">Close</button></div>'
+    );
+    $("m-cancel").addEventListener("click", closeModal);
+    var bw = $("bw");
+    if (bw) bw.addEventListener("click", function () {
+      if (canBuildWarehouse(p)) { closeModal(); buildWarehouse(p); spendAction(); }
+    });
+    Array.prototype.forEach.call($("modal").querySelectorAll("[data-color]"), function (b) {
+      b.disabled = p.cash < mCost || p.machines.length >= CFG.MAX_MACHINES;
+      b.addEventListener("click", function () {
+        if (canBuildMachine(p)) { closeModal(); buildMachine(p, b.dataset.color); spendAction(); }
+      });
+    });
+  }
+
+  // ---- Sail confirm ----
+  function confirmSail(p) {
+    openModal(
+      '<div class="m-head"><h2>Sail to the island</h2><p>This triggers a sealed-bid auction for all ' +
+        p.ship.length + ' container(s) on your ship, and <b>ends your turn</b>.</p></div>' +
+      '<div class="m-body"><div class="zline">' + zoneChips(p.ship) + '</div>' +
+        '<p class="hint">Each rival submits one hidden bid. You then either <b>sell</b> to the top bidder ' +
+        '(you get their bid <i>plus</i> an equal government subsidy), or <b>keep</b> the goods on your own island (you pay the bid to the bank).</p></div>' +
+      '<div class="m-foot"><button class="btn ghost" id="m-cancel">Cancel</button>' +
+        '<button class="btn primary" id="m-ok">Set sail ⛴</button></div>'
+    );
+    $("m-cancel").addEventListener("click", closeModal);
+    $("m-ok").addEventListener("click", function () { closeModal(); startVoyage(p); });
+  }
+
+  // ---- Bid prompt (hotseat: hidden entry) ----
+  function promptBid(p, lot, done) {
+    openModal(
+      '<div class="m-head"><h2>Sealed bid — ' + p.name + '</h2><p>Others, look away. ' +
+        'Bid for this lot of ' + lot.length + ' container(s).</p></div>' +
+      '<div class="m-body">' +
+        '<div class="zline" style="margin-bottom:10px;">' + zoneChips(lot) + '</div>' +
+        '<div class="row"><div class="grow">Your cash</div><div class="mono money">' + p.cash + '</div></div>' +
+        '<div class="row"><div class="grow">Your bid</div>' +
+          '<input class="bid-input" id="bidv" type="number" min="0" max="' + p.cash + '" value="0" /></div>' +
+        '<p class="hint">You can bid 0. You only pay if you win and the seller sells to you.</p>' +
+      '</div>' +
+      '<div class="m-foot"><button class="btn primary" id="m-ok">Submit bid</button></div>'
+    );
+    var input = $("bidv");
+    input.focus(); input.select();
+    $("m-ok").addEventListener("click", function () {
+      var v = Math.max(0, Math.min(p.cash, Math.floor(+input.value || 0)));
+      closeModal();
+      done(v);
+    });
+  }
+
+  // ---- Sell or keep prompt ----
+  function promptSellOrKeep(sailor, lot, high, done) {
+    openModal(
+      '<div class="m-head"><h2>Sell or keep?</h2><p>Top bid: <b>' + high.player.name + '</b> bid <b class="money">' +
+        high.amount + '</b> for ' + lot.length + ' container(s).</p></div>' +
+      '<div class="m-body">' +
+        '<div class="zline" style="margin-bottom:10px;">' + zoneChips(lot) + '</div>' +
+        '<div class="row"><div class="grow"><b>Sell</b> to ' + high.player.name +
+          '</div><div class="hint">You get ' + high.amount + ' + ' + high.amount + ' subsidy = <b class="money">' + (high.amount * 2) + '</b>; goods go to their island.</div></div>' +
+        '<div class="row"><div class="grow"><b>Keep</b> the goods</div>' +
+          '<div class="hint">You pay <b class="money">' + high.amount + '</b> to the bank; goods go to your island.</div></div>' +
+      '</div>' +
+      '<div class="m-foot">' +
+        '<button class="btn" id="m-keep"' + (sailor.cash >= high.amount ? "" : " disabled") + '>Keep (pay ' + high.amount + ')</button>' +
+        '<button class="btn primary" id="m-sell">Sell (+' + (high.amount * 2) + ')</button>' +
+      '</div>'
+    );
+    $("m-sell").addEventListener("click", function () { closeModal(); done("sell"); });
+    var k = $("m-keep");
+    k.addEventListener("click", function () { closeModal(); done("keep"); });
+  }
+
+  // ==================================================================
+  //  SCOREBOARD
+  // ==================================================================
+  function renderScoreboard(results) {
+    $("go-sub").textContent = results[0].player.name + " wins with a net worth of $" + results[0].net + ".";
+    var t = $("score-table");
+    t.innerHTML =
+      "<thead><tr><th>Player</th><th>Cash</th><th>Island</th><th>Harbour</th><th>Ship</th><th>Loans</th><th>Net</th></tr></thead><tbody>" +
+      results.map(function (r, i) {
+        return "<tr class='" + (i === 0 ? "win" : "") + "'>" +
+          "<td>" + r.player.name + " <span class='hint'>(" + r.player.premiumColor + " premium" +
+            (r.discardColor ? ", discarded " + r.discardColor : "") + (r.hasAllFive ? ", all-five!" : "") + ")</span></td>" +
+          "<td class='mono'>" + r.cash + "</td>" +
+          "<td class='mono'>" + r.islandVal + "</td>" +
+          "<td class='mono'>" + r.harbourVal + "</td>" +
+          "<td class='mono'>" + r.shipVal + "</td>" +
+          "<td class='mono'>-" + r.loanDebt + "</td>" +
+          "<td class='net'>" + r.net + "</td></tr>";
+      }).join("") + "</tbody>";
+  }
+
+  // ==================================================================
+  //  SETUP UI
+  // ==================================================================
+  var setupState = { count: 3, seats: [] };
+
+  function defaultSeats(n) {
+    var seats = [];
+    for (var i = 0; i < n; i++) {
+      seats.push({ name: i === 0 ? "You" : "AI " + i, isAI: i !== 0 });
+    }
+    return seats;
+  }
+
+  function renderSetup() {
+    var np = $("num-pick"); np.innerHTML = "";
+    [2, 3, 4, 5].forEach(function (n) {
+      var b = el("button", setupState.count === n ? "sel" : "", String(n));
+      b.addEventListener("click", function () {
+        setupState.count = n;
+        setupState.seats = defaultSeats(n);
+        renderSetup();
+      });
+      np.appendChild(b);
+    });
+    var box = $("seat-cfgs"); box.innerHTML = "";
+    setupState.seats.forEach(function (s, i) {
+      var row = el("div", "seat-cfg");
+      var swatch = el("span", "swatch");
+      swatch.style.background = COLOR_HEX[CFG.COLORS[i % CFG.COLORS.length]];
+      var name = el("input"); name.type = "text"; name.value = s.name;
+      name.addEventListener("input", function () { s.name = name.value || ("Player " + (i + 1)); });
+      var seg = el("div", "seg");
+      var human = el("button", s.isAI ? "" : "sel", "Human");
+      var ai = el("button", s.isAI ? "sel" : "", "AI");
+      human.addEventListener("click", function () { s.isAI = false; human.classList.add("sel"); ai.classList.remove("sel"); });
+      ai.addEventListener("click", function () { s.isAI = true; ai.classList.add("sel"); human.classList.remove("sel"); });
+      seg.appendChild(human); seg.appendChild(ai);
+      row.appendChild(swatch); row.appendChild(name); row.appendChild(seg);
+      box.appendChild(row);
+    });
+  }
+
+  function rulesHTML() {
+    return '<ul>' +
+      '<li><b>Goal:</b> finish with the highest net worth (cash + island goods by your value card + $2/harbour + $3/ship − $10/loan).</li>' +
+      '<li><b>Each turn</b> take <b>' + CFG.ACTIONS_PER_TURN + ' actions</b> (in any mix): Produce, Buy goods, Load ship, Build, or Sail.</li>' +
+      '<li><b>Produce:</b> one container per machine into your factory store, priced ' + CFG.PRICE_MIN + '–' + CFG.PRICE_MAX +
+        '. You pay a $' + CFG.UNION_FEE + '/container union fee to the player on your right.</li>' +
+      '<li><b>Buy goods:</b> buy from a <i>rival’s</i> factory store into your harbour. You can never buy your own production — that’s the whole economy.</li>' +
+      '<li><b>Load &amp; Sail:</b> load up to ' + CFG.SHIP_CAP + ' goods onto your ship, then sail to the island. Sailing ends your turn and triggers a <b>sealed-bid auction</b>.</li>' +
+      '<li><b>Auction:</b> every rival makes one hidden bid. You then <b>sell</b> to the top bidder (you receive the bid <i>plus</i> an equal government subsidy; goods go to their island) or <b>keep</b> the goods (you pay the bid to the bank; goods go to your island).</li>' +
+      '<li><b>Loans:</b> take up to ' + CFG.MAX_LOANS + ' loans of $' + CFG.LOAN_AMOUNT + ' anytime (not an action); pay $' + CFG.LOAN_INTEREST + ' interest each at the start of your turn.</li>' +
+      '<li><b>Value card (secret):</b> one premium colour scores ' + CFG.PREMIUM_FULL + ' if you hold all five colours on your island, otherwise ' + CFG.PREMIUM_PARTIAL + '; the others score fixed amounts.</li>' +
+      '<li><b>End:</b> once two colours are exhausted from the bank, the round finishes. Then everyone <b>discards every container of the colour they hold most of</b> before scoring — so hoard wisely.</li>' +
+    '</ul>';
+  }
+
+  // ==================================================================
+  //  WIRING
+  // ==================================================================
+  $("rules-body").innerHTML = rulesHTML();
+  setupState.seats = defaultSeats(setupState.count);
+  renderSetup();
+
+  $("start-btn").addEventListener("click", function () {
+    newGame(setupState.seats.map(function (s) { return { name: s.name, isAI: s.isAI }; }));
+  });
+  $("new-btn").addEventListener("click", function () { showScreen("setup"); });
+  $("go-again").addEventListener("click", function () { showScreen("setup"); });
+  $("rules-btn").addEventListener("click", function () {
+    openModal('<div class="m-head"><h2>How to play Container</h2></div>' +
+      '<div class="m-body"><div class="body">' + rulesHTML() + '</div></div>' +
+      '<div class="m-foot"><button class="btn primary" id="m-cancel">Got it</button></div>');
+    $("m-cancel").addEventListener("click", closeModal);
+  });
+  $("show-log-btn").addEventListener("click", function () {
+    var logHTML = G ? G.log.slice().reverse().map(function (e) {
+      return '<div class="entry ' + e.cls + '">' + e.msg + '</div>';
+    }).join("") : "<p class='hint'>No game in progress.</p>";
+    openModal('<div class="m-head"><h2>Game log</h2></div><div class="m-body" id="logmodal">' + logHTML + '</div>' +
+      '<div class="m-foot"><button class="btn primary" id="m-cancel">Close</button></div>');
+    $("m-cancel").addEventListener("click", function () { closeModal(); });
+  });
+
+  showScreen("setup");
+})();
+</script>
+</body>
+</html>

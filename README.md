@@ -13,9 +13,21 @@ Open `index.html` in any browser — desktop or phone. No install, no account, n
 Drag a piece from the tray onto the 8×8 board. Fill a full row or column to clear it and
 score. The game ends when none of your three pieces can fit.
 
+## Also in here: Container
+
+A second, unrelated game ships alongside Tranquil Blocks. Open the **▦ Games** menu
+in the top bar (or go straight to `container.html`) to play **Container** — a virtual
+version of the classic economic board game, built in the spartan, information-dense
+style of the 18xx titles at [18xx.games](https://18xx.games).
+
+It's a fully player-driven shipping economy: produce goods, buy from your rivals
+(you can never buy your own production), sail laden ships to the island, and win the
+sealed-bid auctions. Supports **2–5 players, hotseat and/or AI** in any mix. Same
+zero-dependency, single-file approach — no build step, no backend.
+
 ## Status
 
-Early prototype — single self-contained HTML file. Built to validate the idea quickly.
+Early prototype — self-contained HTML files. Built to validate the ideas quickly.
 
 ## Where this could go (money model)
 

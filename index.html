@@ -187,6 +187,16 @@
     background: var(--grid); color: var(--muted);
   }
   .toggle.on { background: var(--accent); color: #06231e; }
+  .game-link {
+    display: flex; align-items: center; gap: 12px; text-decoration: none; text-align: left;
+    background: var(--grid); color: var(--ink); padding: 13px 14px; border-radius: 12px;
+    margin: 9px 0; font-weight: 700; font-size: 15px;
+  }
+  .game-link:active { transform: translateY(1px); }
+  .game-link.current { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .game-link .gl-emoji { font-size: 22px; line-height: 1; }
+  .game-link .gl-text { display: flex; flex-direction: column; }
+  .game-link .gl-sub { color: var(--muted); font-weight: 500; font-size: 12px; margin-top: 1px; }
   .how { padding: 14px 0 4px; border-top: 1px solid rgba(255,255,255,0.06); }
   .how .how-title { color: var(--ink); font-weight: 700; font-size: 14px; margin: 0 0 6px; }
   .how p.body { color: var(--muted); font-size: 13px; line-height: 1.5; margin: 0; }
@@ -236,6 +246,7 @@
         <span class="title">Tranquil Blocks</span>
       </div>
       <div class="bar-actions">
+        <button id="menu-btn" class="icon-btn" aria-label="Games">▦</button>
         <button id="restart" class="icon-btn" aria-label="New game">↻</button>
         <button id="settings-btn" class="icon-btn" aria-label="Settings">⚙</button>
       </div>
@@ -265,6 +276,23 @@
 </div>
 
 <div id="drag-ghost"></div>
+
+<div id="games-overlay" class="modal-overlay">
+  <div class="modal settings">
+    <h2>Games</h2>
+    <a href="index.html" class="game-link current">
+      <span class="gl-emoji">🧩</span>
+      <span class="gl-text">Tranquil Blocks
+        <span class="gl-sub">Block puzzle · no ads, ever</span></span>
+    </a>
+    <a href="container.html" class="game-link">
+      <span class="gl-emoji">🚢</span>
+      <span class="gl-text">Container
+        <span class="gl-sub">Shipping-economy strategy · hotseat &amp; AI</span></span>
+    </a>
+    <button id="games-close" class="ghost-btn">Done</button>
+  </div>
+</div>
 
 <div id="settings-overlay" class="modal-overlay">
   <div class="modal settings">
@@ -942,6 +970,12 @@
   document.getElementById("settings-btn").addEventListener("click", () => {
     updateSoundToggle();
     settingsOverlay.classList.add("show");
+  });
+  const gamesOverlay = document.getElementById("games-overlay");
+  document.getElementById("menu-btn").addEventListener("click", () => gamesOverlay.classList.add("show"));
+  document.getElementById("games-close").addEventListener("click", () => gamesOverlay.classList.remove("show"));
+  gamesOverlay.addEventListener("click", (e) => {
+    if (e.target === gamesOverlay) gamesOverlay.classList.remove("show");
   });
   document.getElementById("settings-close").addEventListener("click", () => settingsOverlay.classList.remove("show"));
   settingsOverlay.addEventListener("click", (e) => {
