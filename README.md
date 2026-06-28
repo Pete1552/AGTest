@@ -1,21 +1,36 @@
-# Tranquil Blocks
+# Tranquil
 
-A clean, ad-free take on the classic block-puzzle game (the "wood block" / block-blast
-style that's everywhere on mobile — but without the constant ads and pop-ups).
-
-**The pitch:** the popular casual games people love are ruined by aggressive ads. The
-product here *is the absence of ads* — same satisfying gameplay, zero interruptions.
+A small collection of clean, **ad-free** games. No ads, no pop-ups, no nags — ever.
+Built as zero-dependency, single-file web pages; no build step, no backend.
 
 ## Play it
 
-Open `index.html` in any browser — desktop or phone. No install, no account, no build step.
+Open `index.html` in any browser — desktop or phone. It's the home screen (hub); tap a
+game to play. Add it to your Home Screen for a full-screen, app-like experience.
 
-Drag a piece from the tray onto the 8×8 board. Fill a full row or column to clear it and
-score. The game ends when none of your three pieces can fit.
+Live: https://pete1552.github.io/AGTest/
+
+## Games
+
+- **Blocks** (`blocks.html`) — drop pieces onto an 8×8 grid and clear full rows/columns.
+  Endless + a daily challenge with streaks.
+- **Bloom** (`bloom.html`) — flood the board to a single colour in as few moves as possible.
+- **Ripple** (`ripple.html`) — a calm "lights out" style puzzle: tap to toggle a tile and
+  its neighbours until every tile is calm.
+- **Trace** (`trace.html`) — draw one continuous line through every cell exactly once.
+
+All games share one design system (`shared.css`) and a collection-wide sound setting.
+
+## Also in the repo: Container
+
+`container.html` is a separate, more complex game — *Container*, a virtual shipping
+economy (produce goods, resell rivals' production, win sealed-bid auctions; 2–5 players,
+hotseat and/or AI). It's kept in the repo but **not yet linked from the hub** — it can be
+folded into the collection later.
 
 ## Status
 
-Early prototype — single self-contained HTML file. Built to validate the idea quickly.
+Early prototype — self-contained HTML files, built to validate the ideas quickly.
 
 ## Where this could go (money model)
 
@@ -25,13 +40,3 @@ models:
 - **Sell the calm:** free to play, optional one-time "remove all nags" unlock.
 - **One *optional* reward ad** (watch one only if you want a continue) — never forced.
 - **Free web version for discovery → paid native app** (iOS/Android) later.
-
-## Possible next steps
-
-- Drag polish + sound + haptics
-- Combo scoring and streak feedback
-- Daily challenge / shareable score
-- Package for the App Store / Play Store
-- Light, tasteful monetization per the model above
-
-<!-- public deploy -->
