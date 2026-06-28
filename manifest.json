@@ -1,7 +1,7 @@
 {
-  "name": "Tranquil Blocks",
+  "name": "Tranquil",
   "short_name": "Tranquil",
-  "description": "A block puzzle with no ads, ever.",
+  "description": "A collection of calm games with no ads, ever.",
   "start_url": "./index.html",
   "display": "standalone",
   "orientation": "portrait",

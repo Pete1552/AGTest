@@ -1,0 +1,967 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#11151c" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Tranquil" />
+<link rel="apple-touch-icon" href="icon.png" />
+<link rel="manifest" href="manifest.json" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet" />
+<title>Tranquil Blocks — a block puzzle with no ads, ever</title>
+<style>
+  :root {
+    --bg: #11151c;
+    --panel: #1b212c;
+    --grid: #232b38;
+    --cell-empty: #1f2632;
+    --ink: #e8edf4;
+    --muted: #8a97a8;
+    --accent: #5dd6c0;
+    --radius: 10px;
+    --font-text: 'Nunito', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-display: 'Quicksand', var(--font-text);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html {
+    height: 100%;
+    overflow: hidden;
+    background: var(--bg);
+  }
+  body {
+    margin: 0; padding: 0;
+    position: fixed; inset: 0; width: 100%; height: 100%; overflow: hidden;
+    background: radial-gradient(120% 90% at 50% 0%, #18202c 0%, var(--bg) 60%);
+    color: var(--ink);
+    font-family: var(--font-text);
+    touch-action: manipulation;
+    overscroll-behavior: none;
+  }
+  .wrap {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: calc(10px + env(safe-area-inset-top)) 8px calc(10px + env(safe-area-inset-bottom));
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+  }
+  header { text-align: center; margin-bottom: 8px; padding: 0 6px; }
+  .topbar { display: flex; align-items: center; justify-content: space-between; }
+  .brand { display: flex; align-items: center; gap: 9px; }
+  .brand img { width: 28px; height: 28px; border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.35); }
+  .brand .title { font-family: var(--font-display); font-size: 19px; font-weight: 700; letter-spacing: 0.3px; }
+  .icon-btn {
+    width: 40px; height: 40px; border-radius: 12px; border: none; cursor: pointer;
+    background: var(--panel); color: var(--ink); font-size: 17px;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .icon-btn:active { transform: translateY(1px); }
+  .bar-actions { display: flex; gap: 8px; }
+  .modes {
+    display: inline-flex; margin: 10px auto 0; background: var(--panel);
+    border-radius: 999px; padding: 4px; gap: 3px;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.3);
+  }
+  .mode-btn {
+    background: transparent; color: var(--muted); border: none; cursor: pointer;
+    padding: 7px 22px; border-radius: 999px; font-size: 13px; font-weight: 700;
+    transition: background 140ms ease, color 140ms ease;
+  }
+  .mode-btn.active { background: var(--accent); color: #06231e; box-shadow: 0 2px 8px rgba(93,214,192,0.3); }
+  .daily-info { color: var(--muted); font-size: 11.5px; margin: 7px 0 0; min-height: 14px; }
+  .daily-info .streak { color: var(--accent); font-weight: 700; }
+  .scores {
+    display: flex; gap: 8px; margin: 9px 0;
+  }
+  .score-box {
+    flex: 1; text-align: center; background: var(--panel);
+    border-radius: 12px; padding: 7px 8px 8px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+  }
+  .score-label { color: var(--muted); font-size: 9.5px; text-transform: uppercase; letter-spacing: 1.2px; font-weight: 700; }
+  .score-val { font-family: var(--font-display); font-size: 22px; font-weight: 700; line-height: 1.2; margin-top: 1px; }
+  .score-box.best .score-val { color: var(--accent); }
+  .board-area {
+    flex: 1 1 auto; min-height: 0;
+    display: flex; align-items: center; justify-content: center;
+    margin: 4px 0;
+  }
+  #board {
+    position: relative;
+    width: 100%;
+    max-width: 100%;
+    max-height: 100%;
+    aspect-ratio: 1 / 1;
+    background: var(--panel);
+    border-radius: 14px;
+    padding: 8px;
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    grid-template-rows: repeat(8, 1fr);
+    gap: 4px;
+    touch-action: none;
+    user-select: none;
+  }
+  .cell {
+    background: var(--cell-empty);
+    border-radius: var(--radius);
+    transition: background 90ms ease;
+  }
+  .cell.filled {
+    box-shadow: inset 0 3px 0 rgba(255,255,255,0.16), inset 0 -3px 0 rgba(0,0,0,0.28);
+  }
+  .cell.preview { outline: 2px dashed rgba(255,255,255,0.35); outline-offset: -3px; }
+  .cell.preview-bad { outline: 2px dashed rgba(255,90,90,0.5); outline-offset: -3px; }
+  .cell.will-clear { box-shadow: inset 0 0 0 3px rgba(255,255,255,0.5); filter: brightness(1.15); }
+  .cell.pop-in { animation: popIn 190ms ease; }
+  @keyframes popIn {
+    0% { transform: scale(0.5); }
+    60% { transform: scale(1.1); }
+    100% { transform: scale(1); }
+  }
+  .cell.clearing { animation: pop 220ms ease forwards; }
+  @keyframes pop {
+    0% { transform: scale(1); }
+    45% { transform: scale(1.18); filter: brightness(1.6); }
+    100% { transform: scale(0); }
+  }
+  #tray {
+    margin-top: 10px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    min-height: 92px;
+    align-items: center;
+    background: var(--panel);
+    border-radius: 12px;
+    padding: 8px 6px;
+  }
+  .piece {
+    display: grid;
+    gap: 3px;
+    justify-content: center;
+    align-content: center;
+    padding: 6px;
+    border-radius: 12px;
+    cursor: grab;
+    touch-action: none;
+    transition: transform 120ms ease, opacity 120ms ease;
+  }
+  .piece:active { cursor: grabbing; }
+  .piece.used { opacity: 0; pointer-events: none; }
+  .piece.stuck { opacity: 0.3; filter: saturate(0.4); }
+  .pcell { width: 20px; height: 20px; border-radius: 5px;
+    box-shadow: inset 0 2px 0 rgba(255,255,255,0.16), inset 0 -2px 0 rgba(0,0,0,0.25); }
+  .pcell.blank { background: transparent !important; box-shadow: none; }
+  #drag-ghost {
+    position: fixed; left: 0; top: 0; pointer-events: none; z-index: 50;
+    display: grid; gap: 4px; opacity: 0.95; transform: translate(-9999px,-9999px);
+    filter: drop-shadow(0 8px 14px rgba(0,0,0,0.4));
+  }
+  #drag-ghost .gcell { border-radius: 8px;
+    box-shadow: inset 0 3px 0 rgba(255,255,255,0.18), inset 0 -3px 0 rgba(0,0,0,0.28); }
+  .footer { display: none; }
+  .no-ads { color: var(--accent); font-weight: 600; }
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(10,13,18,0.82);
+    display: none; align-items: center; justify-content: center; z-index: 100;
+    backdrop-filter: blur(3px); padding: 20px;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal.settings { text-align: left; }
+  .modal.settings h2 { text-align: center; color: var(--ink); margin-bottom: 16px; }
+  .setting-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 0; border-top: 1px solid rgba(255,255,255,0.06);
+  }
+  .setting-row .label { font-size: 15px; font-weight: 600; }
+  .toggle {
+    width: auto; min-width: 64px; padding: 7px 16px; border-radius: 999px;
+    font-size: 13px; font-weight: 700; cursor: pointer; border: none;
+    background: var(--grid); color: var(--muted);
+  }
+  .toggle.on { background: var(--accent); color: #06231e; }
+  .how { padding: 14px 0 4px; border-top: 1px solid rgba(255,255,255,0.06); }
+  .how .how-title { color: var(--ink); font-weight: 700; font-size: 14px; margin: 0 0 6px; }
+  .how p.body { color: var(--muted); font-size: 13px; line-height: 1.5; margin: 0; }
+  .promise {
+    text-align: center; color: var(--accent); font-weight: 700; font-size: 13px;
+    margin: 16px 0 16px; letter-spacing: 0.2px;
+  }
+  .modal .ghost-btn { background: transparent; color: var(--muted); margin-top: 8px; }
+  .modal {
+    background: var(--panel); border-radius: 20px; padding: 26px 24px; text-align: center;
+    max-width: 320px; width: 86%; border: 1px solid rgba(255,255,255,0.07);
+    box-shadow: 0 18px 50px rgba(0,0,0,0.5);
+  }
+  .modal h2 { font-family: var(--font-display); margin: 0 0 4px; font-size: 19px; color: var(--muted); font-weight: 700; }
+  .modal p { color: var(--ink); margin: 6px 0 18px; font-size: 15px; font-weight: 600; min-height: 19px; }
+  .modal .final { font-family: var(--font-display); font-size: 48px; font-weight: 700; margin: 6px 0 0; color: var(--accent); line-height: 1; }
+  .modal .final-best { color: var(--muted); font-size: 13px; margin: 4px 0 0; min-height: 16px; }
+  .modal button {
+    background: var(--accent); color: #06231e; border: none; padding: 12px 26px;
+    border-radius: 999px; font-size: 15px; font-weight: 700; cursor: pointer; width: 100%;
+  }
+  .modal button:active { transform: translateY(1px); }
+  .modal .share {
+    background: var(--grid); color: var(--ink); margin-top: 10px;
+  }
+  #fx-layer { position: absolute; inset: 0; pointer-events: none; z-index: 20; overflow: visible; }
+  .float-popup {
+    position: absolute; transform: translate(-50%, -50%);
+    font-weight: 800; color: #fff; text-shadow: 0 2px 8px rgba(0,0,0,0.5);
+    white-space: nowrap; animation: floatUp 850ms ease-out forwards;
+  }
+  .float-popup.big { font-size: 30px; }
+  .float-popup.combo { color: var(--accent); font-size: 22px; }
+  @keyframes floatUp {
+    0% { opacity: 0; transform: translate(-50%, -30%) scale(0.6); }
+    20% { opacity: 1; transform: translate(-50%, -55%) scale(1.05); }
+    100% { opacity: 0; transform: translate(-50%, -130%) scale(1); }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="topbar">
+      <div class="brand">
+        <a href="index.html" class="icon-btn" aria-label="Back to games">‹</a>
+        <span class="title">Blocks</span>
+      </div>
+      <div class="bar-actions">
+        <button id="restart" class="icon-btn" aria-label="New game">↻</button>
+        <button id="settings-btn" class="icon-btn" aria-label="Settings">⚙</button>
+      </div>
+    </div>
+    <div class="modes">
+      <button id="mode-endless" class="mode-btn active">Endless</button>
+      <button id="mode-daily" class="mode-btn">Daily</button>
+    </div>
+    <div class="daily-info" id="daily-info"></div>
+  </header>
+
+  <div class="scores">
+    <div class="score-box">
+      <div class="score-label">Score</div>
+      <div class="score-val" id="score">0</div>
+    </div>
+    <div class="score-box best">
+      <div class="score-label" id="best-label">Best</div>
+      <div class="score-val" id="best">0</div>
+    </div>
+  </div>
+
+  <div class="board-area">
+    <div id="board"><div id="fx-layer"></div></div>
+  </div>
+  <div id="tray"></div>
+</div>
+
+<div id="drag-ghost"></div>
+
+<div id="settings-overlay" class="modal-overlay">
+  <div class="modal settings">
+    <h2>Tranquil Blocks</h2>
+    <div class="setting-row">
+      <span class="label">Sound</span>
+      <button id="sound-toggle" class="toggle on">On</button>
+    </div>
+    <div class="how">
+      <p class="how-title">How to play</p>
+      <p class="body">Drag a piece onto the grid. Fill a complete row or column to clear it and score. Keep going until none of your three pieces fit.</p>
+    </div>
+    <p class="promise">No ads. No pop-ups. No nags — ever.</p>
+    <button id="settings-share" class="share">Share the game</button>
+    <button id="settings-close" class="ghost-btn">Done</button>
+  </div>
+</div>
+
+<div id="overlay" class="modal-overlay">
+  <div class="modal">
+    <h2>No moves left</h2>
+    <div class="final" id="final-score">0</div>
+    <div class="final-best" id="final-best"></div>
+    <p id="final-msg">Nice run.</p>
+    <button id="play-again">Play again</button>
+    <button id="share" class="share">Share your score</button>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  const SIZE = 8;
+  const COLORS = ["#5dd6c0", "#f2b35e", "#7aa2f7", "#e06c9f", "#9ece6a", "#bb9af7", "#f7768e"];
+
+  // Polyomino shapes as lists of [row, col] offsets.
+  const SHAPES = [
+    [[0,0]],
+    [[0,0],[0,1]],
+    [[0,0],[1,0]],
+    [[0,0],[0,1],[0,2]],
+    [[0,0],[1,0],[2,0]],
+    [[0,0],[0,1],[0,2],[0,3]],
+    [[0,0],[1,0],[2,0],[3,0]],
+    [[0,0],[0,1],[1,0],[1,1]],
+    [[0,0],[0,1],[1,0]],
+    [[0,0],[0,1],[1,1]],
+    [[0,0],[1,0],[1,1]],
+    [[0,1],[1,0],[1,1]],
+    [[0,0],[0,1],[0,2],[1,0]],
+    [[0,0],[0,1],[0,2],[1,2]],
+    [[0,0],[1,0],[1,1],[1,2]],
+    [[0,2],[1,0],[1,1],[1,2]],
+    [[0,0],[0,1],[1,1],[1,2]],
+    [[0,1],[0,2],[1,0],[1,1]],
+    [[0,0],[0,1],[0,2],[1,0],[1,1],[1,2]],
+    [[0,0],[0,1],[1,0],[1,1],[2,0],[2,1]],
+    [[0,1],[1,0],[1,1],[1,2],[2,1]]
+  ];
+
+  let board = [];           // SIZE x SIZE of color string or null
+  let tray = [];            // {shape, color, used}
+  let score = 0;
+  let combo = 0;            // consecutive placements that cleared lines
+  let best = Number(localStorage.getItem("tranquilblocks_best") || 0);
+  let muted = localStorage.getItem("tranquilblocks_muted") === "1";
+
+  let mode = "endless";     // "endless" | "daily"
+  let rng = Math.random;    // randomness source (seeded in daily mode)
+  let prevBest = 0;         // best at the start of the current game (for "new best")
+  let dailyData = loadJSON("tranquilblocks_daily", { date: "", best: 0 });
+  let streakData = loadJSON("tranquilblocks_streak", { count: 0, lastDate: "" });
+
+  const boardEl = document.getElementById("board");
+  const boardArea = document.querySelector(".board-area");
+  const fxLayer = document.getElementById("fx-layer");
+  const trayEl = document.getElementById("tray");
+  const scoreEl = document.getElementById("score");
+  const bestEl = document.getElementById("best");
+  const bestLabel = document.getElementById("best-label");
+  const ghost = document.getElementById("drag-ghost");
+  const overlay = document.getElementById("overlay");
+  const dailyInfoEl = document.getElementById("daily-info");
+  const modeEndlessBtn = document.getElementById("mode-endless");
+  const modeDailyBtn = document.getElementById("mode-daily");
+  const settingsOverlay = document.getElementById("settings-overlay");
+  const soundToggle = document.getElementById("sound-toggle");
+
+  let cellEls = [];
+
+  function loadJSON(key, fallback) {
+    try { return JSON.parse(localStorage.getItem(key)) || fallback; }
+    catch (e) { return fallback; }
+  }
+
+  // ---- Dates & seeded RNG (so everyone gets the same daily puzzle) ----
+  function todayStr() {
+    const d = new Date();
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") +
+      "-" + String(d.getDate()).padStart(2, "0");
+  }
+  function todaySeed() {
+    const d = new Date();
+    return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+  }
+  function yesterdayStr() {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") +
+      "-" + String(d.getDate()).padStart(2, "0");
+  }
+  function prettyDate() {
+    return new Date().toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  }
+  function mulberry32(a) {
+    return function () {
+      a |= 0; a = a + 0x6D2B79F5 | 0;
+      let t = Math.imul(a ^ a >>> 15, 1 | a);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+
+  // ---- Sound (synthesized, no asset files) ----
+  let audioCtx = null;
+  function ensureAudio() {
+    if (!audioCtx) {
+      try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+      catch (e) { audioCtx = null; }
+    }
+    if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+  }
+  function tone(freq, dur, type, gain) {
+    if (muted || !audioCtx) return;
+    const osc = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    osc.type = type || "sine";
+    osc.frequency.value = freq;
+    g.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(gain || 0.12, audioCtx.currentTime + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + dur);
+    osc.connect(g); g.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + dur + 0.02);
+  }
+  function sfxPlace() { tone(220, 0.08, "triangle", 0.08); }
+  function sfxClear(level) {
+    const base = 520;
+    for (let i = 0; i < Math.min(level, 4); i++) {
+      setTimeout(() => tone(base + i * 140, 0.16, "sine", 0.12), i * 70);
+    }
+  }
+  function sfxGameOver() {
+    [330, 247, 196].forEach((f, i) => setTimeout(() => tone(f, 0.3, "sine", 0.1), i * 140));
+  }
+  function buzz(ms) {
+    if (!muted && navigator.vibrate) { try { navigator.vibrate(ms); } catch (e) {} }
+  }
+
+  function popup(text, cls, topPct) {
+    const el = document.createElement("div");
+    el.className = "float-popup" + (cls ? " " + cls : "");
+    el.textContent = text;
+    el.style.left = "50%";
+    el.style.top = (topPct || 44) + "%";
+    fxLayer.appendChild(el);
+    setTimeout(() => el.remove(), 900);
+  }
+
+  function buildBoard() {
+    boardEl.innerHTML = "";
+    boardEl.appendChild(fxLayer);
+    fxLayer.innerHTML = "";
+    cellEls = [];
+    for (let r = 0; r < SIZE; r++) {
+      cellEls[r] = [];
+      for (let c = 0; c < SIZE; c++) {
+        const d = document.createElement("div");
+        d.className = "cell";
+        boardEl.appendChild(d);
+        cellEls[r][c] = d;
+      }
+    }
+  }
+
+  function renderBoard() {
+    for (let r = 0; r < SIZE; r++) {
+      for (let c = 0; c < SIZE; c++) {
+        const el = cellEls[r][c];
+        const v = board[r][c];
+        el.classList.remove("preview", "preview-bad");
+        if (v) {
+          el.classList.add("filled");
+          el.style.background = v;
+        } else {
+          el.classList.remove("filled");
+          el.style.background = "";
+        }
+      }
+    }
+  }
+
+  function shapeBounds(shape) {
+    let maxR = 0, maxC = 0;
+    for (const [r, c] of shape) { maxR = Math.max(maxR, r); maxC = Math.max(maxC, c); }
+    return { rows: maxR + 1, cols: maxC + 1 };
+  }
+
+  function randomPiece() {
+    const shape = SHAPES[Math.floor(rng() * SHAPES.length)];
+    const color = COLORS[Math.floor(rng() * COLORS.length)];
+    return { shape, color, used: false };
+  }
+
+  function refillTray() {
+    tray = [randomPiece(), randomPiece(), randomPiece()];
+    renderTray();
+  }
+
+  function renderTray() {
+    trayEl.innerHTML = "";
+    tray.forEach((piece, idx) => {
+      const { rows, cols } = shapeBounds(piece.shape);
+      const el = document.createElement("div");
+      const stuck = !piece.used && !canPlaceShapeAnywhere(piece.shape);
+      el.className = "piece" + (piece.used ? " used" : (stuck ? " stuck" : ""));
+      el.style.gridTemplateColumns = `repeat(${cols}, 20px)`;
+      el.style.gridTemplateRows = `repeat(${rows}, 20px)`;
+      const filledSet = new Set(piece.shape.map(([r, c]) => r + "," + c));
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const cell = document.createElement("div");
+          if (filledSet.has(r + "," + c)) {
+            cell.className = "pcell";
+            cell.style.background = piece.color;
+          } else {
+            cell.className = "pcell blank";
+          }
+          el.appendChild(cell);
+        }
+      }
+      if (!piece.used) attachDrag(el, idx);
+      trayEl.appendChild(el);
+    });
+  }
+
+  function canPlace(shape, row, col) {
+    for (const [dr, dc] of shape) {
+      const r = row + dr, c = col + dc;
+      if (r < 0 || r >= SIZE || c < 0 || c >= SIZE) return false;
+      if (board[r][c]) return false;
+    }
+    return true;
+  }
+
+  function canPlaceShapeAnywhere(shape) {
+    for (let r = 0; r < SIZE; r++)
+      for (let c = 0; c < SIZE; c++)
+        if (canPlace(shape, r, c)) return true;
+    return false;
+  }
+
+  function anyMoveAvailable() {
+    for (const piece of tray) {
+      if (piece.used) continue;
+      if (canPlaceShapeAnywhere(piece.shape)) return true;
+    }
+    return false;
+  }
+
+  // Which rows/cols would be full if this shape were placed at row,col.
+  function linesIfPlaced(shape, row, col) {
+    const added = new Set(shape.map(([dr, dc]) => (row + dr) + "," + (col + dc)));
+    const filled = (r, c) => board[r][c] || added.has(r + "," + c);
+    const rows = [], cols = [];
+    for (let r = 0; r < SIZE; r++) {
+      let f = true;
+      for (let c = 0; c < SIZE; c++) if (!filled(r, c)) { f = false; break; }
+      if (f) rows.push(r);
+    }
+    for (let c = 0; c < SIZE; c++) {
+      let f = true;
+      for (let r = 0; r < SIZE; r++) if (!filled(r, c)) { f = false; break; }
+      if (f) cols.push(c);
+    }
+    return { rows, cols };
+  }
+
+  function placePiece(idx, row, col) {
+    const piece = tray[idx];
+    if (piece.used || !canPlace(piece.shape, row, col)) return false;
+    const placed = [];
+    for (const [dr, dc] of piece.shape) {
+      board[row + dr][col + dc] = piece.color;
+      placed.push([row + dr, col + dc]);
+    }
+    score += piece.shape.length;
+    piece.used = true;
+    sfxPlace();
+    buzz(8);
+
+    const cleared = clearLines();
+
+    // Pop-in animation for freshly placed cells that aren't being cleared.
+    placed.forEach(([r, c]) => {
+      const el = cellEls[r][c];
+      if (!el.classList.contains("clearing")) {
+        el.classList.add("pop-in");
+        setTimeout(() => el.classList.remove("pop-in"), 200);
+      }
+    });
+
+    if (cleared > 0) {
+      combo += 1;
+      const lineBonus = cleared * 10 + (cleared - 1) * 10;
+      const comboBonus = (combo - 1) * 15;
+      score += lineBonus + comboBonus;
+      sfxClear(cleared);
+      buzz(cleared > 1 ? [18, 40, 28] : 22);
+      popup("+" + (lineBonus + comboBonus), "big", 48);
+      if (combo > 1) popup("Combo x" + combo, "combo", 33);
+    } else {
+      combo = 0;
+    }
+
+    if (tray.every(p => p.used)) refillTray();
+    else renderTray();
+    renderBoard();
+    updateScore();
+    // If lines are clearing, wait for the board to settle before judging game over,
+    // since the freed space may open up new moves.
+    if (cleared > 0) {
+      setTimeout(() => { if (!anyMoveAvailable()) gameOver(); }, 240);
+    } else if (!anyMoveAvailable()) {
+      gameOver();
+    }
+    return true;
+  }
+
+  // Clears any full rows/columns, animates them, and returns the number cleared.
+  function clearLines() {
+    const fullRows = [], fullCols = [];
+    for (let r = 0; r < SIZE; r++)
+      if (board[r].every(v => v)) fullRows.push(r);
+    for (let c = 0; c < SIZE; c++) {
+      let full = true;
+      for (let r = 0; r < SIZE; r++) if (!board[r][c]) { full = false; break; }
+      if (full) fullCols.push(c);
+    }
+    const cleared = fullRows.length + fullCols.length;
+    if (cleared === 0) return 0;
+
+    const toClear = new Set();
+    fullRows.forEach(r => { for (let c = 0; c < SIZE; c++) toClear.add(r + "," + c); });
+    fullCols.forEach(c => { for (let r = 0; r < SIZE; r++) toClear.add(r + "," + c); });
+
+    toClear.forEach(key => {
+      const [r, c] = key.split(",").map(Number);
+      cellEls[r][c].classList.add("clearing");
+    });
+
+    setTimeout(() => {
+      toClear.forEach(key => {
+        const [r, c] = key.split(",").map(Number);
+        board[r][c] = null;
+        cellEls[r][c].classList.remove("clearing");
+      });
+      renderBoard();
+      renderTray(); // freed space may un-stick remaining pieces
+    }, 220);
+
+    return cleared;
+  }
+
+  let shownScore = 0, scoreAnim = null;
+  function renderScoreNumber(target) {
+    if (scoreAnim) cancelAnimationFrame(scoreAnim);
+    const start = shownScore, t0 = performance.now(), dur = 280;
+    function step(now) {
+      const k = Math.min(1, (now - t0) / dur);
+      shownScore = Math.round(start + (target - start) * k);
+      scoreEl.textContent = shownScore;
+      if (k < 1) scoreAnim = requestAnimationFrame(step);
+      else { shownScore = target; scoreEl.textContent = target; }
+    }
+    scoreAnim = requestAnimationFrame(step);
+  }
+
+  function updateScore() {
+    renderScoreNumber(score);
+    if (mode === "endless") {
+      if (score > best) {
+        best = score;
+        localStorage.setItem("tranquilblocks_best", String(best));
+      }
+      bestEl.textContent = best;
+    } else {
+      const todaysBest = (dailyData.date === todayStr()) ? dailyData.best : 0;
+      bestEl.textContent = Math.max(todaysBest, score);
+    }
+  }
+
+  function liveStreak() {
+    if (streakData.lastDate === todayStr() || streakData.lastDate === yesterdayStr())
+      return streakData.count;
+    return 0;
+  }
+
+  function updateDailyInfo() {
+    if (mode === "daily") {
+      let s = "Daily · " + prettyDate();
+      const st = liveStreak();
+      if (st > 0) s += ' · <span class="streak">🔥 ' + st + ' day' + (st > 1 ? 's' : '') + '</span>';
+      dailyInfoEl.innerHTML = s;
+    } else {
+      dailyInfoEl.innerHTML = "";
+    }
+  }
+
+  function gameOver() {
+    combo = 0;
+    sfxGameOver();
+    buzz([30, 60, 40]);
+
+    let newBest = false;
+    let streakMsg = "";
+
+    if (mode === "endless") {
+      if (score > prevBest && score > 0) newBest = true;
+    } else {
+      const t = todayStr();
+      if (dailyData.date !== t) dailyData = { date: t, best: 0 };
+      if (score > dailyData.best) dailyData.best = score;
+      if (score > prevBest && score > 0) newBest = true;
+      localStorage.setItem("tranquilblocks_daily", JSON.stringify(dailyData));
+      // Count one completed daily per calendar day; extend or reset the streak.
+      if (streakData.lastDate !== t) {
+        streakData.count = (streakData.lastDate === yesterdayStr()) ? streakData.count + 1 : 1;
+        streakData.lastDate = t;
+        localStorage.setItem("tranquilblocks_streak", JSON.stringify(streakData));
+        streakMsg = "🔥 " + streakData.count + " day streak!";
+      }
+      updateDailyInfo();
+    }
+
+    document.getElementById("final-score").textContent = score;
+    document.getElementById("final-best").textContent =
+      (mode === "daily") ? "Today's best · " + dailyData.best : "Best · " + best;
+    let msg;
+    if (newBest) msg = "New best! 🎉";
+    else if (streakMsg) msg = streakMsg;
+    else {
+      const msgs = ["Nice run.", "Clean game.", "Well played.", "No ads in sight."];
+      msg = msgs[Math.floor(Math.random() * msgs.length)];
+    }
+    document.getElementById("final-msg").textContent = msg;
+    overlay.classList.add("show");
+  }
+
+  async function shareScore() {
+    const text = (mode === "daily")
+      ? "I scored " + score + " on today's Tranquil Blocks daily (" + prettyDate() + ") — a block puzzle with no ads. Beat me:"
+      : "I scored " + score + " on Tranquil Blocks — a block puzzle with no ads. Try it:";
+    const url = "https://pete1552.github.io/AGTest/";
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: "Tranquil Blocks", text, url });
+        return;
+      }
+    } catch (e) { return; }
+    try {
+      await navigator.clipboard.writeText(text + " " + url);
+      const btn = document.getElementById("share");
+      const old = btn.textContent;
+      btn.textContent = "Copied!";
+      setTimeout(() => { btn.textContent = old; }, 1500);
+    } catch (e) {}
+  }
+
+  // ---- Drag & drop ----
+  let drag = null;
+  const LIFT = 52;       // px the piece floats above the finger
+  const SNAP = 1;        // cell radius the drop will forgive / snap within
+
+  function attachDrag(el, idx) {
+    el.addEventListener("pointerdown", (e) => {
+      const piece = tray[idx];
+      if (piece.used) return;
+      e.preventDefault();
+      ensureAudio();
+      const { rows, cols } = shapeBounds(piece.shape);
+      drag = { idx, piece, rows, cols, lastValid: null };
+      buildGhost(piece);
+      moveGhost(e.clientX, e.clientY);
+      document.addEventListener("pointermove", onMove);
+      document.addEventListener("pointerup", onUp, { once: true });
+    });
+  }
+
+  function buildGhost(piece) {
+    const { rows, cols } = shapeBounds(piece.shape);
+    const cell = currentCellSize();
+    ghost.style.gridTemplateColumns = `repeat(${cols}, ${cell}px)`;
+    ghost.style.gridTemplateRows = `repeat(${rows}, ${cell}px)`;
+    ghost.innerHTML = "";
+    const filledSet = new Set(piece.shape.map(([r, c]) => r + "," + c));
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const d = document.createElement("div");
+        if (filledSet.has(r + "," + c)) {
+          d.className = "gcell";
+          d.style.width = cell + "px";
+          d.style.height = cell + "px";
+          d.style.background = piece.color;
+        } else {
+          d.style.width = cell + "px";
+          d.style.height = cell + "px";
+        }
+        ghost.appendChild(d);
+      }
+    }
+  }
+
+  function currentCellSize() {
+    const rect = boardEl.getBoundingClientRect();
+    const pad = 8, gap = 4;
+    return (rect.width - pad * 2 - gap * (SIZE - 1)) / SIZE;
+  }
+
+  function moveGhost(x, y) {
+    const cell = currentCellSize();
+    const w = drag.cols * cell + (drag.cols - 1) * 4;
+    const h = drag.rows * cell + (drag.rows - 1) * 4;
+    // Float the piece a bit above the finger so it's visible on touch.
+    ghost.style.transform = `translate(${x - w / 2}px, ${y - h / 2 - LIFT}px)`;
+  }
+
+  function boardAnchorFrom(x, y) {
+    const rect = boardEl.getBoundingClientRect();
+    const pad = 8, gap = 4;
+    const cell = (rect.width - pad * 2 - gap * (SIZE - 1)) / SIZE;
+    const step = cell + gap;
+    // Pointer is offset upward (matching the ghost lift) for placement intent.
+    const py = y - LIFT;
+    const relX = x - rect.left - pad;
+    const relY = py - rect.top - pad;
+    const fc = relX / step - drag.cols / 2 + 0.5;
+    const fr = relY / step - drag.rows / 2 + 0.5;
+    return { fr, fc };
+  }
+
+  // Find the nearest spot the piece actually fits, within a tolerance of a few
+  // cells, so a slightly-off drop still lands where the player intended.
+  function bestAnchor(shape, fr, fc) {
+    const baseR = Math.round(fr), baseC = Math.round(fc);
+    let best = null, bestD = Infinity;
+    for (let dr = -SNAP; dr <= SNAP; dr++) {
+      for (let dc = -SNAP; dc <= SNAP; dc++) {
+        const r = baseR + dr, c = baseC + dc;
+        if (canPlace(shape, r, c)) {
+          const d = (r - fr) * (r - fr) + (c - fc) * (c - fc);
+          if (d < bestD) { bestD = d; best = { row: r, col: c }; }
+        }
+      }
+    }
+    return best;
+  }
+
+  function clearPreview() {
+    for (let r = 0; r < SIZE; r++)
+      for (let c = 0; c < SIZE; c++)
+        cellEls[r][c].classList.remove("preview", "preview-bad", "will-clear");
+  }
+
+  function onMove(e) {
+    if (!drag) return;
+    moveGhost(e.clientX, e.clientY);
+    const { fr, fc } = boardAnchorFrom(e.clientX, e.clientY);
+    clearPreview();
+    const anchor = bestAnchor(drag.piece.shape, fr, fc);
+    drag.lastValid = anchor;
+    const row = anchor ? anchor.row : Math.round(fr);
+    const col = anchor ? anchor.col : Math.round(fc);
+    const ok = !!anchor;
+    for (const [dr, dc] of drag.piece.shape) {
+      const r = row + dr, c = col + dc;
+      if (r >= 0 && r < SIZE && c >= 0 && c < SIZE)
+        cellEls[r][c].classList.add(ok ? "preview" : "preview-bad");
+    }
+    // Highlight any line that would clear if dropped here.
+    if (ok) {
+      const { rows, cols } = linesIfPlaced(drag.piece.shape, row, col);
+      rows.forEach(r => { for (let c = 0; c < SIZE; c++) cellEls[r][c].classList.add("will-clear"); });
+      cols.forEach(c => { for (let r = 0; r < SIZE; r++) cellEls[r][c].classList.add("will-clear"); });
+    }
+  }
+
+  function onUp() {
+    document.removeEventListener("pointermove", onMove);
+    ghost.style.transform = "translate(-9999px,-9999px)";
+    clearPreview();
+    if (drag && drag.lastValid) {
+      placePiece(drag.idx, drag.lastValid.row, drag.lastValid.col);
+    }
+    drag = null;
+  }
+
+  // ---- Lifecycle ----
+  function newGame() {
+    if (mode === "daily") {
+      rng = mulberry32(todaySeed());
+      prevBest = (dailyData.date === todayStr()) ? dailyData.best : 0;
+    } else {
+      rng = Math.random;
+      prevBest = best;
+    }
+    board = Array.from({ length: SIZE }, () => Array(SIZE).fill(null));
+    score = 0;
+    combo = 0;
+    shownScore = 0;
+    buildBoard();
+    renderBoard();
+    refillTray();
+    updateScore();
+    overlay.classList.remove("show");
+  }
+
+  function setMode(m) {
+    if (mode === m) { newGame(); return; }
+    mode = m;
+    modeEndlessBtn.classList.toggle("active", m === "endless");
+    modeDailyBtn.classList.toggle("active", m === "daily");
+    bestLabel.textContent = (m === "daily") ? "Today" : "Best";
+    updateDailyInfo();
+    newGame();
+  }
+
+  // Size the board to the largest square that fits the available area,
+  // so the whole UI fits on screen without scrolling.
+  function sizeBoard() {
+    const rect = boardArea.getBoundingClientRect();
+    const s = Math.max(0, Math.floor(Math.min(rect.width, rect.height)));
+    boardEl.style.width = s + "px";
+    boardEl.style.height = s + "px";
+  }
+  window.addEventListener("resize", sizeBoard);
+  window.addEventListener("orientationchange", () => setTimeout(sizeBoard, 150));
+
+  function updateSoundToggle() {
+    soundToggle.textContent = muted ? "Off" : "On";
+    soundToggle.classList.toggle("on", !muted);
+  }
+
+  async function shareGame() {
+    const text = "Tranquil Blocks — a calm block puzzle with no ads. Play it:";
+    const url = "https://pete1552.github.io/AGTest/";
+    try {
+      if (navigator.share) { await navigator.share({ title: "Tranquil Blocks", text, url }); return; }
+    } catch (e) { return; }
+    try {
+      await navigator.clipboard.writeText(text + " " + url);
+      const old = document.getElementById("settings-share").textContent;
+      document.getElementById("settings-share").textContent = "Link copied!";
+      setTimeout(() => { document.getElementById("settings-share").textContent = old; }, 1500);
+    } catch (e) {}
+  }
+
+  soundToggle.addEventListener("click", () => {
+    muted = !muted;
+    localStorage.setItem("tranquilblocks_muted", muted ? "1" : "0");
+    updateSoundToggle();
+    if (!muted) { ensureAudio(); sfxPlace(); }
+  });
+  document.getElementById("settings-btn").addEventListener("click", () => {
+    updateSoundToggle();
+    settingsOverlay.classList.add("show");
+  });
+  document.getElementById("settings-close").addEventListener("click", () => settingsOverlay.classList.remove("show"));
+  settingsOverlay.addEventListener("click", (e) => {
+    if (e.target === settingsOverlay) settingsOverlay.classList.remove("show");
+  });
+  document.getElementById("settings-share").addEventListener("click", shareGame);
+  modeEndlessBtn.addEventListener("click", () => setMode("endless"));
+  modeDailyBtn.addEventListener("click", () => setMode("daily"));
+  document.getElementById("restart").addEventListener("click", newGame);
+  document.getElementById("play-again").addEventListener("click", newGame);
+  document.getElementById("share").addEventListener("click", shareScore);
+  bestEl.textContent = best;
+  updateSoundToggle();
+  updateDailyInfo();
+  newGame();
+  sizeBoard();
+  requestAnimationFrame(sizeBoard);
+  setTimeout(sizeBoard, 300); // re-fit after web fonts settle layout
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(sizeBoard);
+})();
+</script>
+</body>
+</html>
