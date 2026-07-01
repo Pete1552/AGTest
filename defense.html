@@ -45,7 +45,7 @@
   </div>
 
   <div class="play-area"><canvas id="stage"></canvas></div>
-  <div class="tap-hint" id="hint">Tap a tile to build a tower (60🪙) · tap a tower to upgrade</div>
+  <div class="tap-hint" id="hint">Tap a tile to build a tower (65🪙) · tap a tower to upgrade</div>
 </div>
 
 <div id="settings-overlay" class="modal-overlay">
@@ -72,7 +72,7 @@
 
   var COLS = 7, ROWS = 11;
   var TURNS = [[1,0],[1,2],[5,2],[5,4],[1,4],[1,6],[5,6],[5,8],[1,8],[1,10]];
-  var TOWER_COST = 60;
+  var TOWER_COST = 65;
   var muted = localStorage.getItem("tranquil_muted") === "1";
 
   // path cells (for blocking building)
@@ -88,7 +88,7 @@
   })();
 
   var enemies = [], towers = [], beams = [];
-  var coins = 220, lives = 20, wave = 1, kills = 0;
+  var coins = 160, lives = 12, wave = 1, kills = 0;
   var toSpawn = 0, spawnTimer = 0, spawnInterval = 800, breakTimer = 0, running = false, over = false;
   var best = Number(localStorage.getItem("tranquil_defense_best") || 0) || 0;
   var ringFx = null; // {col,row,life}
@@ -139,14 +139,14 @@
 
   // ---- Waves ----
   function startWave() {
-    toSpawn = 4 + wave * 2;
-    spawnInterval = Math.max(320, 820 - wave * 22);
+    toSpawn = 5 + wave * 2;
+    spawnInterval = Math.max(280, 760 - wave * 24);
     spawnTimer = 0;
     waveEl.textContent = String(wave);
   }
   function spawnEnemy() {
-    var hp = 12 + wave * 7;
-    enemies.push({ seg: 0, t: 0, hp: hp, maxhp: hp, speed: Math.min(2.3, 1.05 + wave * 0.03), reward: 5 + Math.floor(wave * 1.4) });
+    var hp = Math.round(12 * Math.pow(1.24, wave - 1));
+    enemies.push({ seg: 0, t: 0, hp: hp, maxhp: hp, speed: Math.min(2.5, 1.1 + wave * 0.035), reward: 5 + Math.floor(wave * 0.9) });
   }
 
   // ---- Towers ----
