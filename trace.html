@@ -256,6 +256,16 @@
     }
     return false;
   }
+  // Absolute fallback: a boustrophedon snake over the full grid is always a
+  // valid Hamiltonian path, so generation can never fail.
+  function snakePath() {
+    var p = [];
+    for (var r = 0; r < N; r++) {
+      if (r % 2 === 0) { for (var c = 0; c < N; c++) p.push([r, c]); }
+      else { for (var c = N - 1; c >= 0; c--) p.push([r, c]); }
+    }
+    return p;
+  }
   function generate(seed) {
     var rng = mulberry32(seed >>> 0);
     var wallTries = [4, 3, 2, 1, 0];
@@ -280,8 +290,8 @@
         if (p && p.length === open.size) return buildPuzzle(wallSet, p);
       }
     }
-    // ultimate fallback: no walls
-    var p2 = hamPath(rng, new Set());
+    // ultimate fallback: no walls (snake path is always valid)
+    var p2 = hamPath(rng, new Set()) || snakePath();
     return buildPuzzle(new Set(), p2);
   }
   function buildPuzzle(wallSet, sol) {
