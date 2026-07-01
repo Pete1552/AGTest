@@ -124,3 +124,26 @@ body {
   20% { opacity: 1; transform: translate(-50%, -55%) scale(1.05); }
   100% { opacity: 0; transform: translate(-50%, -130%) scale(1); }
 }
+
+/* ---- Leaderboard (leaderboard.js) ---- */
+.lb-scope { color: var(--muted); font-size: 11px; letter-spacing: 0.4px; margin: 2px 0 12px; }
+.lb-new { color: var(--accent); font-weight: 800; font-size: 15px; margin: 10px 0 8px; }
+.lb-input {
+  width: 100%; box-sizing: border-box; text-align: center;
+  background: var(--grid); color: var(--ink); border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px; padding: 12px; font-size: 16px; font-weight: 700;
+  font-family: var(--font-text); margin-bottom: 10px;
+}
+.lb-input:focus { outline: none; border-color: var(--accent); }
+.lb-loading, .lb-empty { color: var(--muted); font-size: 14px; padding: 16px 0; }
+.lb-list { text-align: left; margin: 4px 0 6px; max-height: 46vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.lb-row {
+  display: flex; align-items: center; gap: 10px; padding: 9px 10px;
+  border-radius: 10px; font-size: 15px;
+}
+.lb-row:nth-child(odd) { background: rgba(255,255,255,0.03); }
+.lb-row.me { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+.lb-rank { width: 22px; text-align: center; color: var(--muted); font-weight: 800; font-size: 13px; }
+.lb-name { flex: 1; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lb-score { font-family: var(--font-display); font-weight: 700; color: var(--accent); }
+.lb-row.me .lb-score { color: var(--ink); }

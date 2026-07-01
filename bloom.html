@@ -74,6 +74,7 @@
       <span class="title">Bloom</span>
     </div>
     <div class="bar-actions">
+      <button class="icon-btn" aria-label="High scores" onclick="LB.open('bloom')">🏆</button>
       <button id="restart" class="icon-btn" aria-label="New game">↻</button>
       <button id="settings-btn" class="icon-btn" aria-label="Settings">⚙</button>
     </div>
@@ -120,6 +121,7 @@
   </div>
 </div>
 
+<script src="leaderboard.js"></script>
 <script>
 (function () {
   "use strict";
@@ -283,7 +285,7 @@
     document.getElementById("final-sub").textContent =
       newBest ? "New best!" : "Best: " + best + " moves";
     setTimeout(sfxWin, 60);
-    setTimeout(() => overlay.classList.add("show"), 360);
+    setTimeout(() => LB.finish({ game: 'bloom', value: moves, resultTitle: 'Filled!', onPlayAgain: newGame }), 360);
   }
 
   function newGame() {

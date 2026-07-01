@@ -57,6 +57,7 @@
       <span class="title">Ripple</span>
     </div>
     <div class="bar-actions">
+      <button class="icon-btn" aria-label="High scores" onclick="LB.open('ripple')">🏆</button>
       <button id="restart" class="icon-btn" aria-label="New game">↻</button>
       <button id="settings-btn" class="icon-btn" aria-label="Settings">⚙</button>
     </div>
@@ -94,6 +95,7 @@
   </div>
 </div>
 
+<script src="leaderboard.js"></script>
 <script>
 (function () {
   "use strict";
@@ -223,10 +225,7 @@
       localStorage.setItem("tranquil_ripple_best", String(best));
     }
     updateBestLabel();
-    document.getElementById("final-moves").textContent = moves;
-    document.getElementById("final-sub").textContent =
-      newBest ? "New best!" : "Best: " + best + " move" + (best === 1 ? "" : "s");
-    setTimeout(() => overlay.classList.add("show"), 420);
+    setTimeout(() => LB.finish({ game: 'ripple', value: moves, resultTitle: 'All calm', onPlayAgain: newGame }), 420);
   }
 
   function updateBestLabel() {

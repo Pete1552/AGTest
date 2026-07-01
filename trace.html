@@ -65,6 +65,7 @@
       <span class="title">Trace</span>
     </div>
     <div class="bar-actions">
+      <button class="icon-btn" aria-label="High scores" onclick="LB.open('trace')">🏆</button>
       <button id="restart" class="icon-btn" aria-label="New game">↻</button>
       <button id="settings-btn" class="icon-btn" aria-label="Settings">⚙</button>
     </div>
@@ -110,6 +111,7 @@
   </div>
 </div>
 
+<script src="leaderboard.js"></script>
 <script>
 (function () {
   "use strict";
@@ -317,7 +319,12 @@
       document.getElementById("final-time").textContent = fmt(t);
       document.getElementById("final-sub").textContent =
         improved ? "New best!" : (best > 0 ? "Best · " + fmt(best) : "");
-      setTimeout(() => overlay.classList.add("show"), 350);
+      setTimeout(() => LB.finish({
+        game: 'trace',
+        value: Math.round(t),
+        resultTitle: 'Solved!',
+        onPlayAgain: newGame
+      }), 350);
     }
   }
 
