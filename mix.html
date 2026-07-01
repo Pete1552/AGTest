@@ -20,17 +20,13 @@
     flex: 1 1 auto; min-height: 0;
     display: flex; flex-direction: column;
     align-items: center; justify-content: center;
-    gap: 16px; margin: 4px 0;
+    gap: 12px; margin: 4px 0;
   }
-  /* Swatches */
-  .swatches {
-    display: flex; gap: 12px; width: 100%;
-    align-items: stretch; justify-content: center;
-  }
+  .swatches { display: flex; gap: 12px; width: 100%; align-items: stretch; justify-content: center; }
   .swatch-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; }
   .swatch-label { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 1.2px; font-weight: 700; }
   .swatch {
-    width: 100%; aspect-ratio: 1 / 1; max-height: 34vh;
+    width: 100%; aspect-ratio: 1 / 1; max-height: 28vh;
     border-radius: 18px;
     box-shadow: inset 0 3px 0 rgba(255,255,255,0.14), inset 0 -4px 0 rgba(0,0,0,0.22), 0 6px 18px rgba(0,0,0,0.35);
     display: flex; align-items: center; justify-content: center;
@@ -41,42 +37,38 @@
   }
   .swatch-hint { color: rgba(255,255,255,0.55); font-family: var(--font-display); font-weight: 700; font-size: 13px; }
 
-  /* Result banner */
   .result {
-    min-height: 26px; text-align: center;
-    font-family: var(--font-display); font-weight: 700; font-size: 20px;
+    min-height: 24px; text-align: center;
+    font-family: var(--font-display); font-weight: 700; font-size: 19px;
     color: var(--accent); line-height: 1;
     opacity: 0; transition: opacity 180ms ease;
   }
   .result.show { opacity: 1; }
 
-  /* Paint buttons */
-  .paints { display: flex; gap: 16px; justify-content: center; align-items: center; }
+  .paints { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; align-items: center; max-width: 320px; }
   .paint {
-    width: 72px; height: 72px; border-radius: 50%; border: none; cursor: pointer;
+    width: 56px; height: 56px; border-radius: 50%; border: none; cursor: pointer;
     box-shadow: inset 0 4px 0 rgba(255,255,255,0.22), inset 0 -5px 0 rgba(0,0,0,0.28), 0 5px 14px rgba(0,0,0,0.4);
-    color: #fff; font-family: var(--font-display); font-weight: 700; font-size: 12px;
-    letter-spacing: 0.5px; text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+    font-family: var(--font-display); font-weight: 700; font-size: 9.5px;
+    letter-spacing: 0.3px; text-shadow: 0 1px 2px rgba(0,0,0,0.35);
     display: flex; align-items: center; justify-content: center;
     transition: transform 90ms ease;
   }
-  .paint:active { transform: scale(0.92); }
-  .paint.r { background: #ff4d4d; }
-  .paint.g { background: #34d05f; }
-  .paint.b { background: #4d7dff; }
+  .paint:active { transform: scale(0.9); }
+  .paint:disabled { opacity: 0.3; cursor: default; }
 
-  /* Drop count + controls */
-  .mix-controls { display: flex; flex-direction: column; align-items: center; gap: 12px; width: 100%; }
+  .mix-controls { display: flex; flex-direction: column; align-items: center; gap: 10px; width: 100%; }
   .drops { color: var(--muted); font-size: 13px; font-weight: 600; min-height: 18px; }
   .drops b { color: var(--ink); font-family: var(--font-display); }
-  .action-row { display: flex; gap: 10px; width: 100%; max-width: 340px; }
+  .drops.full b { color: var(--accent); }
+  .action-row { display: flex; gap: 8px; width: 100%; max-width: 340px; }
   .action-btn {
-    flex: 1; padding: 13px 10px; border-radius: 14px; border: none; cursor: pointer;
-    font-family: var(--font-text); font-size: 15px; font-weight: 700;
+    flex: 1; padding: 12px 8px; border-radius: 14px; border: none; cursor: pointer;
+    font-family: var(--font-text); font-size: 14px; font-weight: 700;
   }
   .action-btn:active { transform: translateY(1px); }
-  .action-btn.clear { background: var(--grid); color: var(--muted); }
-  .action-btn.check { background: var(--accent); color: #06231e; }
+  .action-btn.undo, .action-btn.clear { background: var(--grid); color: var(--muted); }
+  .action-btn.check { background: var(--accent); color: #06231e; flex: 1.4; }
   .action-btn:disabled { opacity: 0.45; cursor: default; }
 </style>
 </head>
@@ -95,7 +87,7 @@
   </header>
 
   <div class="scores">
-    <div class="score-box"><div class="score-label">Round</div><div class="score-val" id="round">1/5</div></div>
+    <div class="score-box"><div class="score-label">Round</div><div class="score-val" id="round">1/6</div></div>
     <div class="score-box best"><div class="score-label">Score</div><div class="score-val" id="score">0</div></div>
   </div>
 
@@ -114,13 +106,10 @@
     <div class="result" id="result"></div>
 
     <div class="mix-controls">
-      <div class="paints">
-        <button class="paint r" data-c="r" aria-label="Add red">RED</button>
-        <button class="paint g" data-c="g" aria-label="Add green">GREEN</button>
-        <button class="paint b" data-c="b" aria-label="Add blue">BLUE</button>
-      </div>
-      <div class="drops">Drops: <b id="drop-count">0</b></div>
+      <div class="paints" id="paints"></div>
+      <div class="drops" id="drops">Drops: <b id="drop-count">0</b> / <span id="drop-max">10</span></div>
       <div class="action-row">
+        <button class="action-btn undo" id="undo">Undo</button>
         <button class="action-btn clear" id="clear">Clear</button>
         <button class="action-btn check" id="check">Check</button>
       </div>
@@ -137,7 +126,7 @@
     </div>
     <div class="how">
       <p class="how-title">How to play</p>
-      <p class="body">Match the target colour by blending paint. Tap Red, Green and Blue to add drops — your mix is the average of every drop you add. Use Clear to start over, then Check to score the round. Closer matches earn more points. Play 5 rounds for the highest total.</p>
+      <p class="body">Match the target colour by blending paint. Tap the six paints to add drops — your mix is the average of every drop. You get a limited number of drops each round, so find the right <em>ratio</em>. Undo or Clear to adjust, then Check to score. Later rounds get trickier. Six rounds; highest total wins.</p>
     </div>
     <p class="promise">No ads. No pop-ups. No nags — ever.</p>
     <button id="settings-share" class="share">Share the game</button>
@@ -150,32 +139,45 @@
 (function () {
   "use strict";
 
-  var ROUNDS = 5;
+  var ROUNDS = 6;
+  var MAXDROPS = 10;                  // drop budget per round
+  var GAMMA = 2.4;                    // steepness of the accuracy curve
   var MAXDIST = Math.sqrt(3) * 255;
-  var PRIMARIES = {
-    r: [255, 0, 0],
-    g: [0, 255, 0],
-    b: [0, 0, 255]
-  };
   var muted = localStorage.getItem("tranquil_muted") === "1";
 
-  var totalScore = 0;
-  var roundNum = 1;      // 1-based
+  // Six paints. text = label colour for contrast.
+  var PALETTE = [
+    { key: "r", rgb: [220, 40, 40],  css: "#dc2828", text: "#fff", label: "RED" },
+    { key: "g", rgb: [40, 190, 80],  css: "#28be50", text: "#fff", label: "GREEN" },
+    { key: "b", rgb: [50, 110, 230], css: "#326ee6", text: "#fff", label: "BLUE" },
+    { key: "y", rgb: [240, 210, 50], css: "#f0d232", text: "#3a2f00", label: "YELLOW" },
+    { key: "w", rgb: [245, 245, 245], css: "#f5f5f5", text: "#20242c", label: "WHITE" },
+    { key: "k", rgb: [30, 30, 34],   css: "#1e1e22", text: "#e8edf4", label: "BLACK" }
+  ];
+  var PMAP = {};
+  PALETTE.forEach(function (p) { PMAP[p.key] = p.rgb; });
+
+  var totalScore = 0, roundNum = 1;
   var target = [255, 255, 255];
-  var drops = [];        // array of primary keys 'r'/'g'/'b'
-  var locked = false;    // between check and next round
+  var drops = [];
+  var locked = false;
 
   var targetSwatch = document.getElementById("target-swatch");
   var mixSwatch = document.getElementById("mix-swatch");
   var mixHint = document.getElementById("mix-hint");
   var resultEl = document.getElementById("result");
   var dropCountEl = document.getElementById("drop-count");
+  var dropMaxEl = document.getElementById("drop-max");
+  var dropsEl = document.getElementById("drops");
   var roundEl = document.getElementById("round");
   var scoreEl = document.getElementById("score");
+  var paintsEl = document.getElementById("paints");
+  var undoBtn = document.getElementById("undo");
   var clearBtn = document.getElementById("clear");
   var checkBtn = document.getElementById("check");
   var settingsOverlay = document.getElementById("settings-overlay");
   var soundToggle = document.getElementById("sound-toggle");
+  var paintBtns = [];
 
   // ---- Sound ----
   var actx = null;
@@ -192,8 +194,8 @@
     gn.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + d);
     o.connect(gn); gn.connect(actx.destination); o.start(); o.stop(actx.currentTime + d + 0.02);
   }
-  var DROP_PITCH = { r: 392.0, g: 493.88, b: 587.33 };
-  function sfxDrop(c) { tone(DROP_PITCH[c] || 440, 0.14, "sine", 0.09); }
+  var DROP_PITCH = { r: 349.2, g: 440.0, b: 523.3, y: 587.3, w: 659.3, k: 294.0 };
+  function sfxDrop(c) { tone(DROP_PITCH[c] || 440, 0.13, "sine", 0.08); }
   function sfxChord() { [523.25, 659.25, 783.99, 1046.5].forEach(function (f, i) { setTimeout(function () { tone(f, 0.35, "sine", 0.12); }, i * 100); }); }
 
   // ---- Colour helpers ----
@@ -201,7 +203,7 @@
   function averageOf(keys) {
     var sum = [0, 0, 0];
     for (var i = 0; i < keys.length; i++) {
-      var p = PRIMARIES[keys[i]];
+      var p = PMAP[keys[i]];
       sum[0] += p[0]; sum[1] += p[1]; sum[2] += p[2];
     }
     var n = keys.length || 1;
@@ -212,119 +214,105 @@
     return Math.sqrt(dr * dr + dg * dg + db * db);
   }
 
-  // ---- Target generation (always matchable) ----
+  // ---- Target generation (always matchable within the drop budget) ----
   function makeTarget() {
-    var keys = ["r", "g", "b"];
-    var D = 3 + Math.floor(Math.random() * 6); // 3..8
+    var D = Math.min(MAXDROPS, 3 + roundNum);   // grows with round: 4..9
+    var keys = PALETTE.map(function (p) { return p.key; });
     var multiset;
     do {
       multiset = [];
-      for (var i = 0; i < D; i++) multiset.push(keys[Math.floor(Math.random() * 3)]);
-    } while (new Set(multiset).size < 2); // ensure at least two different primaries
+      for (var i = 0; i < D; i++) multiset.push(keys[Math.floor(Math.random() * keys.length)]);
+    } while (new Set(multiset).size < 2); // at least two different paints
     return averageOf(multiset);
   }
 
   // ---- Render ----
   function renderMix() {
     dropCountEl.textContent = String(drops.length);
+    dropsEl.classList.toggle("full", drops.length >= MAXDROPS);
     if (drops.length === 0) {
-      mixSwatch.classList.add("empty");
-      mixSwatch.style.background = "";
-      mixHint.style.display = "";
+      mixSwatch.classList.add("empty"); mixSwatch.style.background = ""; mixHint.style.display = "";
     } else {
-      mixSwatch.classList.remove("empty");
-      mixSwatch.style.background = rgbStr(averageOf(drops));
-      mixHint.style.display = "none";
+      mixSwatch.classList.remove("empty"); mixSwatch.style.background = rgbStr(averageOf(drops)); mixHint.style.display = "none";
     }
+    var atCap = drops.length >= MAXDROPS;
+    for (var i = 0; i < paintBtns.length; i++) paintBtns[i].disabled = locked || atCap;
     checkBtn.disabled = locked || drops.length === 0;
     clearBtn.disabled = locked || drops.length === 0;
+    undoBtn.disabled = locked || drops.length === 0;
   }
   function renderScore() {
     roundEl.textContent = roundNum + "/" + ROUNDS;
     scoreEl.textContent = String(totalScore);
+    dropMaxEl.textContent = String(MAXDROPS);
   }
-  function showResult(text) {
-    resultEl.textContent = text;
-    resultEl.classList.add("show");
-  }
-  function hideResult() {
-    resultEl.classList.remove("show");
-    resultEl.textContent = "";
-  }
+  function showResult(text) { resultEl.textContent = text; resultEl.classList.add("show"); }
+  function hideResult() { resultEl.classList.remove("show"); resultEl.textContent = ""; }
 
   // ---- Actions ----
   function addDrop(c) {
-    if (locked) return;
-    audio();
-    drops.push(c);
-    sfxDrop(c);
-    renderMix();
+    if (locked || drops.length >= MAXDROPS) return;
+    audio(); drops.push(c); sfxDrop(c); renderMix();
+  }
+  function undoDrop() {
+    if (locked || !drops.length) return;
+    audio(); drops.pop(); tone(260, 0.06, "sine", 0.05); renderMix();
   }
   function clearDrops() {
-    if (locked) return;
-    audio();
-    drops = [];
-    tone(220, 0.08, "sine", 0.05);
-    renderMix();
+    if (locked || !drops.length) return;
+    audio(); drops = []; tone(220, 0.08, "sine", 0.05); renderMix();
   }
   function check() {
     if (locked || drops.length === 0) return;
-    audio();
-    locked = true;
+    audio(); locked = true;
     var mix = averageOf(drops);
     var d = dist(mix, target);
-    var accuracy = Math.round(100 * (1 - d / MAXDIST));
-    if (accuracy < 0) accuracy = 0;
-    if (accuracy > 100) accuracy = 100;
-    totalScore += accuracy;
+    var acc = Math.round(100 * Math.pow(Math.max(0, 1 - d / MAXDIST), GAMMA));
+    if (acc < 0) acc = 0; if (acc > 100) acc = 100;
+    totalScore += acc;
     renderScore();
-    showResult(accuracy + "% match!");
-    if (accuracy >= 85) sfxChord();
-    else tone(330, 0.25, "sine", 0.1);
-    checkBtn.disabled = true;
-    clearBtn.disabled = true;
-
+    var word = acc >= 95 ? "Perfect! " : acc >= 80 ? "Great! " : acc >= 60 ? "Close. " : "";
+    showResult(word + acc + "% match");
+    if (acc >= 88) sfxChord(); else tone(330, 0.25, "sine", 0.1);
+    for (var i = 0; i < paintBtns.length; i++) paintBtns[i].disabled = true;
+    checkBtn.disabled = true; clearBtn.disabled = true; undoBtn.disabled = true;
     setTimeout(function () {
-      if (roundNum >= ROUNDS) {
-        gameOver();
-      } else {
-        roundNum++;
-        nextRound();
-      }
-    }, 1100);
+      if (roundNum >= ROUNDS) gameOver();
+      else { roundNum++; nextRound(); }
+    }, 1200);
   }
 
   function nextRound() {
-    locked = false;
-    drops = [];
+    locked = false; drops = [];
     target = makeTarget();
     targetSwatch.style.background = rgbStr(target);
-    hideResult();
-    renderMix();
-    renderScore();
+    hideResult(); renderMix(); renderScore();
   }
-
   function gameOver() {
     LB.finish({
-      game: "mix",
-      value: totalScore,
-      resultTitle: "Mixed!",
-      subtitle: "Avg " + Math.round(totalScore / ROUNDS) + "% match",
-      onPlayAgain: newGame
+      game: "mix", value: totalScore, resultTitle: "Mixed!",
+      subtitle: "Avg " + Math.round(totalScore / ROUNDS) + "% match", onPlayAgain: newGame
     });
   }
-
   function newGame() {
-    totalScore = 0;
-    roundNum = 1;
-    locked = false;
-    drops = [];
+    totalScore = 0; roundNum = 1; locked = false; drops = [];
     target = makeTarget();
     targetSwatch.style.background = rgbStr(target);
-    hideResult();
-    renderMix();
-    renderScore();
+    hideResult(); renderMix(); renderScore();
   }
+
+  // ---- Build paint buttons ----
+  PALETTE.forEach(function (p) {
+    var btn = document.createElement("button");
+    btn.className = "paint";
+    btn.style.background = p.css;
+    btn.style.color = p.text;
+    btn.textContent = p.label;
+    btn.setAttribute("aria-label", "Add " + p.label.toLowerCase());
+    btn.addEventListener("click", function () { addDrop(p.key); });
+    paintsEl.appendChild(btn);
+    paintBtns.push(btn);
+  });
 
   // ---- Settings / sound ----
   function updateSoundToggle() { soundToggle.textContent = muted ? "Off" : "On"; soundToggle.classList.toggle("on", !muted); }
@@ -339,16 +327,9 @@
     } catch (e) {}
   }
 
-  // ---- Wire up ----
-  var paintBtns = document.querySelectorAll(".paint");
-  for (var i = 0; i < paintBtns.length; i++) {
-    (function (btn) {
-      btn.addEventListener("click", function () { addDrop(btn.getAttribute("data-c")); });
-    })(paintBtns[i]);
-  }
+  undoBtn.addEventListener("click", undoDrop);
   clearBtn.addEventListener("click", clearDrops);
   checkBtn.addEventListener("click", check);
-
   soundToggle.addEventListener("click", function () {
     muted = !muted; localStorage.setItem("tranquil_muted", muted ? "1" : "0"); updateSoundToggle();
     if (!muted) { audio(); tone(300, 0.05, "sine", 0.07); }
