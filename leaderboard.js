@@ -18,7 +18,10 @@
     bloom:  { name: "Bloom",  dir: "asc",  fmt: function (v) { return v + " moves"; } },
     ripple: { name: "Ripple", dir: "asc",  fmt: function (v) { return v + " moves"; } },
     trace:  { name: "Trace",  dir: "asc",  fmt: function (v) { return v + "s"; } },
-    fuse:   { name: "Fuse",   dir: "desc", fmt: function (v) { return String(v); } }
+    fuse:   { name: "Fuse",   dir: "desc", fmt: function (v) { return String(v); } },
+    blend:  { name: "Blend",  dir: "asc",  fmt: function (v) { return v + " swaps"; } },
+    mix:    { name: "Mix",    dir: "desc", fmt: function (v) { return String(v); } },
+    sort:   { name: "Sort",   dir: "asc",  fmt: function (v) { return v + " pours"; } }
   };
   var MAX = 10;
 
