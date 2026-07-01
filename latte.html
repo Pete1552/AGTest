@@ -16,25 +16,13 @@
 <link rel="stylesheet" href="shared.css" />
 <title>Latte — Tranquil</title>
 <style>
-  #cup {
-    display: block; border-radius: 20px; touch-action: none;
-    background: var(--panel);
-    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04);
-  }
-  .hint {
-    text-align: center; color: var(--muted); font-size: 13px; min-height: 18px; margin: 8px 0 2px;
-  }
+  #cup { display: block; border-radius: 20px; touch-action: none; background: var(--panel); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04); }
+  .hint { text-align: center; color: var(--muted); font-size: 13px; min-height: 18px; margin: 8px 0 2px; }
   .hint b { color: var(--ink); font-family: var(--font-display); }
-  .result {
-    text-align: center; font-family: var(--font-display); font-weight: 700; font-size: 19px;
-    color: var(--accent); min-height: 22px; opacity: 0; transition: opacity 180ms ease;
-  }
+  .result { text-align: center; font-family: var(--font-display); font-weight: 700; font-size: 19px; color: var(--accent); min-height: 22px; opacity: 0; transition: opacity 180ms ease; }
   .result.show { opacity: 1; }
   .action-row { display: flex; gap: 8px; width: 100%; max-width: 360px; margin: 8px auto 0; }
-  .action-btn {
-    flex: 1; padding: 12px 8px; border-radius: 14px; border: none; cursor: pointer;
-    font-family: var(--font-text); font-size: 14px; font-weight: 700;
-  }
+  .action-btn { flex: 1; padding: 12px 8px; border-radius: 14px; border: none; cursor: pointer; font-family: var(--font-text); font-size: 14px; font-weight: 700; }
   .action-btn:active { transform: translateY(1px); }
   .action-btn.undo, .action-btn.clear { background: var(--grid); color: var(--muted); }
   .action-btn.check { background: var(--accent); color: #06231e; flex: 1.4; }
@@ -80,7 +68,7 @@
     </div>
     <div class="how">
       <p class="how-title">How to play</p>
-      <p class="body">Each round shows a faint latte-art design on the cup. Drag to pour the milk and fill the shape — cover the design without spilling outside it. Undo or Clear to adjust, then Done to score. Five pours; highest total wins.</p>
+      <p class="body">Each round shows a faint design on the cup. Drag to pour the milk — hold still to let it bloom into a puddle, move slowly for a wide stream or quickly for a thin one. Fill the shape without spilling outside it. Undo or Clear to adjust, then Done to score. Five pours; highest total wins.</p>
     </div>
     <p class="promise">No ads. No pop-ups. No nags — ever.</p>
     <button id="settings-share" class="share">Share the game</button>
@@ -94,14 +82,20 @@
   "use strict";
 
   var ROUNDS = 5;
-  var MASK = 128;          // scoring mask resolution
-  var BR = 0.06;           // brush radius (normalized to cup size)
+  var MASK = 128;
+  var MILK = "#f7f2ea";
+  var R_FAST = 0.03, R_SLOW = 0.075, BLOOM_MAX = 0.12; // brush radii (normalized)
+  var SPEED_REF = 0.004;                                // normalized units / ms for "fast"
+  var BLOOM_RATE = 0.00009;                             // radius growth per ms while holding
   var muted = localStorage.getItem("tranquil_muted") === "1";
 
   var totalScore = 0, roundNum = 1, locked = false;
-  var strokes = [];        // array of strokes; each stroke = array of {x,y} normalized 0..1
-  var cur = null;          // current stroke
+  var strokes = [];      // array of strokes; each stroke = array of blobs {x,y,r} normalized
+  var cur = null;
   var design = null, targetInfo = null, showGuide = true;
+
+  // pour state
+  var pouring = false, lastPt = null, lastT = 0, lastMoveT = 0, lastFrame = 0, rafId = 0;
 
   var playArea = document.querySelector(".play-area");
   var canvas = document.getElementById("cup");
@@ -118,7 +112,8 @@
 
   var cssSize = 300, dpr = window.devicePixelRatio || 1;
 
-  // offscreen mask canvases
+  // offscreen: milk layer (soft-blurred onto the cup) + scoring masks
+  var mcv = document.createElement("canvas"); var mctx = mcv.getContext("2d");
   var tcv = document.createElement("canvas"); tcv.width = tcv.height = MASK; var tctx = tcv.getContext("2d");
   var pcv = document.createElement("canvas"); pcv.width = pcv.height = MASK; var pctx = pcv.getContext("2d");
 
@@ -139,14 +134,12 @@
   }
   function sfxChord() { [523.25, 659.25, 783.99, 1046.5].forEach(function (f, i) { setTimeout(function () { tone(f, 0.35, "sine", 0.12); }, i * 100); }); }
 
-  // ---- Cup + design drawing (normalized coords * S) ----
+  // ---- Cup + designs (normalized coords * S) ----
   function cupPath(c, S) { c.beginPath(); c.arc(0.5 * S, 0.5 * S, 0.46 * S, 0, Math.PI * 2); }
   function disc(c, x, y, r) { c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.fill(); }
-
   var DESIGNS = [
     { name: "heart", draw: function (c, S) {
-        c.beginPath();
-        var cx = 0.5 * S, cy = 0.55 * S, sc = 0.33 * S;
+        c.beginPath(); var cx = 0.5 * S, cy = 0.55 * S, sc = 0.33 * S;
         for (var i = 0; i <= 64; i++) {
           var t = i / 64 * Math.PI * 2;
           var hx = 16 * Math.pow(Math.sin(t), 3);
@@ -157,161 +150,153 @@
         c.closePath(); c.fill();
       } },
     { name: "tulip", draw: function (c, S) {
-        disc(c, 0.5 * S, 0.64 * S, 0.185 * S);
-        disc(c, 0.5 * S, 0.47 * S, 0.14 * S);
-        disc(c, 0.5 * S, 0.34 * S, 0.098 * S);
+        disc(c, 0.5 * S, 0.64 * S, 0.185 * S); disc(c, 0.5 * S, 0.47 * S, 0.14 * S); disc(c, 0.5 * S, 0.34 * S, 0.098 * S);
         c.fillRect(0.482 * S, 0.17 * S, 0.036 * S, 0.13 * S);
       } },
     { name: "leaf", draw: function (c, S) {
-        c.beginPath();
-        c.moveTo(0.5 * S, 0.16 * S);
+        c.beginPath(); c.moveTo(0.5 * S, 0.16 * S);
         c.quadraticCurveTo(0.75 * S, 0.42 * S, 0.5 * S, 0.85 * S);
         c.quadraticCurveTo(0.25 * S, 0.42 * S, 0.5 * S, 0.16 * S);
-        c.closePath(); c.fill();
-        c.fillRect(0.485 * S, 0.5 * S, 0.03 * S, 0.33 * S);
+        c.closePath(); c.fill(); c.fillRect(0.485 * S, 0.5 * S, 0.03 * S, 0.33 * S);
       } }
   ];
 
-  function drawMilk(c, S, color) {
-    c.save();
-    c.strokeStyle = color; c.fillStyle = color;
-    c.lineCap = "round"; c.lineJoin = "round"; c.lineWidth = BR * 2 * S;
+  // ---- Milk as a union of soft blobs ----
+  function drawBlobs(c, S, color) {
+    c.save(); c.fillStyle = color;
     for (var s = 0; s < strokes.length; s++) {
       var st = strokes[s];
-      if (st.length === 1) { c.beginPath(); c.arc(st[0].x * S, st[0].y * S, BR * S, 0, Math.PI * 2); c.fill(); }
-      else {
-        c.beginPath(); c.moveTo(st[0].x * S, st[0].y * S);
-        for (var i = 1; i < st.length; i++) c.lineTo(st[i].x * S, st[i].y * S);
-        c.stroke();
-      }
+      for (var i = 0; i < st.length; i++) { c.beginPath(); c.arc(st[i].x * S, st[i].y * S, st[i].r * S, 0, Math.PI * 2); c.fill(); }
     }
     c.restore();
+  }
+  function redrawMilk() {
+    mctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    mctx.clearRect(0, 0, cssSize, cssSize);
+    drawBlobs(mctx, cssSize, MILK);
   }
 
   function renderScene() {
     var S = cssSize;
     ctx.clearRect(0, 0, S, S);
-    // crema
     ctx.save(); cupPath(ctx, S);
     var g = ctx.createRadialGradient(0.5 * S, 0.4 * S, 0.04 * S, 0.5 * S, 0.5 * S, 0.46 * S);
     g.addColorStop(0, "#cd9560"); g.addColorStop(1, "#8a5631");
     ctx.fillStyle = g; ctx.fill(); ctx.restore();
-    // inside cup: guide + milk
     ctx.save(); cupPath(ctx, S); ctx.clip();
     if (showGuide && design) { ctx.globalAlpha = 0.22; ctx.fillStyle = "#fff"; design.draw(ctx, S); ctx.globalAlpha = 1; }
-    drawMilk(ctx, S, "#f7f2ea");
+    var blur = Math.max(1, S * 0.006);
+    try { ctx.filter = "blur(" + blur + "px)"; } catch (e) {}
+    ctx.drawImage(mcv, 0, 0, S, S);
+    try { ctx.filter = "none"; } catch (e) {}
     ctx.restore();
-    // rim
     ctx.beginPath(); ctx.arc(0.5 * S, 0.5 * S, 0.46 * S, 0, Math.PI * 2);
     ctx.lineWidth = Math.max(2, 0.018 * S); ctx.strokeStyle = "#efe7dc"; ctx.stroke();
   }
 
-  // ---- Scoring (Dice coefficient between poured milk and the design) ----
-  function maskCount(drawFn) {
-    tctx.clearRect(0, 0, MASK, MASK);
-    tctx.fillStyle = "#000"; tctx.fillRect(0, 0, MASK, MASK);
-    tctx.save(); cupPath(tctx, MASK); tctx.clip();
-    tctx.fillStyle = "#fff"; tctx.strokeStyle = "#fff";
-    drawFn(tctx, MASK);
-    tctx.restore();
-    var d = tctx.getImageData(0, 0, MASK, MASK).data;
+  // ---- Scoring (Dice overlap of poured milk vs design) ----
+  function countMask(c) {
+    var d = c.getImageData(0, 0, MASK, MASK).data;
     var on = new Uint8Array(MASK * MASK), cnt = 0;
     for (var i = 0; i < MASK * MASK; i++) { if (d[i * 4] > 128) { on[i] = 1; cnt++; } }
     return { on: on, count: cnt };
   }
-  function playerMaskCount() {
-    // reuse the same tctx buffer via a separate function drawing milk
-    pctx.clearRect(0, 0, MASK, MASK);
-    pctx.fillStyle = "#000"; pctx.fillRect(0, 0, MASK, MASK);
-    pctx.save(); cupPath(pctx, MASK); pctx.clip();
-    drawMilk(pctx, MASK, "#fff");
-    pctx.restore();
-    var d = pctx.getImageData(0, 0, MASK, MASK).data;
-    var on = new Uint8Array(MASK * MASK), cnt = 0;
-    for (var i = 0; i < MASK * MASK; i++) { if (d[i * 4] > 128) { on[i] = 1; cnt++; } }
-    return { on: on, count: cnt };
+  function targetMask() {
+    tctx.clearRect(0, 0, MASK, MASK); tctx.fillStyle = "#000"; tctx.fillRect(0, 0, MASK, MASK);
+    tctx.save(); cupPath(tctx, MASK); tctx.clip(); tctx.fillStyle = "#fff"; design.draw(tctx, MASK); tctx.restore();
+    return countMask(tctx);
   }
-
+  function playerMask() {
+    pctx.clearRect(0, 0, MASK, MASK); pctx.fillStyle = "#000"; pctx.fillRect(0, 0, MASK, MASK);
+    pctx.save(); cupPath(pctx, MASK); pctx.clip(); drawBlobs(pctx, MASK, "#fff"); pctx.restore();
+    return countMask(pctx);
+  }
   function scoreRound() {
-    var p = playerMaskCount();
-    var inter = 0;
+    var p = playerMask(), inter = 0;
     for (var i = 0; i < MASK * MASK; i++) if (p.on[i] && targetInfo.on[i]) inter++;
     var denom = targetInfo.count + p.count;
-    var dice = denom > 0 ? (2 * inter) / denom : 0;
-    return Math.round(100 * dice);
+    return Math.round(100 * (denom > 0 ? (2 * inter) / denom : 0));
   }
 
   // ---- Rounds ----
   function pickDesign() { return DESIGNS[Math.floor(Math.random() * DESIGNS.length)]; }
   function updateButtons() {
     var has = strokes.length > 0;
-    undoBtn.disabled = locked || !has;
-    clearBtn.disabled = locked || !has;
-    checkBtn.disabled = locked || !has;
+    undoBtn.disabled = locked || !has; clearBtn.disabled = locked || !has; checkBtn.disabled = locked || !has;
   }
   function newRound() {
-    design = pickDesign();
-    targetInfo = maskCount(function (c, S) { design.draw(c, S); });
+    design = pickDesign(); targetInfo = targetMask();
     strokes = []; cur = null; locked = false; showGuide = true;
     hintEl.innerHTML = "Pour a <b>" + design.name + "</b>";
     resultEl.classList.remove("show");
-    roundEl.textContent = roundNum + "/" + ROUNDS;
-    scoreEl.textContent = String(totalScore);
-    updateButtons();
-    renderScene();
+    roundEl.textContent = roundNum + "/" + ROUNDS; scoreEl.textContent = String(totalScore);
+    updateButtons(); redrawMilk(); renderScene();
   }
   function check() {
     if (locked || !strokes.length) return;
     locked = true; showGuide = false; renderScene();
-    var acc = scoreRound();
-    totalScore += acc;
-    scoreEl.textContent = String(totalScore);
+    var acc = scoreRound(); totalScore += acc; scoreEl.textContent = String(totalScore);
     var word = acc >= 90 ? "Beautiful! " : acc >= 75 ? "Lovely! " : acc >= 55 ? "Not bad. " : "";
-    resultEl.textContent = word + acc + "% match";
-    resultEl.classList.add("show");
+    resultEl.textContent = word + acc + "% match"; resultEl.classList.add("show");
     if (acc >= 80) sfxChord(); else tone(330, 0.25, "sine", 0.1);
     updateButtons();
-    setTimeout(function () {
-      if (roundNum >= ROUNDS) gameOver();
-      else { roundNum++; newRound(); }
-    }, 1300);
+    setTimeout(function () { if (roundNum >= ROUNDS) gameOver(); else { roundNum++; newRound(); } }, 1300);
   }
   function gameOver() {
-    LB.finish({
-      game: "latte", value: totalScore, resultTitle: "Nice pour!",
-      subtitle: "Avg " + Math.round(totalScore / ROUNDS) + "% match", onPlayAgain: newGame
-    });
+    LB.finish({ game: "latte", value: totalScore, resultTitle: "Nice pour!",
+      subtitle: "Avg " + Math.round(totalScore / ROUNDS) + "% match", onPlayAgain: newGame });
   }
-  function newGame() {
-    totalScore = 0; roundNum = 1;
-    newRound();
-  }
+  function newGame() { totalScore = 0; roundNum = 1; newRound(); }
 
-  // ---- Pour input ----
-  function pt(e) {
-    var r = canvas.getBoundingClientRect();
-    return { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height };
+  // ---- Pour input (bloom on hold, width by speed) ----
+  function pt(e) { var r = canvas.getBoundingClientRect(); return { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height }; }
+  function pourLoop() {
+    if (!pouring) return;
+    var now = performance.now();
+    if (now - lastMoveT > 55 && cur && cur.length) {
+      var b = cur[cur.length - 1];
+      b.r = Math.min(BLOOM_MAX, b.r + BLOOM_RATE * (now - lastFrame));
+      redrawMilk(); renderScene();
+    }
+    lastFrame = now;
+    rafId = requestAnimationFrame(pourLoop);
   }
   canvas.addEventListener("pointerdown", function (e) {
     if (locked) return;
     audio(); e.preventDefault();
-    cur = [pt(e)]; strokes.push(cur);
+    var p = pt(e), t = performance.now();
+    cur = [{ x: p.x, y: p.y, r: 0.05 }]; strokes.push(cur);
+    lastPt = p; lastT = t; lastMoveT = t; lastFrame = t; pouring = true;
     try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
-    tone(180, 0.05, "sine", 0.04);
-    updateButtons(); renderScene();
+    tone(170, 0.05, "sine", 0.04);
+    updateButtons(); redrawMilk(); renderScene();
+    rafId = requestAnimationFrame(pourLoop);
   });
   canvas.addEventListener("pointermove", function (e) {
-    if (locked || !cur) return;
+    if (!pouring || !cur) return;
     e.preventDefault();
-    var p = pt(e), last = cur[cur.length - 1];
-    if (Math.hypot(p.x - last.x, p.y - last.y) > 0.008) { cur.push(p); renderScene(); }
+    var p = pt(e), t = performance.now();
+    var dt = Math.max(1, t - lastT), dist = Math.hypot(p.x - lastPt.x, p.y - lastPt.y);
+    var speed = dist / dt;
+    var r = R_SLOW - (R_SLOW - R_FAST) * Math.min(speed / SPEED_REF, 1);
+    var steps = Math.max(1, Math.ceil(dist / (r * 0.55)));
+    for (var i = 1; i <= steps; i++) {
+      var f = i / steps;
+      cur.push({ x: lastPt.x + (p.x - lastPt.x) * f, y: lastPt.y + (p.y - lastPt.y) * f, r: r });
+    }
+    lastPt = p; lastT = t; lastMoveT = t;
+    redrawMilk(); renderScene();
   });
-  function endStroke(e) { if (cur) { cur = null; try { canvas.releasePointerCapture(e.pointerId); } catch (err) {} } }
+  function endStroke(e) {
+    pouring = false; cur = null;
+    if (rafId) { cancelAnimationFrame(rafId); rafId = 0; }
+    try { canvas.releasePointerCapture(e.pointerId); } catch (err) {}
+  }
   canvas.addEventListener("pointerup", endStroke);
   canvas.addEventListener("pointercancel", endStroke);
 
-  undoBtn.addEventListener("click", function () { if (locked || !strokes.length) return; strokes.pop(); cur = null; tone(260, 0.05, "sine", 0.05); updateButtons(); renderScene(); });
-  clearBtn.addEventListener("click", function () { if (locked || !strokes.length) return; strokes = []; cur = null; tone(220, 0.08, "sine", 0.05); updateButtons(); renderScene(); });
+  undoBtn.addEventListener("click", function () { if (locked || !strokes.length) return; strokes.pop(); cur = null; tone(260, 0.05, "sine", 0.05); updateButtons(); redrawMilk(); renderScene(); });
+  clearBtn.addEventListener("click", function () { if (locked || !strokes.length) return; strokes = []; cur = null; tone(220, 0.08, "sine", 0.05); updateButtons(); redrawMilk(); renderScene(); });
   checkBtn.addEventListener("click", check);
 
   // ---- Sizing ----
@@ -322,7 +307,8 @@
     canvas.style.width = s + "px"; canvas.style.height = s + "px";
     canvas.width = Math.round(s * dpr); canvas.height = Math.round(s * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    renderScene();
+    mcv.width = Math.round(s * dpr); mcv.height = Math.round(s * dpr);
+    redrawMilk(); renderScene();
   }
   window.addEventListener("resize", sizeCup);
   window.addEventListener("orientationchange", function () { setTimeout(sizeCup, 150); });
