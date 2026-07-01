@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#11151c" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Tranquil" />
+<link rel="apple-touch-icon" href="icon.png" />
+<link rel="manifest" href="manifest.json" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="shared.css" />
+<title>Defense — Tranquil</title>
+<style>
+  .play-area { touch-action: none; margin: 6px 0; }
+  #stage {
+    display: block; width: 100%; height: 100%; border-radius: 16px;
+    background: #10151d; touch-action: none;
+    -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+  }
+  .tap-hint { text-align: center; color: var(--muted); font-size: 12px; min-height: 16px; margin-top: 6px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="topbar">
+    <div class="brand">
+      <a href="index.html" class="icon-btn" aria-label="Back to games">‹</a>
+      <span class="title">Defense</span>
+    </div>
+    <div class="bar-actions">
+      <button id="lb-btn" class="icon-btn" aria-label="High scores">🏆</button>
+      <button id="restart" class="icon-btn" aria-label="New game">↻</button>
+      <button id="settings-btn" class="icon-btn" aria-label="Settings">⚙</button>
+    </div>
+  </header>
+
+  <div class="scores">
+    <div class="score-box"><div class="score-label">Wave</div><div class="score-val" id="wave">1</div></div>
+    <div class="score-box best"><div class="score-label">Best</div><div class="score-val" id="best">0</div></div>
+  </div>
+
+  <div class="play-area"><canvas id="stage"></canvas></div>
+  <div class="tap-hint" id="hint">Tap a tile to build a tower (60🪙) · tap a tower to upgrade</div>
+</div>
+
+<div id="settings-overlay" class="modal-overlay">
+  <div class="modal settings">
+    <h2>Defense</h2>
+    <div class="setting-row">
+      <span class="label">Sound</span>
+      <button id="sound-toggle" class="toggle on">On</button>
+    </div>
+    <div class="how">
+      <p class="how-title">How to play</p>
+      <p class="body">Enemies march along the path toward your base. Tap an empty tile to build a tower (they auto-fire at enemies in range). Tap a tower to upgrade its range and damage. Kills earn coins. Each enemy that reaches the base costs a life — lose all your lives and it's over. Survive as many waves as you can.</p>
+    </div>
+    <p class="promise">No ads. No pop-ups. No nags — ever.</p>
+    <button id="settings-share" class="share">Share the game</button>
+    <button id="settings-close" class="ghost-btn">Done</button>
+  </div>
+</div>
+
+<script src="leaderboard.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  var COLS = 7, ROWS = 11;
+  var TURNS = [[1,0],[1,2],[5,2],[5,4],[1,4],[1,6],[5,6],[5,8],[1,8],[1,10]];
+  var TOWER_COST = 60;
+  var muted = localStorage.getItem("tranquil_muted") === "1";
+
+  // path cells (for blocking building)
+  var pathSet = {};
+  (function () {
+    for (var s = 0; s < TURNS.length - 1; s++) {
+      var a = TURNS[s], b = TURNS[s + 1];
+      var dc = Math.sign(b[0] - a[0]), dr = Math.sign(b[1] - a[1]);
+      var c = a[0], r = a[1];
+      pathSet[c + "," + r] = 1;
+      while (c !== b[0] || r !== b[1]) { c += dc; r += dr; pathSet[c + "," + r] = 1; }
+    }
+  })();
+
+  var enemies = [], towers = [], beams = [];
+  var coins = 220, lives = 20, wave = 1, kills = 0;
+  var toSpawn = 0, spawnTimer = 0, spawnInterval = 800, breakTimer = 0, running = false, over = false;
+  var best = Number(localStorage.getItem("tranquil_defense_best") || 0) || 0;
+  var ringFx = null; // {col,row,life}
+
+  var playArea = document.querySelector(".play-area");
+  var canvas = document.getElementById("stage");
+  var ctx = canvas.getContext("2d");
+  var waveEl = document.getElementById("wave");
+  var bestEl = document.getElementById("best");
+  var settingsOverlay = document.getElementById("settings-overlay");
+  var soundToggle = document.getElementById("sound-toggle");
+  var W = 300, H = 460, dpr = window.devicePixelRatio || 1;
+  var cell = 30, ox = 0, oy = 0;
+
+  // ---- Sound ----
+  var actx = null;
+  function audio() {
+    if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { actx = null; } }
+    if (actx && actx.state === "suspended") actx.resume();
+  }
+  function tone(f, d, t, g) {
+    if (muted || !actx) return;
+    var o = actx.createOscillator(), gn = actx.createGain();
+    o.type = t || "sine"; o.frequency.value = f;
+    gn.gain.setValueAtTime(0.0001, actx.currentTime);
+    gn.gain.exponentialRampToValueAtTime(g || 0.1, actx.currentTime + 0.01);
+    gn.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + d);
+    o.connect(gn); gn.connect(actx.destination); o.start(); o.stop(actx.currentTime + d + 0.02);
+  }
+  function sfxShoot() { tone(680, 0.04, "square", 0.03); }
+  function sfxKill() { tone(880, 0.08, "triangle", 0.05); }
+  function sfxBuild() { tone(440, 0.09, "sine", 0.08); }
+  function sfxLeak() { tone(200, 0.18, "sawtooth", 0.06); }
+  function sfxOver() { [330, 247, 175].forEach(function (f, i) { setTimeout(function () { tone(f, 0.3, "sine", 0.09); }, i * 130); }); }
+
+  // ---- Grid <-> pixels ----
+  function ccx(col) { return ox + (col + 0.5) * cell; }
+  function ccy(row) { return oy + (row + 0.5) * cell; }
+  function enemyPos(e) {
+    var a = TURNS[e.seg], b = TURNS[e.seg + 1];
+    var gc = a[0] + (b[0] - a[0]) * e.t, gr = a[1] + (b[1] - a[1]) * e.t;
+    return { x: ccx(gc), y: ccy(gr) };
+  }
+  function enemyCell(e) {
+    var a = TURNS[e.seg], b = TURNS[e.seg + 1];
+    return { c: a[0] + (b[0] - a[0]) * e.t, r: a[1] + (b[1] - a[1]) * e.t };
+  }
+
+  // ---- Waves ----
+  function startWave() {
+    toSpawn = 4 + wave * 2;
+    spawnInterval = Math.max(320, 820 - wave * 22);
+    spawnTimer = 0;
+    waveEl.textContent = String(wave);
+  }
+  function spawnEnemy() {
+    var hp = 12 + wave * 7;
+    enemies.push({ seg: 0, t: 0, hp: hp, maxhp: hp, speed: Math.min(2.3, 1.05 + wave * 0.03), reward: 5 + Math.floor(wave * 1.4) });
+  }
+
+  // ---- Towers ----
+  function towerAt(col, row) { for (var i = 0; i < towers.length; i++) if (towers[i].col === col && towers[i].row === row) return towers[i]; return null; }
+  function towerStats(level) { return { range: 2.2 + level * 0.4, dmg: 5 + level * 4, rate: Math.max(180, 460 - level * 45) }; }
+  function upgradeCost(level) { return 45 * level; }
+
+  // ---- Update ----
+  var lastT = 0, rafId = 0;
+  function loop(ts) {
+    var dt = lastT ? Math.min(0.05, (ts - lastT) / 1000) : 0.016;
+    lastT = ts;
+    if (running && !over) update(dt);
+    render();
+    rafId = requestAnimationFrame(loop);
+  }
+  function update(dt) {
+    // spawn
+    if (toSpawn > 0) {
+      spawnTimer -= dt * 1000;
+      if (spawnTimer <= 0) { spawnEnemy(); toSpawn--; spawnTimer = spawnInterval; }
+    } else if (enemies.length === 0) {
+      // wave cleared
+      if (breakTimer <= 0) breakTimer = 1.2;
+      else { breakTimer -= dt; if (breakTimer <= 0) { wave++; startWave(); } }
+    }
+    // move enemies
+    for (var i = enemies.length - 1; i >= 0; i--) {
+      var e = enemies[i];
+      var a = TURNS[e.seg], b = TURNS[e.seg + 1];
+      var segLen = Math.abs(b[0] - a[0]) + Math.abs(b[1] - a[1]);
+      e.t += (e.speed * dt) / segLen;
+      while (e.t >= 1) {
+        e.t -= 1; e.seg++;
+        if (e.seg >= TURNS.length - 1) { enemies.splice(i, 1); leak(); e = null; break; }
+        var na = TURNS[e.seg], nb = TURNS[e.seg + 1];
+        var nl = Math.abs(nb[0] - na[0]) + Math.abs(nb[1] - na[1]);
+        e.t = e.t * segLen / nl; segLen = nl;
+      }
+    }
+    // towers fire
+    for (var ti = 0; ti < towers.length; ti++) {
+      var tw = towers[ti]; tw.cd -= dt * 1000;
+      if (tw.cd > 0) continue;
+      var st = towerStats(tw.level);
+      var tx = tw.col + 0.5, ty = tw.row + 0.5;
+      var target = null, bestProg = -1;
+      for (var ei = 0; ei < enemies.length; ei++) {
+        var en = enemies[ei], ec = enemyCell(en);
+        var d = Math.hypot((ec.c + 0.5) - tx, (ec.r + 0.5) - ty);
+        if (d <= st.range) {
+          var prog = en.seg + en.t;
+          if (prog > bestProg) { bestProg = prog; target = en; }
+        }
+      }
+      if (target) {
+        target.hp -= st.dmg; tw.cd = st.rate;
+        var tp = enemyPos(target);
+        beams.push({ x1: ccx(tw.col), y1: ccy(tw.row), x2: tp.x, y2: tp.y, life: 6 });
+        sfxShoot();
+        if (target.hp <= 0) {
+          var idx = enemies.indexOf(target);
+          if (idx >= 0) enemies.splice(idx, 1);
+          coins += target.reward; kills++; sfxKill();
+        }
+      }
+    }
+    for (var bi = beams.length - 1; bi >= 0; bi--) { if (--beams[bi].life <= 0) beams.splice(bi, 1); }
+    if (ringFx) { if (--ringFx.life <= 0) ringFx = null; }
+  }
+  function leak() {
+    lives--; sfxLeak();
+    if (lives <= 0) { lives = 0; gameOver(); }
+  }
+  function gameOver() {
+    over = true; running = false; sfxOver();
+    if (wave > best) { best = wave; localStorage.setItem("tranquil_defense_best", String(best)); }
+    setTimeout(function () {
+      LB.finish({ game: "defense", value: wave, resultTitle: "Overrun!",
+        subtitle: "Reached wave " + wave + " · " + kills + " kills", onPlayAgain: newGame });
+    }, 500);
+  }
+
+  // ---- Render ----
+  function render() {
+    ctx.clearRect(0, 0, W, H);
+    // grid + path
+    for (var r = 0; r < ROWS; r++) for (var c = 0; c < COLS; c++) {
+      var x = ox + c * cell, y = oy + r * cell;
+      if (pathSet[c + "," + r]) { ctx.fillStyle = "#2a3444"; ctx.fillRect(x + 1, y + 1, cell - 2, cell - 2); }
+      else { ctx.fillStyle = "#161d28"; ctx.fillRect(x + 1.5, y + 1.5, cell - 3, cell - 3); }
+    }
+    // base
+    var base = TURNS[TURNS.length - 1];
+    ctx.fillStyle = "#5dd6c0";
+    roundRect(ox + base[0] * cell + 4, oy + base[1] * cell + 4, cell - 8, cell - 8, 5); ctx.fill();
+    // range ring fx
+    if (ringFx) {
+      var st = towerStats(ringFx.level);
+      ctx.globalAlpha = ringFx.life / 30; ctx.strokeStyle = "#5dd6c0"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(ccx(ringFx.col), ccy(ringFx.row), st.range * cell, 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+    // towers
+    for (var i = 0; i < towers.length; i++) {
+      var tw = towers[i], x = ox + tw.col * cell, y = oy + tw.row * cell;
+      ctx.fillStyle = tw.level > 1 ? "#7fbf9a" : "#8fb4f0";
+      roundRect(x + 3, y + 3, cell - 6, cell - 6, 5); ctx.fill();
+      ctx.fillStyle = "#0d1016"; ctx.beginPath(); ctx.arc(ccx(tw.col), ccy(tw.row), cell * 0.14, 0, Math.PI * 2); ctx.fill();
+      if (tw.level > 1) { ctx.fillStyle = "#eafff9"; ctx.font = "700 " + Math.round(cell * 0.28) + "px Nunito, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(tw.level, ccx(tw.col), ccy(tw.row) + cell * 0.02); }
+    }
+    // beams
+    for (var b = 0; b < beams.length; b++) {
+      var bm = beams[b]; ctx.globalAlpha = bm.life / 6; ctx.strokeStyle = "#ffe89a"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(bm.x1, bm.y1); ctx.lineTo(bm.x2, bm.y2); ctx.stroke(); ctx.globalAlpha = 1;
+    }
+    // enemies
+    for (var e = 0; e < enemies.length; e++) {
+      var en = enemies[e], p = enemyPos(en), sz = cell * 0.5;
+      ctx.fillStyle = "#e06c9f";
+      roundRect(p.x - sz / 2, p.y - sz / 2, sz, sz, 4); ctx.fill();
+      var hpw = sz, frac = Math.max(0, en.hp / en.maxhp);
+      ctx.fillStyle = "rgba(0,0,0,0.5)"; ctx.fillRect(p.x - hpw / 2, p.y - sz / 2 - 6, hpw, 3);
+      ctx.fillStyle = "#9ece6a"; ctx.fillRect(p.x - hpw / 2, p.y - sz / 2 - 6, hpw * frac, 3);
+    }
+    // HUD
+    ctx.fillStyle = "#e8edf4"; ctx.font = "700 " + Math.round(H * 0.032) + "px Nunito, sans-serif";
+    ctx.textAlign = "left"; ctx.textBaseline = "top";
+    ctx.fillText("🪙 " + coins, 8, 8);
+    ctx.textAlign = "right";
+    ctx.fillText("❤ " + lives, W - 8, 8);
+  }
+  function roundRect(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+  }
+
+  // ---- Input ----
+  canvas.addEventListener("pointerdown", function (e) {
+    e.preventDefault();
+    if (over) return;
+    audio();
+    var r = canvas.getBoundingClientRect();
+    var px = (e.clientX - r.left) * (W / r.width), py = (e.clientY - r.top) * (H / r.height);
+    var col = Math.floor((px - ox) / cell), row = Math.floor((py - oy) / cell);
+    if (col < 0 || col >= COLS || row < 0 || row >= ROWS) return;
+    if (pathSet[col + "," + row]) return;
+    var t = towerAt(col, row);
+    if (t) {
+      var uc = upgradeCost(t.level);
+      if (coins >= uc) { coins -= uc; t.level++; sfxBuild(); ringFx = { col: col, row: row, level: t.level, life: 30 }; }
+      else { tone(160, 0.12, "sine", 0.05); }
+    } else {
+      if (coins >= TOWER_COST) { coins -= TOWER_COST; towers.push({ col: col, row: row, level: 1, cd: 0 }); sfxBuild(); ringFx = { col: col, row: row, level: 1, life: 30 }; }
+      else { tone(160, 0.12, "sine", 0.05); }
+    }
+  });
+  canvas.addEventListener("touchstart", function (e) { e.preventDefault(); }, { passive: false });
+  canvas.addEventListener("touchmove", function (e) { e.preventDefault(); }, { passive: false });
+  document.addEventListener("gesturestart", function (e) { e.preventDefault(); });
+
+  // ---- Sizing ----
+  function sizeStage() {
+    var r = playArea.getBoundingClientRect();
+    W = Math.max(40, Math.floor(r.width)); H = Math.max(40, Math.floor(r.height));
+    dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    cell = Math.min(W / COLS, H / ROWS);
+    ox = (W - cell * COLS) / 2; oy = (H - cell * ROWS) / 2;
+    render();
+  }
+  window.addEventListener("resize", sizeStage);
+  window.addEventListener("orientationchange", function () { setTimeout(sizeStage, 150); });
+
+  // ---- Settings / sound ----
+  function updateSoundToggle() { soundToggle.textContent = muted ? "Off" : "On"; soundToggle.classList.toggle("on", !muted); }
+  async function shareGame() {
+    var text = "Defense — a calm tower-defense game with no ads. Play it:";
+    var url = "https://pete1552.github.io/AGTest/";
+    try { if (navigator.share) { await navigator.share({ title: "Defense", text: text, url: url }); return; } } catch (e) { return; }
+    try {
+      await navigator.clipboard.writeText(text + " " + url);
+      var b = document.getElementById("settings-share"), old = b.textContent; b.textContent = "Link copied!";
+      setTimeout(function () { b.textContent = old; }, 1500);
+    } catch (e) {}
+  }
+  soundToggle.addEventListener("click", function () {
+    muted = !muted; localStorage.setItem("tranquil_muted", muted ? "1" : "0"); updateSoundToggle();
+    if (!muted) { audio(); tone(300, 0.05, "sine", 0.07); }
+  });
+  document.getElementById("settings-btn").addEventListener("click", function () { updateSoundToggle(); settingsOverlay.classList.add("show"); });
+  document.getElementById("settings-close").addEventListener("click", function () { settingsOverlay.classList.remove("show"); });
+  settingsOverlay.addEventListener("click", function (e) { if (e.target === settingsOverlay) settingsOverlay.classList.remove("show"); });
+  document.getElementById("settings-share").addEventListener("click", shareGame);
+  document.getElementById("lb-btn").addEventListener("click", function () { LB.open("defense"); });
+  document.getElementById("restart").addEventListener("click", newGame);
+
+  // ---- Lifecycle ----
+  function newGame() {
+    enemies = []; towers = []; beams = [];
+    coins = 220; lives = 20; wave = 1; kills = 0; over = false; running = true; breakTimer = 0; ringFx = null;
+    bestEl.textContent = String(best);
+    startWave();
+  }
+  updateSoundToggle();
+  sizeStage();
+  newGame();
+  rafId = requestAnimationFrame(loop);
+  setTimeout(sizeStage, 300);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(sizeStage);
+})();
+</script>
+</body>
+</html>
