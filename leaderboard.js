@@ -22,7 +22,7 @@
     blend:  { name: "Blend",  dir: "asc",  fmt: function (v) { return v + " swaps"; } },
     mix:    { name: "Mix",    dir: "desc", fmt: function (v) { return String(v); } },
     sort:   { name: "Sort",   dir: "asc",  fmt: function (v) { return v + " pours"; } },
-    latte:  { name: "Latte",  dir: "desc", fmt: function (v) { return String(v); } }
+    tower:  { name: "Tower",  dir: "desc", fmt: function (v) { return String(v); } }
   };
   var MAX = 10;
 
