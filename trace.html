@@ -16,15 +16,12 @@
 <link rel="stylesheet" href="shared.css" />
 <title>Trace — Tranquil</title>
 <style>
-  /* Game-specific styles only */
   #board {
     position: relative;
     background: var(--panel);
     border-radius: 14px;
     padding: 8px;
     display: grid;
-    grid-template-columns: repeat(6, 1fr);
-    grid-template-rows: repeat(6, 1fr);
     gap: 6px;
     touch-action: none;
     user-select: none;
@@ -40,22 +37,32 @@
     background: var(--accent);
     box-shadow: inset 0 2px 0 rgba(255,255,255,0.18), inset 0 -2px 0 rgba(0,0,0,0.22);
   }
-  .cell.head {
-    box-shadow: inset 0 0 0 3px rgba(255,255,255,0.55),
-                inset 0 2px 0 rgba(255,255,255,0.18);
-    filter: brightness(1.08);
+  .cell.head { box-shadow: inset 0 0 0 3px rgba(255,255,255,0.6); filter: brightness(1.08); }
+  .cell.wall {
+    background: #0c0f15;
+    box-shadow: inset 0 0 0 2px rgba(0,0,0,0.5);
   }
   /* Connector nubs joining consecutive path cells across the gap */
-  .cell .link {
-    position: absolute;
-    background: var(--accent);
-    z-index: 1;
-    pointer-events: none;
+  .cell .link { position: absolute; background: var(--accent); z-index: 1; pointer-events: none; }
+  .cell .link.right { top: 30%; bottom: 30%; right: -8px; width: 10px; border-radius: 3px; }
+  .cell .link.left  { top: 30%; bottom: 30%; left: -8px; width: 10px; border-radius: 3px; }
+  .cell .link.down  { left: 30%; right: 30%; bottom: -8px; height: 10px; border-radius: 3px; }
+  .cell .link.up    { left: 30%; right: 30%; top: -8px; height: 10px; border-radius: 3px; }
+  /* Checkpoint badge with its number */
+  .cell .num {
+    position: absolute; inset: 14%;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 50%;
+    background: var(--grid);
+    color: var(--ink);
+    font-family: var(--font-display); font-weight: 700;
+    font-size: clamp(11px, 3.4vw, 18px);
+    box-shadow: 0 0 0 2px rgba(255,255,255,0.14);
+    z-index: 2; pointer-events: none;
   }
-  .cell .link.right { top: 28%; bottom: 28%; right: -8px; width: 10px; border-radius: 3px; }
-  .cell .link.left  { top: 28%; bottom: 28%; left: -8px; width: 10px; border-radius: 3px; }
-  .cell .link.down  { left: 28%; right: 28%; bottom: -8px; height: 10px; border-radius: 3px; }
-  .cell .link.up    { left: 28%; right: 28%; top: -8px; height: 10px; border-radius: 3px; }
+  .cell.on .num { background: #06231e; color: #eafffb; box-shadow: 0 0 0 2px rgba(255,255,255,0.3); }
+  .cell.next .num { box-shadow: 0 0 0 2px var(--accent); }
+  .mode-btn { padding: 7px 18px; }
 </style>
 </head>
 <body>
@@ -66,21 +73,23 @@
       <span class="title">Trace</span>
     </div>
     <div class="bar-actions">
-      <button class="icon-btn" aria-label="High scores" onclick="LB.open('trace')">🏆</button>
-      <button id="restart" class="icon-btn" aria-label="New game">↻</button>
+      <button id="lb-btn" class="icon-btn" aria-label="High scores">🏆</button>
+      <button id="restart" class="icon-btn" aria-label="Reset puzzle">↻</button>
       <button id="settings-btn" class="icon-btn" aria-label="Settings">⚙</button>
     </div>
   </header>
 
+  <div style="text-align:center">
+    <div class="modes">
+      <button id="mode-daily" class="mode-btn active">Daily</button>
+      <button id="mode-practice" class="mode-btn">Practice</button>
+    </div>
+    <div class="daily-info" id="daily-info"></div>
+  </div>
+
   <div class="scores">
-    <div class="score-box">
-      <div class="score-label">Filled</div>
-      <div class="score-val" id="filled">0/36</div>
-    </div>
-    <div class="score-box best">
-      <div class="score-label">Best time</div>
-      <div class="score-val" id="best">–</div>
-    </div>
+    <div class="score-box"><div class="score-label">Filled</div><div class="score-val" id="filled">0/0</div></div>
+    <div class="score-box best"><div class="score-label">Time</div><div class="score-val" id="time">0s</div></div>
   </div>
 
   <div class="play-area"><div id="board"></div></div>
@@ -95,7 +104,7 @@
     </div>
     <div class="how">
       <p class="how-title">How to play</p>
-      <p class="body">Drag to draw one continuous line that passes through every cell exactly once, moving up/down/left/right. Drag back to undo.</p>
+      <p class="body">Draw one continuous line that fills every open cell, passing the numbered dots in order (1 → 2 → 3 …). Grey cells are walls. Drag back along the line to undo, or grab any point on it to redraw from there. Everyone gets the same Daily puzzle — fastest solve wins.</p>
     </div>
     <p class="promise">No ads. No pop-ups. No nags — ever.</p>
     <button id="settings-share" class="share">Share the game</button>
@@ -103,12 +112,14 @@
   </div>
 </div>
 
+<!-- Practice solve modal (Daily uses the leaderboard modal instead) -->
 <div id="overlay" class="modal-overlay">
   <div class="modal">
     <h2>Solved!</h2>
     <div class="final" id="final-time">0s</div>
-    <div class="final-sub" id="final-sub"></div>
-    <button id="play-again">Play again</button>
+    <div class="final-sub">Practice puzzle</div>
+    <button id="play-again">New puzzle</button>
+    <button id="to-daily" class="ghost-btn">Back to Daily</button>
   </div>
 </div>
 
@@ -117,348 +128,426 @@
 (function () {
   "use strict";
 
-  const GRID = 6;
-  const TOTAL = GRID * GRID;
+  var N = 7;                 // grid size
+  var CP_COUNT = 5;          // numbered checkpoints
 
   // ---- State ----
-  let path = [];                 // ordered array of [r, c]
-  let inPath = [];               // GRID x GRID boolean: is cell currently in path
-  let drawing = false;           // pointer is down and dragging
-  let startTime = 0;             // ms timestamp of first cell added
-  let timerId = null;
-  let solved = false;
-  let best = Number(localStorage.getItem("tranquil_trace_best") || 0) || 0;
-
-  let muted = localStorage.getItem("tranquil_muted") === "1";
+  var walls, cpNum, total;   // board: Set of wall keys, cpNum[r][c]=number or 0, total open cells
+  var path = [];             // ordered [r,c]
+  var inPath = [];           // boolean grid
+  var drawing = false, solved = false, startTime = 0;
+  var mode = "daily";
+  var muted = localStorage.getItem("tranquil_muted") === "1";
 
   // ---- Elements ----
-  const playArea = document.querySelector(".play-area");
-  const board = document.getElementById("board");
-  const filledEl = document.getElementById("filled");
-  const bestEl = document.getElementById("best");
-  const overlay = document.getElementById("overlay");
-  const settingsOverlay = document.getElementById("settings-overlay");
-  const soundToggle = document.getElementById("sound-toggle");
+  var playArea = document.querySelector(".play-area");
+  var board = document.getElementById("board");
+  var filledEl = document.getElementById("filled");
+  var timeEl = document.getElementById("time");
+  var dailyInfoEl = document.getElementById("daily-info");
+  var overlay = document.getElementById("overlay");
+  var settingsOverlay = document.getElementById("settings-overlay");
+  var soundToggle = document.getElementById("sound-toggle");
+  var modeDailyBtn = document.getElementById("mode-daily");
+  var modePracticeBtn = document.getElementById("mode-practice");
+  var cellEls = [];
+  var timerTick = null;
 
-  let cellEls = [];              // GRID x GRID of cell elements
-
-  // ---- Sound (shared collection mute key) ----
-  let actx = null;
+  // ---- Sound ----
+  var actx = null;
   function audio() {
-    if (!actx) {
-      try { actx = new (window.AudioContext || window.webkitAudioContext)(); }
-      catch (e) { actx = null; }
-    }
+    if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { actx = null; } }
     if (actx && actx.state === "suspended") actx.resume();
   }
   function tone(f, d, t, g) {
     if (muted || !actx) return;
-    const o = actx.createOscillator(), gn = actx.createGain();
-    o.type = t || "sine";
-    o.frequency.value = f;
+    var o = actx.createOscillator(), gn = actx.createGain();
+    o.type = t || "sine"; o.frequency.value = f;
     gn.gain.setValueAtTime(0.0001, actx.currentTime);
     gn.gain.exponentialRampToValueAtTime(g || 0.1, actx.currentTime + 0.01);
     gn.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + d);
-    o.connect(gn); gn.connect(actx.destination);
-    o.start();
-    o.stop(actx.currentTime + d + 0.02);
+    o.connect(gn); gn.connect(actx.destination); o.start(); o.stop(actx.currentTime + d + 0.02);
   }
-  function sfxSolve() {
-    [523.25, 659.25, 783.99, 1046.5].forEach((f, i) =>
-      setTimeout(() => tone(f, 0.4, "sine", 0.12), i * 110));
+  function sfxSolve() { [523.25, 659.25, 783.99, 1046.5].forEach(function (f, i) { setTimeout(function () { tone(f, 0.4, "sine", 0.12); }, i * 110); }); }
+
+  // ---- Seeded RNG (deterministic daily boards for everyone) ----
+  function mulberry32(a) {
+    return function () {
+      a |= 0; a = a + 0x6D2B79F5 | 0;
+      var t = Math.imul(a ^ a >>> 15, 1 | a);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+  function todayStr() {
+    var d = new Date();
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  }
+  function todaySeed() { var d = new Date(); return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate(); }
+  function prettyDate() { return new Date().toLocaleDateString(undefined, { month: "short", day: "numeric" }); }
+
+  // ---- Puzzle generation (guaranteed solvable) ----
+  var DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  function key(r, c) { return r * N + c; }
+  function shuffle(arr, rng) {
+    for (var i = arr.length - 1; i > 0; i--) { var j = Math.floor(rng() * (i + 1)); var t = arr[i]; arr[i] = arr[j]; arr[j] = t; }
+    return arr;
+  }
+  function connectedCount(open, startKey) {
+    // BFS over open (Set of keys) from startKey
+    var seen = {}, stack = [startKey], n = 0;
+    seen[startKey] = true;
+    while (stack.length) {
+      var k = stack.pop(); n++;
+      var r = Math.floor(k / N), c = k % N;
+      for (var i = 0; i < 4; i++) {
+        var nr = r + DIRS[i][0], nc = c + DIRS[i][1], nk = key(nr, nc);
+        if (nr >= 0 && nr < N && nc >= 0 && nc < N && open.has(nk) && !seen[nk]) { seen[nk] = true; stack.push(nk); }
+      }
+    }
+    return n;
+  }
+  function hamPath(rng, wallSet) {
+    // Randomized DFS with Warnsdorff ordering over all non-wall cells.
+    var open = new Set();
+    var cells = [];
+    for (var r = 0; r < N; r++) for (var c = 0; c < N; c++) if (!wallSet.has(key(r, c))) { open.add(key(r, c)); cells.push([r, c]); }
+    var need = cells.length;
+    var starts = shuffle(cells.slice(), rng).slice(0, 3);
+    for (var s = 0; s < starts.length; s++) {
+      var budget = [15000];
+      var visited = {};
+      var pathArr = [];
+      var st = starts[s];
+      visited[key(st[0], st[1])] = true; pathArr.push(st);
+      if (dfs(st, visited, pathArr, open, need, rng, budget)) return pathArr;
+    }
+    return null;
+  }
+  function onward(r, c, visited, open) {
+    var n = 0;
+    for (var i = 0; i < 4; i++) {
+      var nr = r + DIRS[i][0], nc = c + DIRS[i][1];
+      if (nr < 0 || nr >= N || nc < 0 || nc >= N) continue;
+      var nk = key(nr, nc);
+      if (open.has(nk) && !visited[nk]) n++;
+    }
+    return n;
+  }
+  function dfs(cell, visited, pathArr, open, need, rng, budget) {
+    if (budget[0]-- <= 0) return false;
+    if (pathArr.length === need) return true;
+    var r = cell[0], c = cell[1];
+    var nbrs = [];
+    for (var i = 0; i < 4; i++) {
+      var nr = r + DIRS[i][0], nc = c + DIRS[i][1];
+      if (nr < 0 || nr >= N || nc < 0 || nc >= N) continue;
+      var nk = key(nr, nc);
+      if (open.has(nk) && !visited[nk]) nbrs.push([nr, nc]);
+    }
+    // deterministic tie-break: shuffle, then stable-order by onward count ascending
+    shuffle(nbrs, rng);
+    nbrs.sort(function (a, b) { return onward(a[0], a[1], visited, open) - onward(b[0], b[1], visited, open); });
+    for (var j = 0; j < nbrs.length; j++) {
+      var nb = nbrs[j], k = key(nb[0], nb[1]);
+      visited[k] = true; pathArr.push(nb);
+      if (dfs(nb, visited, pathArr, open, need, rng, budget)) return true;
+      pathArr.pop(); visited[k] = false;
+    }
+    return false;
+  }
+  function generate(seed) {
+    var rng = mulberry32(seed >>> 0);
+    var wallTries = [4, 3, 2, 1, 0];
+    for (var w = 0; w < wallTries.length; w++) {
+      var wc = wallTries[w];
+      for (var attempt = 0; attempt < 8; attempt++) {
+        var wallSet = new Set();
+        var allCells = [];
+        for (var r = 0; r < N; r++) for (var c = 0; c < N; c++) allCells.push([r, c]);
+        shuffle(allCells, rng);
+        for (var i = 0; i < wc; i++) { var cc = allCells[i]; wallSet.add(key(cc[0], cc[1])); }
+        // connectivity check
+        var open = new Set();
+        var first = -1;
+        for (var rr = 0; rr < N; rr++) for (var ccc = 0; ccc < N; ccc++) { var kk = key(rr, ccc); if (!wallSet.has(kk)) { open.add(kk); if (first < 0) first = kk; } }
+        if (connectedCount(open, first) !== open.size) continue;
+        // parity pre-check: a Hamiltonian path needs balanced checkerboard colours
+        var bC = 0, wC = 0;
+        open.forEach(function (kk) { var rr2 = Math.floor(kk / N), cc2 = kk % N; if ((rr2 + cc2) & 1) bC++; else wC++; });
+        if (Math.abs(bC - wC) > 1) continue;
+        var p = hamPath(rng, wallSet);
+        if (p && p.length === open.size) return buildPuzzle(wallSet, p);
+      }
+    }
+    // ultimate fallback: no walls
+    var p2 = hamPath(rng, new Set());
+    return buildPuzzle(new Set(), p2);
+  }
+  function buildPuzzle(wallSet, sol) {
+    var cp = [];
+    for (var r = 0; r < N; r++) { cp[r] = []; for (var c = 0; c < N; c++) cp[r][c] = 0; }
+    var L = sol.length;
+    var k = Math.min(CP_COUNT, L);
+    for (var i = 0; i < k; i++) {
+      var idx = Math.round(i * (L - 1) / (k - 1));
+      var cell = sol[idx];
+      cp[cell[0]][cell[1]] = i + 1;
+    }
+    return { walls: wallSet, cp: cp, total: L };
   }
 
-  // ---- Build board ----
+  // ---- Build DOM board ----
   function buildBoard() {
+    board.style.gridTemplateColumns = "repeat(" + N + ", 1fr)";
+    board.style.gridTemplateRows = "repeat(" + N + ", 1fr)";
     board.innerHTML = "";
     cellEls = [];
-    for (let r = 0; r < GRID; r++) {
+    for (var r = 0; r < N; r++) {
       cellEls[r] = [];
-      for (let c = 0; c < GRID; c++) {
-        const d = document.createElement("div");
+      for (var c = 0; c < N; c++) {
+        var d = document.createElement("div");
         d.className = "cell";
-        d.dataset.r = r;
-        d.dataset.c = c;
+        d.dataset.r = r; d.dataset.c = c;
+        if (walls.has(key(r, c))) d.classList.add("wall");
+        else if (cpNum[r][c]) {
+          var num = document.createElement("div");
+          num.className = "num"; num.textContent = cpNum[r][c];
+          d.appendChild(num);
+        }
         board.appendChild(d);
         cellEls[r][c] = d;
       }
     }
   }
 
-  // ---- Time formatting ----
-  function fmt(sec) { return Math.max(0, Math.round(sec)) + "s"; }
+  function fmtTime(sec) { return Math.max(0, Math.round(sec)) + "s"; }
+  function elapsed() { return startTime ? (performance.now() - startTime) / 1000 : 0; }
+  function updateFilled() { filledEl.textContent = path.length + "/" + total; }
+  function updateTime() { timeEl.textContent = fmtTime(elapsed()); }
 
-  function updateFilled() {
-    filledEl.textContent = path.length + "/" + TOTAL;
-  }
-
-  function updateBest() {
-    bestEl.textContent = best > 0 ? fmt(best) : "–";
-  }
-
-  // ---- Timer ----
-  function startTimer() {
-    if (startTime) return;
-    startTime = performance.now();
-  }
-  function elapsedSec() {
-    return startTime ? (performance.now() - startTime) / 1000 : 0;
-  }
-  function stopTimer() {
-    if (timerId) { clearInterval(timerId); timerId = null; }
-  }
-
-  // ---- Rendering the path ----
-  function clearAllVisuals() {
-    for (let r = 0; r < GRID; r++) {
-      for (let c = 0; c < GRID; c++) {
-        const el = cellEls[r][c];
-        el.classList.remove("on", "head");
-        // remove any link nubs
-        const links = el.querySelectorAll(".link");
-        for (const l of links) l.remove();
-      }
-    }
-  }
+  function cpInPath() { var n = 0; for (var i = 0; i < path.length; i++) { if (cpNum[path[i][0]][path[i][1]]) n++; } return n; }
 
   function renderPath() {
-    clearAllVisuals();
-    for (let i = 0; i < path.length; i++) {
-      const [r, c] = path[i];
-      const el = cellEls[r][c];
-      el.classList.add("on");
-      // draw a connector toward the next cell in the path
+    // clear
+    for (var r = 0; r < N; r++) for (var c = 0; c < N; c++) {
+      var el = cellEls[r][c];
+      el.classList.remove("on", "head", "next");
+      var links = el.querySelectorAll(".link");
+      for (var q = 0; q < links.length; q++) links[q].remove();
+    }
+    for (var i = 0; i < path.length; i++) {
+      var pr = path[i][0], pc = path[i][1];
+      cellEls[pr][pc].classList.add("on");
       if (i < path.length - 1) {
-        const [nr, nc] = path[i + 1];
-        const link = document.createElement("div");
-        link.className = "link";
-        if (nr === r && nc === c + 1) link.classList.add("right");
-        else if (nr === r && nc === c - 1) link.classList.add("left");
-        else if (nc === c && nr === r + 1) link.classList.add("down");
-        else if (nc === c && nr === r - 1) link.classList.add("up");
-        el.appendChild(link);
+        var nr = path[i + 1][0], nc = path[i + 1][1];
+        var link = document.createElement("div"); link.className = "link";
+        if (nr === pr && nc === pc + 1) link.classList.add("right");
+        else if (nr === pr && nc === pc - 1) link.classList.add("left");
+        else if (nc === pc && nr === pr + 1) link.classList.add("down");
+        else if (nc === pc && nr === pr - 1) link.classList.add("up");
+        cellEls[pr][pc].appendChild(link);
       }
     }
-    if (path.length > 0) {
-      const [hr, hc] = path[path.length - 1];
-      cellEls[hr][hc].classList.add("head");
+    if (path.length) cellEls[path[path.length - 1][0]][path[path.length - 1][1]].classList.add("head");
+    // highlight the next checkpoint to hit
+    var want = cpInPath() + 1;
+    for (var rr = 0; rr < N; rr++) for (var cc = 0; cc < N; cc++) {
+      if (cpNum[rr][cc] === want && !inPath[rr][cc]) cellEls[rr][cc].classList.add("next");
     }
     updateFilled();
   }
 
-  // ---- Path logic ----
-  function resetState() {
-    path = [];
-    inPath = Array.from({ length: GRID }, () => Array(GRID).fill(false));
-    drawing = false;
-    solved = false;
-    startTime = 0;
-    stopTimer();
-  }
+  function adjacent(a, b) { return Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) === 1; }
 
-  function adjacent(a, b) {
-    const dr = Math.abs(a[0] - b[0]);
-    const dc = Math.abs(a[1] - b[1]);
-    return (dr + dc) === 1;
-  }
-
-  // Try to extend/backtrack the path toward cell (r,c) based on a pointer entering it.
   function visitCell(r, c) {
     if (solved) return;
-    if (r < 0 || r >= GRID || c < 0 || c >= GRID) return;
+    if (r < 0 || r >= N || c < 0 || c >= N) return;
+    if (walls.has(key(r, c))) return;
 
-    // First cell of a fresh drag starts the path.
     if (path.length === 0) {
-      path.push([r, c]);
-      inPath[r][c] = true;
-      startTimer();
-      renderPath();
-      tone(440, 0.05, "sine", 0.07);
-      return;
+      // must start on checkpoint 1 (or any non-checkpoint cell is allowed; first cp hit must be 1)
+      if (cpNum[r][c] && cpNum[r][c] !== 1) return;
+      path.push([r, c]); inPath[r][c] = true;
+      if (!startTime) { startTime = performance.now(); if (!timerTick) timerTick = setInterval(updateTime, 250); }
+      renderPath(); tone(440, 0.05, "sine", 0.07); return;
     }
+    var head = path[path.length - 1];
+    if (r === head[0] && c === head[1]) return;
 
-    const head = path[path.length - 1];
-    if (r === head[0] && c === head[1]) return; // same cell, ignore
-
-    // Backtrack: entering the second-to-last cell pops the last.
+    // backtrack
     if (path.length >= 2) {
-      const prev = path[path.length - 2];
+      var prev = path[path.length - 2];
       if (prev[0] === r && prev[1] === c) {
-        const popped = path.pop();
-        inPath[popped[0]][popped[1]] = false;
-        renderPath();
-        tone(330, 0.05, "sine", 0.06);
-        return;
+        var pop = path.pop(); inPath[pop[0]][pop[1]] = false;
+        renderPath(); tone(300, 0.05, "sine", 0.05); return;
       }
     }
-
-    // Extend: must be orthogonally adjacent to head and not already in path.
+    // extend: adjacent, unvisited, and checkpoint order respected
     if (!inPath[r][c] && adjacent(head, [r, c])) {
-      path.push([r, c]);
-      inPath[r][c] = true;
+      var cn = cpNum[r][c];
+      if (cn && cn !== cpInPath() + 1) return; // out-of-order checkpoint blocked
+      path.push([r, c]); inPath[r][c] = true;
       renderPath();
-      tone(440, 0.05, "sine", 0.07);
+      tone(cn ? 620 : 440, 0.05, "sine", cn ? 0.09 : 0.07);
       checkWin();
     }
-    // Non-adjacent jumps are ignored.
+  }
+
+  function stepToward(tr, tc) {
+    var guard = 0;
+    while (guard++ < N * N + 2) {
+      if (solved || path.length === 0) return;
+      var head = path[path.length - 1];
+      if (head[0] === tr && head[1] === tc) return;
+      var nr = head[0], nc = head[1];
+      if (head[0] !== tr && head[1] === tc) nr += head[0] < tr ? 1 : -1;
+      else if (head[1] !== tc && head[0] === tr) nc += head[1] < tc ? 1 : -1;
+      else nr += head[0] < tr ? 1 : -1;
+      var before = path.length;
+      visitCell(nr, nc);
+      if (path.length === before) return;
+    }
   }
 
   function checkWin() {
-    if (path.length === TOTAL && !solved) {
-      solved = true;
-      drawing = false;
-      const t = elapsedSec();
-      stopTimer();
-      let improved = false;
-      if (best === 0 || t < best) {
-        best = t;
-        localStorage.setItem("tranquil_trace_best", String(t));
-        improved = true;
-      }
-      updateBest();
+    if (path.length === total && !solved) {
+      solved = true; drawing = false;
+      var t = elapsed();
+      if (timerTick) { clearInterval(timerTick); timerTick = null; }
+      updateTime();
       sfxSolve();
-      document.getElementById("final-time").textContent = fmt(t);
-      document.getElementById("final-sub").textContent =
-        improved ? "New best!" : (best > 0 ? "Best · " + fmt(best) : "");
-      setTimeout(() => LB.finish({
-        game: 'trace',
-        value: Math.round(t),
-        resultTitle: 'Solved!',
-        onPlayAgain: newGame
-      }), 350);
+      if (mode === "daily") {
+        var round = todayStr();
+        var best = Number(localStorage.getItem("tranquil_trace_best_" + round) || 0) || 0;
+        if (best === 0 || t < best) localStorage.setItem("tranquil_trace_best_" + round, String(Math.round(t)));
+        setTimeout(function () {
+          LB.finish({
+            game: "trace", value: Math.round(t), resultTitle: "Solved!",
+            subtitle: "Daily · " + prettyDate(), round: round, roundLabel: prettyDate(),
+            onPlayAgain: function () { setMode("practice"); }
+          });
+        }, 350);
+      } else {
+        document.getElementById("final-time").textContent = fmtTime(t);
+        setTimeout(function () { overlay.classList.add("show"); }, 350);
+      }
     }
   }
 
-  // ---- Pointer → cell mapping (robust: elementFromPoint + data attrs) ----
+  // ---- Pointer handling ----
   function cellFromPoint(x, y) {
-    const el = document.elementFromPoint(x, y);
+    var el = document.elementFromPoint(x, y);
     if (!el) return null;
-    const cell = el.closest(".cell");
+    var cell = el.closest(".cell");
     if (!cell || !board.contains(cell)) return null;
     return [Number(cell.dataset.r), Number(cell.dataset.c)];
   }
-
-  // Walk the path one cell at a time toward (tr,tc) so fast drags never skip cells.
-  function stepToward(tr, tc) {
-    let guard = 0;
-    while (guard++ < GRID * GRID + 2) {
-      if (solved || path.length === 0) return;
-      const head = path[path.length - 1];
-      if (head[0] === tr && head[1] === tc) return;
-      let nr = head[0], nc = head[1];
-      if (head[0] !== tr && head[1] === tc) nr += head[0] < tr ? 1 : -1;
-      else if (head[1] !== tc && head[0] === tr) nc += head[1] < tc ? 1 : -1;
-      else nr += head[0] < tr ? 1 : -1; // off-axis target: close the row first
-      const before = path.length;
-      visitCell(nr, nc);
-      if (path.length === before) return; // blocked — stop stepping
-    }
-  }
-
-  function onPointerDown(e) {
+  function onDown(e) {
     if (solved) return;
-    audio();
-    e.preventDefault();
-    const cell = cellFromPoint(e.clientX, e.clientY);
+    audio(); e.preventDefault();
+    var cell = cellFromPoint(e.clientX, e.clientY);
     if (!cell) return;
-    const r = cell[0], c = cell[1];
+    var r = cell[0], c = cell[1];
+    if (walls.has(key(r, c))) return;
     if (path.length > 0 && inPath[r][c]) {
-      // Grab an existing point on the line: rewind to it and keep drawing from there.
-      let idx = -1;
-      for (let i = 0; i < path.length; i++) if (path[i][0] === r && path[i][1] === c) { idx = i; break; }
+      var idx = -1;
+      for (var i = 0; i < path.length; i++) if (path[i][0] === r && path[i][1] === c) { idx = i; break; }
       if (idx >= 0) {
-        for (let k = idx + 1; k < path.length; k++) inPath[path[k][0]][path[k][1]] = false;
-        path.length = idx + 1;
-        renderPath();
+        for (var k = idx + 1; k < path.length; k++) inPath[path[k][0]][path[k][1]] = false;
+        path.length = idx + 1; renderPath();
       }
     } else {
-      resetState();
-      visitCell(r, c);
+      resetPath(); visitCell(r, c);
     }
     drawing = true;
     try { board.setPointerCapture(e.pointerId); } catch (err) {}
   }
-
-  function onPointerMove(e) {
+  function onMove(e) {
     if (!drawing || solved) return;
     e.preventDefault();
-    const cell = cellFromPoint(e.clientX, e.clientY);
+    var cell = cellFromPoint(e.clientX, e.clientY);
     if (!cell) return;
     stepToward(cell[0], cell[1]);
   }
+  function onUp(e) { drawing = false; try { board.releasePointerCapture(e.pointerId); } catch (err) {} }
+  board.addEventListener("pointerdown", onDown);
+  board.addEventListener("pointermove", onMove);
+  board.addEventListener("pointerup", onUp);
+  board.addEventListener("pointercancel", onUp);
 
-  function onPointerUp(e) {
-    drawing = false;
-    try { board.releasePointerCapture(e.pointerId); } catch (err) {}
+  // ---- Lifecycle ----
+  function resetPath() {
+    path = [];
+    inPath = [];
+    for (var r = 0; r < N; r++) { inPath[r] = []; for (var c = 0; c < N; c++) inPath[r][c] = false; }
+    drawing = false; solved = false; startTime = 0;
+    if (timerTick) { clearInterval(timerTick); timerTick = null; }
+    updateTime();
   }
-
-  board.addEventListener("pointerdown", onPointerDown);
-  board.addEventListener("pointermove", onPointerMove);
-  board.addEventListener("pointerup", onPointerUp);
-  board.addEventListener("pointercancel", onPointerUp);
-
-  // ---- New game ----
+  function loadPuzzle(seed) {
+    var p = generate(seed);
+    walls = p.walls; cpNum = p.cp; total = p.total;
+    resetPath();
+    buildBoard();
+    renderPath();
+    sizeBoard();
+  }
   function newGame() {
     overlay.classList.remove("show");
-    resetState();
-    renderPath();      // clears visuals + updates filled count
-    updateBest();
+    if (mode === "daily") loadPuzzle(todaySeed());
+    else loadPuzzle((Math.floor(Math.random() * 1e9)) >>> 0);
+  }
+  function setMode(m) {
+    mode = m;
+    modeDailyBtn.classList.toggle("active", m === "daily");
+    modePracticeBtn.classList.toggle("active", m === "practice");
+    dailyInfoEl.innerHTML = (m === "daily") ? ("Daily · " + prettyDate() + " — same puzzle for everyone") : "Practice — unlimited puzzles";
+    newGame();
   }
 
-  // ---- Board auto-sizing ----
+  // ---- Board sizing ----
   function sizeBoard() {
-    const r = playArea.getBoundingClientRect();
-    const s = Math.max(0, Math.floor(Math.min(r.width, r.height)));
-    board.style.width = s + "px";
-    board.style.height = s + "px";
+    var r = playArea.getBoundingClientRect();
+    var s = Math.max(0, Math.floor(Math.min(r.width, r.height)));
+    board.style.width = s + "px"; board.style.height = s + "px";
   }
   window.addEventListener("resize", sizeBoard);
-  window.addEventListener("orientationchange", () => setTimeout(sizeBoard, 150));
+  window.addEventListener("orientationchange", function () { setTimeout(sizeBoard, 150); });
 
   // ---- Settings / sound ----
-  function updateSoundToggle() {
-    soundToggle.textContent = muted ? "Off" : "On";
-    soundToggle.classList.toggle("on", !muted);
-  }
-
+  function updateSoundToggle() { soundToggle.textContent = muted ? "Off" : "On"; soundToggle.classList.toggle("on", !muted); }
   async function shareGame() {
-    const text = "Trace — a calm one-line puzzle with no ads. Play it:";
-    const url = "https://pete1552.github.io/AGTest/";
-    try {
-      if (navigator.share) { await navigator.share({ title: "Trace", text, url }); return; }
-    } catch (e) { return; }
+    var text = "Trace — a calm daily one-line puzzle with no ads. Play it:";
+    var url = "https://pete1552.github.io/AGTest/";
+    try { if (navigator.share) { await navigator.share({ title: "Trace", text: text, url: url }); return; } } catch (e) { return; }
     try {
       await navigator.clipboard.writeText(text + " " + url);
-      const btn = document.getElementById("settings-share");
-      const old = btn.textContent;
-      btn.textContent = "Link copied!";
-      setTimeout(() => { btn.textContent = old; }, 1500);
+      var b = document.getElementById("settings-share"), old = b.textContent; b.textContent = "Link copied!";
+      setTimeout(function () { b.textContent = old; }, 1500);
     } catch (e) {}
   }
-
-  soundToggle.addEventListener("click", () => {
-    muted = !muted;
-    localStorage.setItem("tranquil_muted", muted ? "1" : "0");
-    updateSoundToggle();
+  soundToggle.addEventListener("click", function () {
+    muted = !muted; localStorage.setItem("tranquil_muted", muted ? "1" : "0"); updateSoundToggle();
     if (!muted) { audio(); tone(440, 0.05, "sine", 0.07); }
   });
-  document.getElementById("settings-btn").addEventListener("click", () => {
-    updateSoundToggle();
-    settingsOverlay.classList.add("show");
-  });
-  document.getElementById("settings-close").addEventListener("click", () => settingsOverlay.classList.remove("show"));
-  settingsOverlay.addEventListener("click", (e) => {
-    if (e.target === settingsOverlay) settingsOverlay.classList.remove("show");
-  });
+  document.getElementById("settings-btn").addEventListener("click", function () { updateSoundToggle(); settingsOverlay.classList.add("show"); });
+  document.getElementById("settings-close").addEventListener("click", function () { settingsOverlay.classList.remove("show"); });
+  settingsOverlay.addEventListener("click", function (e) { if (e.target === settingsOverlay) settingsOverlay.classList.remove("show"); });
   document.getElementById("settings-share").addEventListener("click", shareGame);
-  document.getElementById("restart").addEventListener("click", newGame);
-  document.getElementById("play-again").addEventListener("click", newGame);
+  document.getElementById("lb-btn").addEventListener("click", function () {
+    if (mode === "daily") LB.open("trace", todayStr(), prettyDate());
+    else LB.open("trace", todayStr(), prettyDate());
+  });
+  document.getElementById("restart").addEventListener("click", function () { newGame(); });
+  document.getElementById("play-again").addEventListener("click", function () { newGame(); });
+  document.getElementById("to-daily").addEventListener("click", function () { setMode("daily"); });
+  modeDailyBtn.addEventListener("click", function () { setMode("daily"); });
+  modePracticeBtn.addEventListener("click", function () { setMode("practice"); });
 
   // ---- Boot ----
-  buildBoard();
   updateSoundToggle();
-  newGame();
-  sizeBoard();
+  setMode("daily");
   requestAnimationFrame(sizeBoard);
   setTimeout(sizeBoard, 300);
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(sizeBoard);

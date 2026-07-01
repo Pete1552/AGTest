@@ -1,11 +1,11 @@
 /* Tranquil — shared high-score leaderboard.
-   Works on-device by default. Fill in CFG (Supabase url + anon key) to go global. */
+   Works on-device by default. Fill in CFG (Supabase url + anon key) to go global.
+   Supports an optional per-"round" scope (e.g. a daily puzzle id) so a day's
+   scores can be ranked against only that day's puzzle. */
 (function () {
   "use strict";
 
   // ==== CONFIG: set these to enable the GLOBAL leaderboard (empty = on-device) ====
-  // Supabase project URL + publishable (anon) key. The key is safe to expose:
-  // database rules only allow reading scores and inserting a valid name+score.
   var CFG = {
     url: "https://qgmfmalbcnqhyrshopgc.supabase.co",
     anonKey: "sb_publishable_jo_wttINAE90GQJVS7zovA_Yt958HKi"
@@ -28,15 +28,15 @@
   }
 
   // ---- on-device backend ----
-  function lkey(id) { return "tranquil_lb_" + id; }
-  function localTop(id) {
-    try { return sortBest(id, JSON.parse(localStorage.getItem(lkey(id)) || "[]")).slice(0, MAX); }
+  function lkey(id, round) { return "tranquil_lb_" + id + (round ? "_" + round : ""); }
+  function localTop(id, round) {
+    try { return sortBest(id, JSON.parse(localStorage.getItem(lkey(id, round)) || "[]")).slice(0, MAX); }
     catch (e) { return []; }
   }
-  function localSubmit(id, name, score) {
-    var a = localTop(id); a.push({ name: name, score: score });
+  function localSubmit(id, name, score, round) {
+    var a = localTop(id, round); a.push({ name: name, score: score });
     a = sortBest(id, a).slice(0, MAX);
-    localStorage.setItem(lkey(id), JSON.stringify(a));
+    localStorage.setItem(lkey(id, round), JSON.stringify(a));
     return Promise.resolve(a);
   }
 
@@ -44,26 +44,29 @@
   function headers() {
     return { apikey: CFG.anonKey, Authorization: "Bearer " + CFG.anonKey, "Content-Type": "application/json" };
   }
-  function sbTop(id) {
+  function sbTop(id, round) {
     var order = meta(id).dir === "asc" ? "score.asc" : "score.desc";
     var url = CFG.url + "/rest/v1/scores?game=eq." + encodeURIComponent(id) +
       "&select=name,score&order=" + order + "&limit=" + MAX;
+    if (round) url += "&round=eq." + encodeURIComponent(round);
     return fetch(url, { headers: headers() }).then(function (r) {
       if (!r.ok) throw new Error("read failed"); return r.json();
     });
   }
-  function sbSubmit(id, name, score) {
+  function sbSubmit(id, name, score, round) {
+    var row = { game: id, name: name, score: score };
+    if (round) row.round = round;
     return fetch(CFG.url + "/rest/v1/scores", {
       method: "POST",
       headers: Object.assign({ Prefer: "return=minimal" }, headers()),
-      body: JSON.stringify([{ game: id, name: name, score: score }])
+      body: JSON.stringify([row])
     }).then(function (r) { if (!r.ok) throw new Error("write failed"); });
   }
 
-  function top(id) { return isGlobal() ? sbTop(id) : Promise.resolve(localTop(id)); }
-  function submit(id, name, score) {
-    return isGlobal() ? sbSubmit(id, name, score).then(function () { return top(id); })
-                      : localSubmit(id, name, score);
+  function top(id, round) { return isGlobal() ? sbTop(id, round) : Promise.resolve(localTop(id, round)); }
+  function submit(id, name, score, round) {
+    return isGlobal() ? sbSubmit(id, name, score, round).then(function () { return top(id, round); })
+                      : localSubmit(id, name, score, round);
   }
   function qualifies(id, score, list) {
     if (list.length < MAX) return true;
@@ -93,11 +96,12 @@
     });
   }
 
-  function boardHtml(id, rows, hi, resultHtml) {
+  function boardHtml(id, rows, hi, resultHtml, roundLabel) {
     var m = meta(id), scope = isGlobal() ? "🌍 Global" : "On this device";
+    if (roundLabel) scope += " · " + roundLabel;
     var h = resultHtml || "";
     h += '<h2>' + esc(m.name) + ' · High Scores</h2>';
-    h += '<div class="lb-scope">' + scope + '</div><div class="lb-list">';
+    h += '<div class="lb-scope">' + esc(scope) + '</div><div class="lb-list">';
     if (!rows.length) h += '<div class="lb-empty">No scores yet — be the first!</div>';
     else rows.forEach(function (r, i) {
       h += '<div class="lb-row' + (i === hi ? ' me' : '') + '">' +
@@ -120,12 +124,12 @@
     document.getElementById("lb-close").onclick = hide;
   }
 
-  // Public: open the leaderboard for a game (from a 🏆 button).
-  function open(id) {
+  // Public: open the leaderboard for a game (from a 🏆 button). round/roundLabel optional.
+  function open(id, round, roundLabel) {
     show();
     box.innerHTML = '<h2>' + esc(meta(id).name) + ' · High Scores</h2><div class="lb-loading">Loading…</div>';
-    top(id).then(function (rows) {
-      box.innerHTML = boardHtml(id, rows, -1, "") + buttonsHtml(false); wire(null);
+    top(id, round).then(function (rows) {
+      box.innerHTML = boardHtml(id, rows, -1, "", roundLabel) + buttonsHtml(false); wire(null);
     }).catch(function () {
       box.innerHTML = '<h2>High Scores</h2><p>Couldn’t load the leaderboard.</p>' + buttonsHtml(false); wire(null);
     });
@@ -133,14 +137,14 @@
 
   // Public: end-of-game screen with result + name entry (if a high score) + board.
   function finish(opts) {
-    var id = opts.game, val = opts.value;
+    var id = opts.game, val = opts.value, round = opts.round, roundLabel = opts.roundLabel;
     show();
     var result = '<h2>' + esc(opts.resultTitle || "Game over") + '</h2>' +
       '<div class="final">' + esc(meta(id).fmt(val)) + '</div>' +
       (opts.subtitle ? '<div class="final-sub">' + esc(opts.subtitle) + '</div>' : '');
     box.innerHTML = result + '<div class="lb-loading">Loading…</div>';
 
-    top(id).then(function (rows) {
+    top(id, round).then(function (rows) {
       if (qualifies(id, val, rows)) {
         var last = localStorage.getItem("tranquil_name") || "";
         box.innerHTML = result +
@@ -154,8 +158,8 @@
           var name = ((inp.value || "").trim().slice(0, 12)) || "Anon";
           localStorage.setItem("tranquil_name", name);
           box.innerHTML = result + '<div class="lb-loading">Saving…</div>';
-          submit(id, name, val).then(function (rows2) {
-            box.innerHTML = boardHtml(id, rows2, indexOf(rows2, name, val), result) + buttonsHtml(!!opts.onPlayAgain);
+          submit(id, name, val, round).then(function (rows2) {
+            box.innerHTML = boardHtml(id, rows2, indexOf(rows2, name, val), result, roundLabel) + buttonsHtml(!!opts.onPlayAgain);
             wire(opts.onPlayAgain);
           }).catch(function () {
             box.innerHTML = result + '<p>Couldn’t reach the global board.</p>' + buttonsHtml(!!opts.onPlayAgain);
@@ -165,11 +169,11 @@
         document.getElementById("lb-save").onclick = save;
         inp.addEventListener("keydown", function (e) { if (e.key === "Enter") save(); });
         document.getElementById("lb-skip").onclick = function () {
-          box.innerHTML = boardHtml(id, rows, -1, result) + buttonsHtml(!!opts.onPlayAgain);
+          box.innerHTML = boardHtml(id, rows, -1, result, roundLabel) + buttonsHtml(!!opts.onPlayAgain);
           wire(opts.onPlayAgain);
         };
       } else {
-        box.innerHTML = boardHtml(id, rows, -1, result) + buttonsHtml(!!opts.onPlayAgain);
+        box.innerHTML = boardHtml(id, rows, -1, result, roundLabel) + buttonsHtml(!!opts.onPlayAgain);
         wire(opts.onPlayAgain);
       }
     }).catch(function () {
