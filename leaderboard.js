@@ -4,7 +4,12 @@
   "use strict";
 
   // ==== CONFIG: set these to enable the GLOBAL leaderboard (empty = on-device) ====
-  var CFG = { url: "", anonKey: "" };
+  // Supabase project URL + publishable (anon) key. The key is safe to expose:
+  // database rules only allow reading scores and inserting a valid name+score.
+  var CFG = {
+    url: "https://qgmfmalbcnqhyrshopgc.supabase.co",
+    anonKey: "sb_publishable_jo_wttINAE90GQJVS7zovA_Yt958HKi"
+  };
   function isGlobal() { return !!(CFG.url && CFG.anonKey); }
 
   // Per-game rules: dir 'desc' = higher is better, 'asc' = lower is better.
