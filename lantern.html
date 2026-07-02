@@ -138,14 +138,66 @@
   function sfxDeny() { tone(200, 0.08, "sine", 0.05); }
   function sfxWin() { [523.25, 659.25, 783.99, 1046.5].forEach(function (f, i) { setTimeout(function () { tone(f, 0.35, "sine", 0.12); }, i * 100); }); }
 
-  // ---- Deal ----
-  function shuffleArr(a) { for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
+  // ---- Deal: build backwards from an empty board so a clearing path always
+  // exists, instead of assigning symbols to positions purely at random
+  // (which can easily -- and often does -- produce a deal with zero valid
+  // solutions). We repeatedly pick TWO structurally-free positions at once
+  // (both free of each other simultaneously, exactly matching how a real
+  // match removes two tiles together) and give them the same symbol, until
+  // all 32 are paired up -- so playing that exact pairing back is always a
+  // win. (Pairing up a single sequential one-at-a-time removal order does
+  // NOT work: removing position A can be what frees position B, so B isn't
+  // necessarily free while A is still on the board -- which is what a real
+  // match requires.) ----
+  function structFree(remaining, pos) {
+    if (pos.gone) return false;
+    for (var i = 0; i < remaining.length; i++) {
+      var o = remaining[i];
+      if (!o.gone && o.col === pos.col && o.row === pos.row && o.layer > pos.layer) return false;
+    }
+    var leftBlocked = false, rightBlocked = false;
+    for (var j = 0; j < remaining.length; j++) {
+      var b = remaining[j];
+      if (b.gone || b.layer !== pos.layer || b.row !== pos.row) continue;
+      if (b.col === pos.col - 1) leftBlocked = true;
+      if (b.col === pos.col + 1) rightBlocked = true;
+    }
+    return !(leftBlocked && rightBlocked);
+  }
+  function tryComputeRemovalPairs() {
+    var remaining = LAYOUT.map(function (p, i) { return { col: p.col, row: p.row, layer: p.layer, idx: i, gone: false }; });
+    var pairs = [], totalPairs = LAYOUT.length / 2;
+    for (var step = 0; step < totalPairs; step++) {
+      var free = remaining.filter(function (p) { return structFree(remaining, p); });
+      if (free.length < 2) return null; // painted into a corner -- caller retries fresh
+      var p1 = free[Math.floor(Math.random() * free.length)];
+      var rest = free.filter(function (p) { return p !== p1; });
+      var p2 = rest[Math.floor(Math.random() * rest.length)];
+      p1.gone = true; p2.gone = true;
+      pairs.push([p1.idx, p2.idx]);
+    }
+    return pairs;
+  }
+  function computeRemovalPairs() {
+    for (var attempt = 0; attempt < 60; attempt++) {
+      var pairs = tryComputeRemovalPairs();
+      if (pairs) return pairs;
+    }
+    // Practically unreachable given this layout, but never leave the game
+    // without a deal: fall back to a plain shuffled assignment.
+    var order = [];
+    for (var i = 0; i < LAYOUT.length; i++) order.push(i);
+    for (var j = order.length - 1; j > 0; j--) { var k = Math.floor(Math.random() * (j + 1)); var t = order[j]; order[j] = order[k]; order[k] = t; }
+    var fallback = [];
+    for (var m = 0; m < order.length; m += 2) fallback.push([order[m], order[m + 1]]);
+    return fallback;
+  }
   function dealTiles() {
-    var pool = [];
-    for (var i = 0; i < SYM_COUNT; i++) for (var k = 0; k < 4; k++) pool.push(i);
-    shuffleArr(pool);
+    var pairs = computeRemovalPairs();
+    var symOf = new Array(LAYOUT.length);
+    pairs.forEach(function (pr, i) { var s = i % SYM_COUNT; symOf[pr[0]] = s; symOf[pr[1]] = s; });
     tiles = LAYOUT.map(function (pos, i) {
-      return { col: pos.col, row: pos.row, layer: pos.layer, sym: pool[i], removed: false, id: i };
+      return { col: pos.col, row: pos.row, layer: pos.layer, sym: symOf[i], removed: false, id: i };
     });
   }
 
