@@ -23,6 +23,19 @@
     -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
   }
   .tap-hint { text-align: center; color: var(--muted); font-size: 12px; min-height: 16px; margin-top: 6px; }
+  .build-row {
+    display: flex; gap: 8px; width: 100%; max-width: 360px; margin: 8px auto 0;
+  }
+  .build-btn {
+    flex: 1; padding: 10px 6px; border-radius: 14px; border: none; cursor: pointer;
+    font-family: var(--font-text); font-size: 13px; font-weight: 700;
+    background: var(--panel); color: var(--muted);
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+  }
+  .build-btn .dot { width: 14px; height: 14px; border-radius: 50%; }
+  .build-btn.flak .dot { border-radius: 3px; transform: rotate(45deg); }
+  .build-btn.active { background: var(--grid); color: var(--ink); box-shadow: inset 0 0 0 2px var(--accent); }
+  .build-btn:active { transform: translateY(1px); }
 </style>
 </head>
 <body>
@@ -45,7 +58,11 @@
   </div>
 
   <div class="play-area"><canvas id="stage"></canvas></div>
-  <div class="tap-hint" id="hint">Tap a tile to build a tower (65🪙) · tap a tower to upgrade</div>
+  <div class="build-row">
+    <button id="type-cannon" class="build-btn cannon active"><span class="dot" style="background:#8fb4f0"></span>Cannon 65🪙</button>
+    <button id="type-flak" class="build-btn flak"><span class="dot" style="background:#f2b35e"></span>Flak 85🪙</button>
+  </div>
+  <div class="tap-hint" id="hint">Tap a tile to build the selected tower · tap a tower to upgrade</div>
 </div>
 
 <div id="settings-overlay" class="modal-overlay">
@@ -57,7 +74,7 @@
     </div>
     <div class="how">
       <p class="how-title">How to play</p>
-      <p class="body">Enemies march along the path toward your base. Tap an empty tile to build a tower (they auto-fire at enemies in range). Tap a tower to upgrade its range and damage. Kills earn coins. Each enemy that reaches the base costs a life — lose all your lives and it's over. Survive as many waves as you can.</p>
+      <p class="body">Walkers march along the path; flyers cut straight over the board ignoring it. Pick a tower below, then tap an empty tile to build (they auto-fire at enemies in range) — tap a tower to upgrade it. Cannons hit walkers hard but flyers softly; Flak towers do the opposite. Kills earn coins. Each enemy that reaches the base costs a life — lose them all and it's over. Survive as many waves as you can.</p>
     </div>
     <p class="promise">No ads. No pop-ups. No nags — ever.</p>
     <button id="settings-share" class="share">Share the game</button>
@@ -72,8 +89,19 @@
 
   var COLS = 7, ROWS = 11;
   var TURNS = [[1,0],[1,2],[5,2],[5,4],[1,4],[1,6],[5,6],[5,8],[1,8],[1,10]];
-  var TOWER_COST = 65;
   var muted = localStorage.getItem("tranquil_muted") === "1";
+
+  // Two tower types: Cannon (strong vs walkers, weak vs flyers) and
+  // Flak (strong vs flyers, weak vs walkers).
+  var TOWER_TYPES = {
+    cannon: { cost: 65, upgradeBase: 45, color1: "#8fb4f0", color2: "#5dd6c0",
+      mulWalker: 1.0, mulFlyer: 0.35, rangeBase: 2.2, rangeStep: 0.4,
+      dmgBase: 5, dmgStep: 4, rateBase: 460, rateStep: 45, rateMin: 180 },
+    flak: { cost: 85, upgradeBase: 55, color1: "#f2b35e", color2: "#e0866a",
+      mulWalker: 0.45, mulFlyer: 1.7, rangeBase: 2.0, rangeStep: 0.35,
+      dmgBase: 5, dmgStep: 3, rateBase: 560, rateStep: 40, rateMin: 220 }
+  };
+  var selectedType = "cannon";
 
   // path cells (for blocking building)
   var pathSet = {};
@@ -127,32 +155,55 @@
   // ---- Grid <-> pixels ----
   function ccx(col) { return ox + (col + 0.5) * cell; }
   function ccy(row) { return oy + (row + 0.5) * cell; }
-  function enemyPos(e) {
-    var a = TURNS[e.seg], b = TURNS[e.seg + 1];
-    var gc = a[0] + (b[0] - a[0]) * e.t, gr = a[1] + (b[1] - a[1]) * e.t;
-    return { x: ccx(gc), y: ccy(gr) };
-  }
+  // Continuous {c,r} grid position for either a path-following walker or a
+  // flyer cutting a straight line from its spawn point to the base.
   function enemyCell(e) {
+    if (e.type === "flyer") return { c: e.sc + (e.ec - e.sc) * e.t, r: e.sr + (e.er - e.sr) * e.t };
     var a = TURNS[e.seg], b = TURNS[e.seg + 1];
     return { c: a[0] + (b[0] - a[0]) * e.t, r: a[1] + (b[1] - a[1]) * e.t };
   }
+  function enemyPos(e) { var g = enemyCell(e); return { x: ccx(g.c), y: ccy(g.r) }; }
 
   // ---- Waves ----
+  var spawnQueue = [];
   function startWave() {
-    toSpawn = 5 + wave * 2;
+    var count = 5 + wave * 2;
+    var flyerChance = wave >= 3 ? Math.min(0.4, (wave - 2) * 0.06) : 0;
+    spawnQueue = [];
+    for (var i = 0; i < count; i++) spawnQueue.push(Math.random() < flyerChance ? "flyer" : "walker");
+    toSpawn = spawnQueue.length;
     spawnInterval = Math.max(280, 760 - wave * 24);
     spawnTimer = 0;
     waveEl.textContent = String(wave);
   }
   function spawnEnemy() {
-    var hp = Math.round(12 * Math.pow(1.24, wave - 1));
-    enemies.push({ seg: 0, t: 0, hp: hp, maxhp: hp, speed: Math.min(2.5, 1.1 + wave * 0.035), reward: 5 + Math.floor(wave * 0.9) });
+    var type = spawnQueue.shift() || "walker";
+    if (type === "flyer") {
+      var base = TURNS[TURNS.length - 1];
+      var sc = 1 + Math.floor(Math.random() * (COLS - 2));
+      var sr = -1;
+      var hp = Math.round(8 * Math.pow(1.22, wave - 1));
+      var dist = Math.max(0.5, Math.hypot(base[0] - sc, base[1] - sr));
+      enemies.push({ type: "flyer", t: 0, sc: sc, sr: sr, ec: base[0], er: base[1], dist: dist,
+        hp: hp, maxhp: hp, speed: Math.min(2.9, 1.5 + wave * 0.03), reward: 6 + Math.floor(wave * 1.0) });
+    } else {
+      var hp2 = Math.round(12 * Math.pow(1.24, wave - 1));
+      enemies.push({ type: "walker", seg: 0, t: 0, hp: hp2, maxhp: hp2, speed: Math.min(2.5, 1.1 + wave * 0.035), reward: 5 + Math.floor(wave * 0.9) });
+    }
   }
 
   // ---- Towers ----
   function towerAt(col, row) { for (var i = 0; i < towers.length; i++) if (towers[i].col === col && towers[i].row === row) return towers[i]; return null; }
-  function towerStats(level) { return { range: 2.2 + level * 0.4, dmg: 5 + level * 4, rate: Math.max(180, 460 - level * 45) }; }
-  function upgradeCost(level) { return 45 * level; }
+  function towerStats(type, level) {
+    var tt = TOWER_TYPES[type];
+    return {
+      range: tt.rangeBase + level * tt.rangeStep,
+      dmgWalker: (tt.dmgBase + level * tt.dmgStep) * tt.mulWalker,
+      dmgFlyer: (tt.dmgBase + level * tt.dmgStep) * tt.mulFlyer,
+      rate: Math.max(tt.rateMin, tt.rateBase - level * tt.rateStep)
+    };
+  }
+  function upgradeCost(type, level) { return TOWER_TYPES[type].upgradeBase * level; }
 
   // ---- Update ----
   var lastT = 0, rafId = 0;
@@ -176,6 +227,11 @@
     // move enemies
     for (var i = enemies.length - 1; i >= 0; i--) {
       var e = enemies[i];
+      if (e.type === "flyer") {
+        e.t += (e.speed * dt) / e.dist;
+        if (e.t >= 1) { enemies.splice(i, 1); leak(); }
+        continue;
+      }
       var a = TURNS[e.seg], b = TURNS[e.seg + 1];
       var segLen = Math.abs(b[0] - a[0]) + Math.abs(b[1] - a[1]);
       e.t += (e.speed * dt) / segLen;
@@ -191,21 +247,22 @@
     for (var ti = 0; ti < towers.length; ti++) {
       var tw = towers[ti]; tw.cd -= dt * 1000;
       if (tw.cd > 0) continue;
-      var st = towerStats(tw.level);
+      var st = towerStats(tw.type, tw.level);
       var tx = tw.col + 0.5, ty = tw.row + 0.5;
       var target = null, bestProg = -1;
       for (var ei = 0; ei < enemies.length; ei++) {
         var en = enemies[ei], ec = enemyCell(en);
         var d = Math.hypot((ec.c + 0.5) - tx, (ec.r + 0.5) - ty);
         if (d <= st.range) {
-          var prog = en.seg + en.t;
+          var prog = en.type === "flyer" ? en.t : (en.seg + en.t) / (TURNS.length - 1);
           if (prog > bestProg) { bestProg = prog; target = en; }
         }
       }
       if (target) {
-        target.hp -= st.dmg; tw.cd = st.rate;
+        target.hp -= (target.type === "flyer" ? st.dmgFlyer : st.dmgWalker);
+        tw.cd = st.rate;
         var tp = enemyPos(target);
-        beams.push({ x1: ccx(tw.col), y1: ccy(tw.row), x2: tp.x, y2: tp.y, life: 6 });
+        beams.push({ x1: ccx(tw.col), y1: ccy(tw.row), x2: tp.x, y2: tp.y, life: 6, flak: tw.type === "flak" });
         sfxShoot();
         if (target.hp <= 0) {
           var idx = enemies.indexOf(target);
@@ -245,29 +302,39 @@
     roundRect(ox + base[0] * cell + 4, oy + base[1] * cell + 4, cell - 8, cell - 8, 5); ctx.fill();
     // range ring fx
     if (ringFx) {
-      var st = towerStats(ringFx.level);
-      ctx.globalAlpha = ringFx.life / 30; ctx.strokeStyle = "#5dd6c0"; ctx.lineWidth = 2;
+      var st = towerStats(ringFx.type, ringFx.level);
+      ctx.globalAlpha = ringFx.life / 30; ctx.strokeStyle = TOWER_TYPES[ringFx.type].color1; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.arc(ccx(ringFx.col), ccy(ringFx.row), st.range * cell, 0, Math.PI * 2); ctx.stroke();
       ctx.globalAlpha = 1;
     }
     // towers
     for (var i = 0; i < towers.length; i++) {
-      var tw = towers[i], x = ox + tw.col * cell, y = oy + tw.row * cell;
-      ctx.fillStyle = tw.level > 1 ? "#7fbf9a" : "#8fb4f0";
+      var tw = towers[i], x = ox + tw.col * cell, y = oy + tw.row * cell, tt = TOWER_TYPES[tw.type];
+      ctx.fillStyle = tw.level > 1 ? tt.color2 : tt.color1;
       roundRect(x + 3, y + 3, cell - 6, cell - 6, 5); ctx.fill();
-      ctx.fillStyle = "#0d1016"; ctx.beginPath(); ctx.arc(ccx(tw.col), ccy(tw.row), cell * 0.14, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#0d1016";
+      if (tw.type === "flak") { ctx.save(); ctx.translate(ccx(tw.col), ccy(tw.row)); ctx.rotate(Math.PI / 4); ctx.fillRect(-cell * 0.1, -cell * 0.1, cell * 0.2, cell * 0.2); ctx.restore(); }
+      else { ctx.beginPath(); ctx.arc(ccx(tw.col), ccy(tw.row), cell * 0.14, 0, Math.PI * 2); ctx.fill(); }
       if (tw.level > 1) { ctx.fillStyle = "#eafff9"; ctx.font = "700 " + Math.round(cell * 0.28) + "px Nunito, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(tw.level, ccx(tw.col), ccy(tw.row) + cell * 0.02); }
     }
     // beams
     for (var b = 0; b < beams.length; b++) {
-      var bm = beams[b]; ctx.globalAlpha = bm.life / 6; ctx.strokeStyle = "#ffe89a"; ctx.lineWidth = 2;
+      var bm = beams[b]; ctx.globalAlpha = bm.life / 6; ctx.strokeStyle = bm.flak ? "#f2b35e" : "#ffe89a"; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.moveTo(bm.x1, bm.y1); ctx.lineTo(bm.x2, bm.y2); ctx.stroke(); ctx.globalAlpha = 1;
     }
     // enemies
     for (var e = 0; e < enemies.length; e++) {
       var en = enemies[e], p = enemyPos(en), sz = cell * 0.5;
-      ctx.fillStyle = "#e06c9f";
-      roundRect(p.x - sz / 2, p.y - sz / 2, sz, sz, 4); ctx.fill();
+      if (en.type === "flyer") {
+        ctx.globalAlpha = 0.28; ctx.fillStyle = "#000";
+        ctx.beginPath(); ctx.ellipse(p.x, p.y + sz * 0.32, sz * 0.42, sz * 0.16, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(Math.PI / 4);
+        ctx.fillStyle = "#bb9af7"; ctx.fillRect(-sz / 2, -sz / 2, sz, sz); ctx.restore();
+      } else {
+        ctx.fillStyle = "#e06c9f";
+        roundRect(p.x - sz / 2, p.y - sz / 2, sz, sz, 4); ctx.fill();
+      }
       var hpw = sz, frac = Math.max(0, en.hp / en.maxhp);
       ctx.fillStyle = "rgba(0,0,0,0.5)"; ctx.fillRect(p.x - hpw / 2, p.y - sz / 2 - 6, hpw, 3);
       ctx.fillStyle = "#9ece6a"; ctx.fillRect(p.x - hpw / 2, p.y - sz / 2 - 6, hpw * frac, 3);
@@ -297,13 +364,25 @@
     if (pathSet[col + "," + row]) return;
     var t = towerAt(col, row);
     if (t) {
-      var uc = upgradeCost(t.level);
-      if (coins >= uc) { coins -= uc; t.level++; sfxBuild(); ringFx = { col: col, row: row, level: t.level, life: 30 }; }
+      var uc = upgradeCost(t.type, t.level);
+      if (coins >= uc) { coins -= uc; t.level++; sfxBuild(); ringFx = { col: col, row: row, type: t.type, level: t.level, life: 30 }; }
       else { tone(160, 0.12, "sine", 0.05); }
     } else {
-      if (coins >= TOWER_COST) { coins -= TOWER_COST; towers.push({ col: col, row: row, level: 1, cd: 0 }); sfxBuild(); ringFx = { col: col, row: row, level: 1, life: 30 }; }
+      var cost = TOWER_TYPES[selectedType].cost;
+      if (coins >= cost) { coins -= cost; towers.push({ col: col, row: row, level: 1, cd: 0, type: selectedType }); sfxBuild(); ringFx = { col: col, row: row, type: selectedType, level: 1, life: 30 }; }
       else { tone(160, 0.12, "sine", 0.05); }
     }
+  });
+
+  document.getElementById("type-cannon").addEventListener("click", function () {
+    selectedType = "cannon";
+    document.getElementById("type-cannon").classList.add("active");
+    document.getElementById("type-flak").classList.remove("active");
+  });
+  document.getElementById("type-flak").addEventListener("click", function () {
+    selectedType = "flak";
+    document.getElementById("type-flak").classList.add("active");
+    document.getElementById("type-cannon").classList.remove("active");
   });
   canvas.addEventListener("touchstart", function (e) { e.preventDefault(); }, { passive: false });
   canvas.addEventListener("touchmove", function (e) { e.preventDefault(); }, { passive: false });
@@ -348,8 +427,11 @@
 
   // ---- Lifecycle ----
   function newGame() {
-    enemies = []; towers = []; beams = [];
-    coins = 220; lives = 20; wave = 1; kills = 0; over = false; running = true; breakTimer = 0; ringFx = null;
+    enemies = []; towers = []; beams = []; spawnQueue = [];
+    coins = 160; lives = 12; wave = 1; kills = 0; over = false; running = true; breakTimer = 0; ringFx = null;
+    selectedType = "cannon";
+    document.getElementById("type-cannon").classList.add("active");
+    document.getElementById("type-flak").classList.remove("active");
     bestEl.textContent = String(best);
     startWave();
   }
