@@ -34,6 +34,7 @@
   }
   .build-btn .dot { width: 14px; height: 14px; border-radius: 50%; }
   .build-btn.flak .dot { border-radius: 3px; transform: rotate(45deg); }
+  .build-btn.block .dot { border-radius: 3px; }
   .build-btn.active { background: var(--grid); color: var(--ink); box-shadow: inset 0 0 0 2px var(--accent); }
   .build-btn:active { transform: translateY(1px); }
 </style>
@@ -61,8 +62,9 @@
   <div class="build-row">
     <button id="type-cannon" class="build-btn cannon active"><span class="dot" style="background:#8fb4f0"></span>Cannon 65🪙</button>
     <button id="type-flak" class="build-btn flak"><span class="dot" style="background:#f2b35e"></span>Flak 195🪙</button>
+    <button id="type-block" class="build-btn block"><span class="dot" style="background:#f2994a"></span>Block 40🪙</button>
   </div>
-  <div class="tap-hint" id="hint">Tap a tile to build the selected tower · tap a tower to upgrade</div>
+  <div class="tap-hint" id="hint">Towers build on open tiles · Roadblock drops on the path · tap a tower to upgrade</div>
 </div>
 
 <div id="settings-overlay" class="modal-overlay">
@@ -74,7 +76,7 @@
     </div>
     <div class="how">
       <p class="how-title">How to play</p>
-      <p class="body">Walkers march along the path; flyers cut straight over the board ignoring it. Pick a tower below, then tap an empty tile to build (they auto-fire at enemies in range) — tap a tower to upgrade it. Cannons hit walkers hard but flyers softly; Flak towers do the opposite. Kills earn coins. Each enemy that reaches the base costs a life — lose them all and it's over. Survive as many waves as you can.</p>
+      <p class="body">Walkers march along the path; flyers cut straight over the board ignoring it. Pick a tower below, then tap an empty tile to build (they auto-fire at enemies in range) — tap a tower to upgrade it. Cannons hit walkers hard but flyers softly; Flak towers do the opposite. Roadblocks drop directly on the path and slow any walker passing through for a few seconds before crumbling — great for holding enemies in a tower's range — but flyers ignore the path entirely, so roadblocks can't touch them. Kills earn coins. Each enemy that reaches the base costs a life — lose them all and it's over. Survive as many waves as you can.</p>
     </div>
     <p class="promise">No ads. No pop-ups. No nags — ever.</p>
     <button id="settings-share" class="share">Share the game</button>
@@ -102,6 +104,12 @@
       dmgBase: 5, dmgStep: 3, rateBase: 560, rateStep: 40, rateMin: 220 }
   };
   var selectedType = "cannon";
+
+  // Roadblock: a temporary obstacle placed directly ON the path. Slows any
+  // walker passing through it, then crumbles after its duration. Flyers skip
+  // the path entirely, so roadblocks have no effect on them.
+  var ROADBLOCK_COST = 40, ROADBLOCK_DURATION = 10, ROADBLOCK_SLOW = 0.4;
+  var roadblocks = []; // {col,row,life}
 
   // path cells (for blocking building)
   var pathSet = {};
@@ -194,6 +202,7 @@
 
   // ---- Towers ----
   function towerAt(col, row) { for (var i = 0; i < towers.length; i++) if (towers[i].col === col && towers[i].row === row) return towers[i]; return null; }
+  function roadblockAt(col, row) { for (var i = 0; i < roadblocks.length; i++) if (roadblocks[i].col === col && roadblocks[i].row === row) return roadblocks[i]; return null; }
   function towerStats(type, level) {
     var tt = TOWER_TYPES[type];
     return {
@@ -234,7 +243,15 @@
       }
       var a = TURNS[e.seg], b = TURNS[e.seg + 1];
       var segLen = Math.abs(b[0] - a[0]) + Math.abs(b[1] - a[1]);
-      e.t += (e.speed * dt) / segLen;
+      var slowMul = 1;
+      if (roadblocks.length) {
+        var ec0 = enemyCell(e);
+        for (var rbi = 0; rbi < roadblocks.length; rbi++) {
+          var rb = roadblocks[rbi];
+          if (Math.hypot(ec0.c - (rb.col + 0.5), ec0.r - (rb.row + 0.5)) < 0.5) slowMul = Math.min(slowMul, ROADBLOCK_SLOW);
+        }
+      }
+      e.t += (e.speed * slowMul * dt) / segLen;
       while (e.t >= 1) {
         e.t -= 1; e.seg++;
         if (e.seg >= TURNS.length - 1) { enemies.splice(i, 1); leak(); e = null; break; }
@@ -273,6 +290,7 @@
     }
     for (var bi = beams.length - 1; bi >= 0; bi--) { if (--beams[bi].life <= 0) beams.splice(bi, 1); }
     if (ringFx) { if (--ringFx.life <= 0) ringFx = null; }
+    for (var rbj = roadblocks.length - 1; rbj >= 0; rbj--) { roadblocks[rbj].life -= dt; if (roadblocks[rbj].life <= 0) roadblocks.splice(rbj, 1); }
   }
   function leak() {
     lives--; sfxLeak();
@@ -295,6 +313,21 @@
       var x = ox + c * cell, y = oy + r * cell;
       if (pathSet[c + "," + r]) { ctx.fillStyle = "#2a3444"; ctx.fillRect(x + 1, y + 1, cell - 2, cell - 2); }
       else { ctx.fillStyle = "#161d28"; ctx.fillRect(x + 1.5, y + 1.5, cell - 3, cell - 3); }
+    }
+    // roadblocks (hazard stripes on the path, with a countdown bar)
+    for (var rb2 = 0; rb2 < roadblocks.length; rb2++) {
+      var rbk = roadblocks[rb2], rx = ox + rbk.col * cell, ry = oy + rbk.row * cell;
+      ctx.save();
+      ctx.beginPath(); ctx.rect(rx + 1, ry + 1, cell - 2, cell - 2); ctx.clip();
+      ctx.fillStyle = "rgba(20,14,6,0.55)"; ctx.fillRect(rx, ry, cell, cell);
+      ctx.strokeStyle = "#f2994a"; ctx.lineWidth = Math.max(2, cell * 0.09);
+      for (var sx = -cell; sx < cell * 2; sx += cell * 0.35) {
+        ctx.beginPath(); ctx.moveTo(rx + sx, ry + cell); ctx.lineTo(rx + sx + cell, ry); ctx.stroke();
+      }
+      ctx.restore();
+      var frac = Math.max(0, rbk.life / ROADBLOCK_DURATION);
+      ctx.fillStyle = "rgba(0,0,0,0.5)"; ctx.fillRect(rx + 3, ry + cell - 6, cell - 6, 3);
+      ctx.fillStyle = "#f2994a"; ctx.fillRect(rx + 3, ry + cell - 6, (cell - 6) * frac, 3);
     }
     // base
     var base = TURNS[TURNS.length - 1];
@@ -361,7 +394,16 @@
     var px = (e.clientX - r.left) * (W / r.width), py = (e.clientY - r.top) * (H / r.height);
     var col = Math.floor((px - ox) / cell), row = Math.floor((py - oy) / cell);
     if (col < 0 || col >= COLS || row < 0 || row >= ROWS) return;
-    if (pathSet[col + "," + row]) return;
+    var onPath = !!pathSet[col + "," + row];
+
+    if (selectedType === "block") {
+      if (!onPath || roadblockAt(col, row)) { tone(160, 0.12, "sine", 0.05); return; }
+      if (coins >= ROADBLOCK_COST) { coins -= ROADBLOCK_COST; roadblocks.push({ col: col, row: row, life: ROADBLOCK_DURATION }); sfxBuild(); }
+      else { tone(160, 0.12, "sine", 0.05); }
+      return;
+    }
+
+    if (onPath) return;
     var t = towerAt(col, row);
     if (t) {
       var uc = upgradeCost(t.type, t.level);
@@ -374,15 +416,12 @@
     }
   });
 
-  document.getElementById("type-cannon").addEventListener("click", function () {
-    selectedType = "cannon";
-    document.getElementById("type-cannon").classList.add("active");
-    document.getElementById("type-flak").classList.remove("active");
-  });
-  document.getElementById("type-flak").addEventListener("click", function () {
-    selectedType = "flak";
-    document.getElementById("type-flak").classList.add("active");
-    document.getElementById("type-cannon").classList.remove("active");
+  var buildBtns = { cannon: document.getElementById("type-cannon"), flak: document.getElementById("type-flak"), block: document.getElementById("type-block") };
+  Object.keys(buildBtns).forEach(function (key) {
+    buildBtns[key].addEventListener("click", function () {
+      selectedType = key;
+      Object.keys(buildBtns).forEach(function (k) { buildBtns[k].classList.toggle("active", k === key); });
+    });
   });
   canvas.addEventListener("touchstart", function (e) { e.preventDefault(); }, { passive: false });
   canvas.addEventListener("touchmove", function (e) { e.preventDefault(); }, { passive: false });
@@ -427,11 +466,10 @@
 
   // ---- Lifecycle ----
   function newGame() {
-    enemies = []; towers = []; beams = []; spawnQueue = [];
+    enemies = []; towers = []; beams = []; spawnQueue = []; roadblocks = [];
     coins = 160; lives = 12; wave = 1; kills = 0; over = false; running = true; breakTimer = 0; ringFx = null;
     selectedType = "cannon";
-    document.getElementById("type-cannon").classList.add("active");
-    document.getElementById("type-flak").classList.remove("active");
+    Object.keys(buildBtns).forEach(function (k) { buildBtns[k].classList.toggle("active", k === "cannon"); });
     bestEl.textContent = String(best);
     startWave();
   }
