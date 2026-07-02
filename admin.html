@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="theme-color" content="#11151c" />
+<meta name="robots" content="noindex, nofollow" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="shared.css" />
+<title>Admin — Tranquil</title>
+<style>
+  html, body { overflow-y: auto; }
+  body { position: static; height: auto; min-height: 100%; }
+  .wrap { height: auto; min-height: 100%; overflow: visible; max-width: 640px; padding-bottom: 40px; }
+
+  /* Login */
+  #login-view { display: flex; align-items: center; justify-content: center; min-height: 80vh; }
+  .login-card {
+    background: var(--panel); border-radius: 20px; padding: 28px 24px; width: 100%; max-width: 320px;
+    border: 1px solid rgba(255,255,255,0.07);
+  }
+  .login-card h2 { font-family: var(--font-display); margin: 0 0 4px; text-align: center; }
+  .login-card p.sub { color: var(--muted); font-size: 13px; text-align: center; margin: 0 0 18px; }
+  .field { margin-bottom: 12px; }
+  .field label { display: block; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; font-weight: 700; margin-bottom: 5px; }
+  .field input {
+    width: 100%; box-sizing: border-box; background: var(--grid); color: var(--ink);
+    border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 11px 12px;
+    font-family: var(--font-text); font-size: 15px;
+  }
+  .field input:focus { outline: none; border-color: var(--accent); }
+  #login-btn {
+    width: 100%; background: var(--accent); color: #06231e; border: none; padding: 12px;
+    border-radius: 12px; font-size: 15px; font-weight: 700; cursor: pointer; margin-top: 4px;
+  }
+  #login-btn:active { transform: translateY(1px); }
+  #login-err { color: #f28a5e; font-size: 13px; text-align: center; min-height: 18px; margin-top: 10px; }
+
+  /* Dashboard */
+  #dash-view { display: none; }
+  .overview {
+    background: var(--panel); border-radius: 16px; padding: 16px; margin-bottom: 14px;
+  }
+  .overview h3 { margin: 0 0 12px; font-family: var(--font-display); font-size: 15px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; }
+  .ov-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .ov-name { width: 68px; flex-shrink: 0; font-size: 13px; font-weight: 700; }
+  .ov-bar-track { flex: 1; background: var(--grid); border-radius: 4px; height: 16px; overflow: hidden; }
+  .ov-bar-fill { background: var(--accent); height: 100%; border-radius: 0 4px 4px 0; min-width: 2px; }
+  .ov-count { width: 40px; text-align: right; flex-shrink: 0; font-family: var(--font-display); font-size: 13px; font-weight: 700; }
+
+  .game-card { background: var(--panel); border-radius: 16px; padding: 16px; margin-bottom: 14px; }
+  .game-card h3 { margin: 0 0 12px; font-family: var(--font-display); font-size: 18px; }
+  .stat-row { display: flex; gap: 8px; margin-bottom: 16px; }
+  .stat-tile { flex: 1; background: var(--grid); border-radius: 12px; padding: 8px 6px; text-align: center; }
+  .stat-tile .lbl { color: var(--muted); font-size: 9px; text-transform: uppercase; letter-spacing: 0.8px; font-weight: 700; }
+  .stat-tile .val { font-family: var(--font-display); font-size: 17px; font-weight: 700; margin-top: 2px; }
+
+  .hist { display: flex; align-items: flex-end; gap: 2px; height: 90px; }
+  .hist-col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; min-width: 0; }
+  .hist-n { font-size: 9px; color: var(--muted); margin-bottom: 2px; line-height: 1; }
+  .hist-n.peak { color: var(--accent); font-weight: 800; }
+  .hist-bar { width: 100%; background: var(--accent); border-radius: 4px 4px 0 0; opacity: 0.55; }
+  .hist-bar.peak { opacity: 1; }
+  .hist-axis { display: flex; justify-content: space-between; margin-top: 4px; color: var(--muted); font-size: 10px; }
+  .no-data { color: var(--muted); font-size: 13px; padding: 6px 0; }
+  .empty-state { text-align: center; color: var(--muted); padding: 40px 20px; font-size: 14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="topbar">
+    <div class="brand">
+      <a href="index.html" class="icon-btn" aria-label="Back to games">‹</a>
+      <span class="title">Admin</span>
+    </div>
+    <div class="bar-actions">
+      <button id="refresh-btn" class="icon-btn" aria-label="Refresh" style="display:none">↻</button>
+      <button id="signout-btn" class="icon-btn" aria-label="Sign out" style="display:none">⏻</button>
+    </div>
+  </header>
+
+  <div id="login-view">
+    <div class="login-card">
+      <h2>Tranquil Admin</h2>
+      <p class="sub">Sign in to view play statistics</p>
+      <div class="field"><label>Email</label><input id="login-email" type="email" autocomplete="username" /></div>
+      <div class="field"><label>Password</label><input id="login-pass" type="password" autocomplete="current-password" /></div>
+      <button id="login-btn">Sign in</button>
+      <div id="login-err"></div>
+    </div>
+  </div>
+
+  <div id="dash-view">
+    <div id="dash-body"><div class="empty-state">Loading…</div></div>
+  </div>
+</div>
+
+<script src="leaderboard.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  var CFG = LB.getConfig();
+  var TOKEN_KEY = "tranquil_admin_token";
+  var token = sessionStorage.getItem(TOKEN_KEY) || null;
+
+  var loginView = document.getElementById("login-view");
+  var dashView = document.getElementById("dash-view");
+  var dashBody = document.getElementById("dash-body");
+  var loginBtn = document.getElementById("login-btn");
+  var loginErr = document.getElementById("login-err");
+  var signoutBtn = document.getElementById("signout-btn");
+  var refreshBtn = document.getElementById("refresh-btn");
+
+  function esc(s) {
+    return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; });
+  }
+
+  // ---- Auth ----
+  function signIn(email, password) {
+    return fetch(CFG.url + "/auth/v1/token?grant_type=password", {
+      method: "POST",
+      headers: { apikey: CFG.anonKey, "Content-Type": "application/json" },
+      body: JSON.stringify({ email: email, password: password })
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (j) {
+        if (!r.ok) throw new Error(j.error_description || j.msg || "Sign in failed");
+        return j;
+      });
+    });
+  }
+  function rpc(name, args) {
+    return fetch(CFG.url + "/rest/v1/rpc/" + name, {
+      method: "POST",
+      headers: { apikey: CFG.anonKey, Authorization: "Bearer " + token, "Content-Type": "application/json" },
+      body: JSON.stringify(args || {})
+    }).then(function (r) {
+      if (r.status === 401) { signOut(); throw new Error("Session expired — please sign in again."); }
+      if (!r.ok) throw new Error("Request failed (" + r.status + ")");
+      return r.json();
+    });
+  }
+  function signOut() {
+    token = null; sessionStorage.removeItem(TOKEN_KEY);
+    signoutBtn.style.display = "none"; refreshBtn.style.display = "none";
+    dashView.style.display = "none"; loginView.style.display = "flex";
+  }
+
+  loginBtn.addEventListener("click", function () {
+    var email = document.getElementById("login-email").value.trim();
+    var pass = document.getElementById("login-pass").value;
+    loginErr.textContent = ""; loginBtn.disabled = true; loginBtn.textContent = "Signing in…";
+    signIn(email, pass).then(function (j) {
+      token = j.access_token;
+      sessionStorage.setItem(TOKEN_KEY, token);
+      enterDashboard();
+    }).catch(function (e) {
+      loginErr.textContent = e.message || "Sign in failed";
+    }).finally(function () {
+      loginBtn.disabled = false; loginBtn.textContent = "Sign in";
+    });
+  });
+  document.getElementById("login-pass").addEventListener("keydown", function (e) { if (e.key === "Enter") loginBtn.click(); });
+  signoutBtn.addEventListener("click", signOut);
+  refreshBtn.addEventListener("click", loadDashboard);
+
+  // ---- Dashboard ----
+  var GAME_META = {};
+  LB.gameList().forEach(function (g) { GAME_META[g.id] = g; });
+
+  function fmtVal(gameId, v) {
+    var g = GAME_META[gameId];
+    var n = Math.round(v * 10) / 10;
+    return g ? g.fmt(n) : String(n);
+  }
+  function niceName(gameId) { return (GAME_META[gameId] && GAME_META[gameId].name) || gameId; }
+
+  function overviewHtml(summary) {
+    var sorted = summary.slice().sort(function (a, b) { return b.plays - a.plays; });
+    var max = sorted.length ? sorted[0].plays : 1;
+    var h = '<div class="overview"><h3>Plays by game</h3>';
+    sorted.forEach(function (s) {
+      var pct = Math.max(2, Math.round((s.plays / max) * 100));
+      h += '<div class="ov-row"><div class="ov-name">' + esc(niceName(s.game)) + '</div>' +
+        '<div class="ov-bar-track"><div class="ov-bar-fill" style="width:' + pct + '%"></div></div>' +
+        '<div class="ov-count">' + s.plays + '</div></div>';
+    });
+    h += '</div>';
+    return h;
+  }
+
+  function histHtml(rows) {
+    if (!rows || !rows.length) return '<div class="no-data">Not enough data yet.</div>';
+    var max = 0;
+    rows.forEach(function (b) { if (b.cnt > max) max = b.cnt; });
+    if (max === 0) return '<div class="no-data">Not enough data yet.</div>';
+    var h = '<div class="hist">';
+    rows.forEach(function (b) {
+      var isPeak = b.cnt === max;
+      var hpx = Math.round((b.cnt / max) * 82);
+      h += '<div class="hist-col" title="' + Math.round(b.range_low) + '–' + Math.round(b.range_high) + ': ' + b.cnt + ' plays">' +
+        '<div class="hist-n' + (isPeak ? ' peak' : '') + '">' + (b.cnt > 0 ? b.cnt : "") + '</div>' +
+        '<div class="hist-bar' + (isPeak ? ' peak' : '') + '" style="height:' + Math.max(hpx, b.cnt > 0 ? 3 : 0) + 'px"></div>' +
+        '</div>';
+    });
+    h += '</div><div class="hist-axis"><span>' + Math.round(rows[0].range_low) + '</span><span>' + Math.round(rows[rows.length - 1].range_high) + '</span></div>';
+    return h;
+  }
+
+  function gameCardHtml(s, hist) {
+    var range = (s.min_value === s.max_value) ? String(Math.round(s.min_value)) : Math.round(s.min_value) + "–" + Math.round(s.max_value);
+    return '<div class="game-card"><h3>' + esc(niceName(s.game)) + '</h3>' +
+      '<div class="stat-row">' +
+        '<div class="stat-tile"><div class="lbl">Plays</div><div class="val">' + s.plays + '</div></div>' +
+        '<div class="stat-tile"><div class="lbl">Average</div><div class="val">' + fmtVal(s.game, s.avg_value) + '</div></div>' +
+        '<div class="stat-tile"><div class="lbl">Median</div><div class="val">' + fmtVal(s.game, s.median_value) + '</div></div>' +
+        '<div class="stat-tile"><div class="lbl">Range</div><div class="val">' + esc(range) + '</div></div>' +
+      '</div>' + histHtml(hist) + '</div>';
+  }
+
+  function loadDashboard() {
+    dashBody.innerHTML = '<div class="empty-state">Loading…</div>';
+    rpc("admin_play_summary").then(function (summary) {
+      if (!summary || !summary.length) {
+        dashBody.innerHTML = '<div class="empty-state">No play data recorded yet.<br>Once people play a few rounds, stats will show up here.</div>';
+        return;
+      }
+      var sorted = summary.slice().sort(function (a, b) { return b.plays - a.plays; });
+      var html = overviewHtml(summary);
+      Promise.all(sorted.map(function (s) {
+        return rpc("admin_play_histogram", { p_game: s.game, p_buckets: 12 }).catch(function () { return []; });
+      })).then(function (hists) {
+        sorted.forEach(function (s, i) { html += gameCardHtml(s, hists[i]); });
+        dashBody.innerHTML = html;
+      });
+    }).catch(function (e) {
+      dashBody.innerHTML = '<div class="empty-state">' + esc(e.message || "Couldn't load stats.") + '</div>';
+    });
+  }
+
+  function enterDashboard() {
+    loginView.style.display = "none"; dashView.style.display = "block";
+    signoutBtn.style.display = ""; refreshBtn.style.display = "";
+    loadDashboard();
+  }
+
+  // ---- Boot ----
+  if (token) enterDashboard();
+})();
+</script>
+</body>
+</html>

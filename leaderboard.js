@@ -69,6 +69,21 @@
     }).then(function (r) { if (!r.ok) throw new Error("write failed"); });
   }
 
+  // ---- Analytics: log every completed round (not just top-10 qualifiers) to a
+  // separate, admin-only table. Best-effort — never blocks or breaks gameplay.
+  function logPlay(id, value, round) {
+    if (!isGlobal()) return;
+    try {
+      var row = { game: id, value: value };
+      if (round) row.round = round;
+      fetch(CFG.url + "/rest/v1/plays", {
+        method: "POST",
+        headers: Object.assign({ Prefer: "return=minimal" }, headers()),
+        body: JSON.stringify([row])
+      }).catch(function () {});
+    } catch (e) {}
+  }
+
   function top(id, round) { return isGlobal() ? sbTop(id, round) : Promise.resolve(localTop(id, round)); }
   function submit(id, name, score, round) {
     return isGlobal() ? sbSubmit(id, name, score, round).then(function () { return top(id, round); })
@@ -144,6 +159,7 @@
   // Public: end-of-game screen with result + name entry (if a high score) + board.
   function finish(opts) {
     var id = opts.game, val = opts.value, round = opts.round, roundLabel = opts.roundLabel;
+    logPlay(id, val, round);
     show();
     var result = '<h2>' + esc(opts.resultTitle || "Game over") + '</h2>' +
       '<div class="final">' + esc(meta(id).fmt(val)) + '</div>' +
@@ -191,7 +207,12 @@
   window.LB = {
     open: open,
     finish: finish,
+    logPlay: logPlay,
     configure: function (c) { CFG.url = c.url || ""; CFG.anonKey = c.anonKey || ""; },
-    isGlobal: isGlobal
+    isGlobal: isGlobal,
+    getConfig: function () { return { url: CFG.url, anonKey: CFG.anonKey }; },
+    gameList: function () {
+      return Object.keys(GAMES).map(function (id) { return { id: id, name: GAMES[id].name, fmt: GAMES[id].fmt }; });
+    }
   };
 })();

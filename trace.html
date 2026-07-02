@@ -439,6 +439,7 @@
           });
         }, 350);
       } else {
+        LB.logPlay("trace", Math.round(t));
         document.getElementById("final-time").textContent = fmtTime(t);
         setTimeout(function () { overlay.classList.add("show"); }, 350);
       }
