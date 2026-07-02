@@ -23,7 +23,8 @@
     mix:    { name: "Mix",    dir: "desc", fmt: function (v) { return String(v); } },
     sort:   { name: "Sort",   dir: "asc",  fmt: function (v) { return v + " pours"; } },
     tower:  { name: "Tower",  dir: "desc", fmt: function (v) { return String(v); } },
-    defense:{ name: "Defense", dir: "desc", fmt: function (v) { return "Wave " + v; } }
+    defense:{ name: "Defense", dir: "desc", fmt: function (v) { return "Wave " + v; } },
+    lantern:{ name: "Lantern", dir: "asc", fmt: function (v) { return v + "s"; } }
   };
   var MAX = 10;
 
