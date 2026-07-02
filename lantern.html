@@ -88,7 +88,9 @@
   // support, the rest fall back to whatever monochrome font is installed,
   // or nothing at all on some systems).
   var SYM_COUNT = 8;
-  var SYM_COLOR = ["#8fb4f0", "#7fbf9a", "#f2b35e", "#bb9af7", "#e06c9f", "#5dd6c0", "#e8edf4", "#f28a5e"];
+  // 0-2: Circles suit (1/2/3 dots), 3-4: Bamboo suit (1/2 sticks),
+  // 5-7: Dragons (Red / Green / White -- traditionally blank).
+  var SYM_COLOR = ["#8fb4f0", "#f2b35e", "#bb9af7", "#7fbf9a", "#5dd6c0", "#e0524f", "#9ece6a", "#e8edf4"];
   var LAYER_OFF = 0.16;    // per-layer visual offset, as a fraction of cell size
   var muted = localStorage.getItem("tranquil_muted") === "1";
 
@@ -260,42 +262,52 @@
     ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
     ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
   }
-  function starPath(cx, cy, points, outerR, innerR) {
-    ctx.beginPath();
-    for (var i = 0; i < points * 2; i++) {
-      var r = i % 2 === 0 ? outerR : innerR;
-      var a = (Math.PI / points) * i - Math.PI / 2;
-      var x = cx + Math.cos(a) * r, y = cy + Math.sin(a) * r;
-      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-    }
-    ctx.closePath();
-  }
-  // Eight simple, bold vector glyphs -- drawn, not font-rendered, so every
-  // device shows the exact same shape (no emoji/font fallback inconsistency).
+  // Eight glyphs styled after real mahjong tile faces (dots/circles suit,
+  // bamboo suit, and dragon tiles) -- still hand-drawn vectors, not font
+  // glyphs, so every device renders exactly the same shape. Real Unicode
+  // mahjong characters looked inconsistent because only the Red Dragon has
+  // broad colour-emoji support across platforms; the rest fall back to
+  // whatever monochrome font happens to be installed, or nothing at all.
   function drawGlyph(sym, cx, cy, s, color) {
     ctx.fillStyle = color; ctx.strokeStyle = color;
     switch (sym) {
-      case 0: ctx.beginPath(); ctx.arc(cx, cy, s * 0.32, 0, Math.PI * 2); ctx.fill(); break;
-      case 1: ctx.save(); ctx.translate(cx, cy); ctx.rotate(Math.PI / 4); ctx.fillRect(-s * 0.26, -s * 0.26, s * 0.52, s * 0.52); ctx.restore(); break;
-      case 2: ctx.beginPath(); ctx.moveTo(cx, cy - s * 0.34); ctx.lineTo(cx + s * 0.32, cy + s * 0.24); ctx.lineTo(cx - s * 0.32, cy + s * 0.24); ctx.closePath(); ctx.fill(); break;
-      case 3:
-        var t = s * 0.15;
-        ctx.fillRect(cx - t / 2, cy - s * 0.32, t, s * 0.64);
-        ctx.fillRect(cx - s * 0.32, cy - t / 2, s * 0.64, t);
+      case 0: // Circles suit: one dot
+        ctx.beginPath(); ctx.arc(cx, cy, s * 0.28, 0, Math.PI * 2); ctx.fill();
         break;
-      case 4: starPath(cx, cy, 5, s * 0.34, s * 0.15); ctx.fill(); break;
-      case 5: ctx.lineWidth = Math.max(3, s * 0.13); ctx.beginPath(); ctx.arc(cx, cy, s * 0.26, 0, Math.PI * 2); ctx.stroke(); break;
-      case 6:
-        ctx.lineWidth = Math.max(3, s * 0.12); ctx.lineCap = "round";
-        ctx.beginPath(); ctx.moveTo(cx - s * 0.32, cy);
-        ctx.quadraticCurveTo(cx - s * 0.16, cy - s * 0.26, cx, cy);
-        ctx.quadraticCurveTo(cx + s * 0.16, cy + s * 0.26, cx + s * 0.32, cy);
-        ctx.stroke();
+      case 1: // Circles suit: two dots
+        ctx.beginPath(); ctx.arc(cx - s * 0.17, cy, s * 0.16, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(cx + s * 0.17, cy, s * 0.16, 0, Math.PI * 2); ctx.fill();
         break;
-      case 7:
-        [[0, -s * 0.22], [-s * 0.2, s * 0.14], [s * 0.2, s * 0.14]].forEach(function (o) {
-          ctx.beginPath(); ctx.arc(cx + o[0], cy + o[1], s * 0.09, 0, Math.PI * 2); ctx.fill();
+      case 2: // Circles suit: three dots
+        [[0, -s * 0.2], [-s * 0.18, s * 0.14], [s * 0.18, s * 0.14]].forEach(function (o) {
+          ctx.beginPath(); ctx.arc(cx + o[0], cy + o[1], s * 0.13, 0, Math.PI * 2); ctx.fill();
         });
+        break;
+      case 3: // Bamboo suit: one stick
+        roundRect(cx - s * 0.09, cy - s * 0.32, s * 0.18, s * 0.64, s * 0.05); ctx.fill();
+        ctx.strokeStyle = "rgba(0,0,0,0.3)"; ctx.lineWidth = Math.max(1, s * 0.02);
+        [-0.08, 0.1].forEach(function (dy) {
+          ctx.beginPath(); ctx.moveTo(cx - s * 0.09, cy + s * dy); ctx.lineTo(cx + s * 0.09, cy + s * dy); ctx.stroke();
+        });
+        break;
+      case 4: // Bamboo suit: two sticks
+        ctx.fillStyle = color;
+        [-1, 1].forEach(function (dir) {
+          roundRect(cx + dir * s * 0.14 - s * 0.06, cy - s * 0.28, s * 0.12, s * 0.56, s * 0.04); ctx.fill();
+        });
+        break;
+      case 5: // Red Dragon: a bold seal-like mark
+        roundRect(cx - s * 0.2, cy - s * 0.2, s * 0.4, s * 0.4, s * 0.07); ctx.fill();
+        break;
+      case 6: // Green Dragon: an angular mark
+        ctx.beginPath();
+        ctx.moveTo(cx, cy - s * 0.26); ctx.lineTo(cx + s * 0.22, cy + s * 0.05); ctx.lineTo(cx + s * 0.08, cy + s * 0.05);
+        ctx.lineTo(cx + s * 0.08, cy + s * 0.26); ctx.lineTo(cx - s * 0.08, cy + s * 0.26); ctx.lineTo(cx - s * 0.08, cy + s * 0.05);
+        ctx.lineTo(cx - s * 0.22, cy + s * 0.05); ctx.closePath(); ctx.fill();
+        break;
+      case 7: // White Dragon: traditionally blank -- just a framed border
+        ctx.lineWidth = Math.max(2, s * 0.07);
+        roundRect(cx - s * 0.26, cy - s * 0.26, s * 0.52, s * 0.52, s * 0.06); ctx.stroke();
         break;
     }
   }
