@@ -248,7 +248,7 @@
         var ec0 = enemyCell(e);
         for (var rbi = 0; rbi < roadblocks.length; rbi++) {
           var rb = roadblocks[rbi];
-          if (Math.hypot(ec0.c - (rb.col + 0.5), ec0.r - (rb.row + 0.5)) < 0.5) slowMul = Math.min(slowMul, ROADBLOCK_SLOW);
+          if (Math.hypot(ec0.c - rb.col, ec0.r - rb.row) < 0.5) slowMul = Math.min(slowMul, ROADBLOCK_SLOW);
         }
       }
       e.t += (e.speed * slowMul * dt) / segLen;
