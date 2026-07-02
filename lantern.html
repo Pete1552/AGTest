@@ -53,10 +53,9 @@
   </div>
 
   <div class="play-area"><canvas id="stage"></canvas></div>
-  <div class="nudge" id="nudge">No matches left — try Shuffle</div>
+  <div class="nudge" id="nudge">No matches left — start a new game</div>
   <div class="action-row">
     <button class="action-btn" id="hint-btn">Hint</button>
-    <button class="action-btn" id="shuffle-btn">Shuffle</button>
   </div>
 </div>
 
@@ -69,7 +68,7 @@
     </div>
     <div class="how">
       <p class="how-title">How to play</p>
-      <p class="body">Tap two matching tiles to clear them. A tile can only be picked when nothing sits on top of it and at least one side — left or right — is open. Clear every tile as fast as you can. Stuck? Hint shows a valid pair; Shuffle re-deals the tiles left on the board.</p>
+      <p class="body">Tap two matching tiles to clear them. A tile can only be picked when nothing sits on top of it and at least one side — left or right — is open. Clear every tile as fast as you can. Stuck? Hint shows a valid pair if one exists — otherwise, start a new game.</p>
     </div>
     <p class="promise">No ads. No pop-ups. No nags — ever.</p>
     <button id="settings-share" class="share">Share the game</button>
@@ -83,7 +82,12 @@
   "use strict";
 
   var COLS = 6, ROWS = 4;
-  var SYMBOLS = ["🀀", "🀁", "🀂", "🀃", "🀄", "🀅", "🀆", "🀇"];
+  // Tile faces are hand-drawn vector shapes, not font/emoji glyphs -- this
+  // guarantees identical rendering on every device (mahjong Unicode glyphs
+  // render inconsistently: only the Red Dragon has broad colour-emoji
+  // support, the rest fall back to whatever monochrome font is installed,
+  // or nothing at all on some systems).
+  var SYM_COUNT = 8;
   var SYM_COLOR = ["#8fb4f0", "#7fbf9a", "#f2b35e", "#bb9af7", "#e06c9f", "#5dd6c0", "#e8edf4", "#f28a5e"];
   var LAYER_OFF = 0.16;    // per-layer visual offset, as a fraction of cell size
   var muted = localStorage.getItem("tranquil_muted") === "1";
@@ -132,24 +136,17 @@
   function sfxSelect() { tone(420, 0.05, "sine", 0.06); }
   function sfxMatch() { tone(660, 0.09, "sine", 0.09); setTimeout(function () { tone(880, 0.1, "sine", 0.08); }, 70); }
   function sfxDeny() { tone(200, 0.08, "sine", 0.05); }
-  function sfxShuffle() { [420, 500, 580].forEach(function (f, i) { setTimeout(function () { tone(f, 0.06, "sine", 0.05); }, i * 40); }); }
   function sfxWin() { [523.25, 659.25, 783.99, 1046.5].forEach(function (f, i) { setTimeout(function () { tone(f, 0.35, "sine", 0.12); }, i * 100); }); }
 
   // ---- Deal ----
   function shuffleArr(a) { for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
   function dealTiles() {
     var pool = [];
-    SYMBOLS.forEach(function (s, i) { for (var k = 0; k < 4; k++) pool.push(i); });
+    for (var i = 0; i < SYM_COUNT; i++) for (var k = 0; k < 4; k++) pool.push(i);
     shuffleArr(pool);
     tiles = LAYOUT.map(function (pos, i) {
       return { col: pos.col, row: pos.row, layer: pos.layer, sym: pool[i], removed: false, id: i };
     });
-  }
-  function redealRemaining() {
-    var remaining = tiles.filter(function (t) { return !t.removed; });
-    var syms = remaining.map(function (t) { return t.sym; });
-    shuffleArr(syms);
-    remaining.forEach(function (t, i) { t.sym = syms[i]; });
   }
 
   // ---- Free-tile rule: nothing above (same col,row, higher layer) and not
@@ -211,10 +208,49 @@
     ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
     ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
   }
+  function starPath(cx, cy, points, outerR, innerR) {
+    ctx.beginPath();
+    for (var i = 0; i < points * 2; i++) {
+      var r = i % 2 === 0 ? outerR : innerR;
+      var a = (Math.PI / points) * i - Math.PI / 2;
+      var x = cx + Math.cos(a) * r, y = cy + Math.sin(a) * r;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+  }
+  // Eight simple, bold vector glyphs -- drawn, not font-rendered, so every
+  // device shows the exact same shape (no emoji/font fallback inconsistency).
+  function drawGlyph(sym, cx, cy, s, color) {
+    ctx.fillStyle = color; ctx.strokeStyle = color;
+    switch (sym) {
+      case 0: ctx.beginPath(); ctx.arc(cx, cy, s * 0.32, 0, Math.PI * 2); ctx.fill(); break;
+      case 1: ctx.save(); ctx.translate(cx, cy); ctx.rotate(Math.PI / 4); ctx.fillRect(-s * 0.26, -s * 0.26, s * 0.52, s * 0.52); ctx.restore(); break;
+      case 2: ctx.beginPath(); ctx.moveTo(cx, cy - s * 0.34); ctx.lineTo(cx + s * 0.32, cy + s * 0.24); ctx.lineTo(cx - s * 0.32, cy + s * 0.24); ctx.closePath(); ctx.fill(); break;
+      case 3:
+        var t = s * 0.15;
+        ctx.fillRect(cx - t / 2, cy - s * 0.32, t, s * 0.64);
+        ctx.fillRect(cx - s * 0.32, cy - t / 2, s * 0.64, t);
+        break;
+      case 4: starPath(cx, cy, 5, s * 0.34, s * 0.15); ctx.fill(); break;
+      case 5: ctx.lineWidth = Math.max(3, s * 0.13); ctx.beginPath(); ctx.arc(cx, cy, s * 0.26, 0, Math.PI * 2); ctx.stroke(); break;
+      case 6:
+        ctx.lineWidth = Math.max(3, s * 0.12); ctx.lineCap = "round";
+        ctx.beginPath(); ctx.moveTo(cx - s * 0.32, cy);
+        ctx.quadraticCurveTo(cx - s * 0.16, cy - s * 0.26, cx, cy);
+        ctx.quadraticCurveTo(cx + s * 0.16, cy + s * 0.26, cx + s * 0.32, cy);
+        ctx.stroke();
+        break;
+      case 7:
+        [[0, -s * 0.22], [-s * 0.2, s * 0.14], [s * 0.2, s * 0.14]].forEach(function (o) {
+          ctx.beginPath(); ctx.arc(cx + o[0], cy + o[1], s * 0.09, 0, Math.PI * 2); ctx.fill();
+        });
+        break;
+    }
+  }
   function render() {
     ctx.clearRect(0, 0, W, H);
     var order = tiles.filter(function (t) { return !t.removed; }).sort(function (a, b) { return a.layer - b.layer; });
-    var w = cell * 0.9, glyphPx = Math.round(w * 0.62);
+    var w = cell * 0.9;
     for (var i = 0; i < order.length; i++) {
       var t = order[i], p = tilePx(t), free = isFree(t);
       var isSel = selected === t, isHint = hinted.indexOf(t) !== -1;
@@ -230,10 +266,7 @@
         roundRect(p.x + 1.5, p.y + 1.5, w - 3, w - 3, 6); ctx.stroke();
       }
       ctx.globalAlpha = free ? 1 : 0.45;
-      ctx.fillStyle = SYM_COLOR[t.sym];
-      ctx.font = glyphPx + "px sans-serif";
-      ctx.textAlign = "center"; ctx.textBaseline = "middle";
-      ctx.fillText(SYMBOLS[t.sym], p.x + w / 2, p.y + w / 2 + w * 0.03);
+      drawGlyph(t.sym, p.x + w / 2, p.y + w / 2, w, SYM_COLOR[t.sym]);
       ctx.globalAlpha = 1;
     }
   }
@@ -286,11 +319,6 @@
     clearTimeout(hintTimer);
     hintTimer = setTimeout(function () { hinted = []; render(); }, 1200);
   });
-  document.getElementById("shuffle-btn").addEventListener("click", function () {
-    if (solved) return;
-    audio(); selected = null; redealRemaining(); sfxShuffle(); updateNudge(); render();
-  });
-
   // ---- Lifecycle ----
   function newGame() {
     dealTiles();
