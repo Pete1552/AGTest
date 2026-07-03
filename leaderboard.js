@@ -24,7 +24,8 @@
     sort:   { name: "Sort",   dir: "asc",  fmt: function (v) { return v + " pours"; } },
     tower:  { name: "Tower",  dir: "desc", fmt: function (v) { return String(v); } },
     defense:{ name: "Defense", dir: "desc", fmt: function (v) { return "Wave " + v; } },
-    lantern:{ name: "Lantern", dir: "asc", fmt: function (v) { return v + "s"; } }
+    lantern:{ name: "Lantern", dir: "asc", fmt: function (v) { return v + "s"; } },
+    breaker:{ name: "Breaker", dir: "desc", fmt: function (v) { return String(v); } }
   };
   var MAX = 10;
 
