@@ -40,3 +40,5 @@ models:
 - **Sell the calm:** free to play, optional one-time "remove all nags" unlock.
 - **One *optional* reward ad** (watch one only if you want a continue) — never forced.
 - **Free web version for discovery → paid native app** (iOS/Android) later.
+
+<!-- retry deploy: previous GitHub Pages attempt failed transiently -->
