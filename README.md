@@ -42,3 +42,4 @@ models:
 - **Free web version for discovery → paid native app** (iOS/Android) later.
 
 <!-- retry deploy: previous GitHub Pages attempt failed transiently -->
+<!-- retry 2 -->
