@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="shared.css" />
-<title>Tranquil Blocks — a block puzzle with no ads, ever</title>
+<title>Tranquil Blocks — a calm block puzzle</title>
 <style>
   :root {
     --bg: #11151c;
@@ -279,7 +279,6 @@
       <p class="how-title">How to play</p>
       <p class="body">Drag a piece onto the grid. Fill a complete row or column to clear it and score. Keep going until none of your three pieces fit.</p>
     </div>
-    <p class="promise">No ads. No pop-ups. No nags — ever.</p>
     <button id="settings-share" class="share">Share the game</button>
     <button id="settings-close" class="ghost-btn">Done</button>
   </div>
@@ -718,7 +717,7 @@
     if (newBest) msg = "New best! 🎉";
     else if (streakMsg) msg = streakMsg;
     else {
-      const msgs = ["Nice run.", "Clean game.", "Well played.", "No ads in sight."];
+      const msgs = ["Nice run.", "Clean game.", "Well played.", "Solid game."];
       msg = msgs[Math.floor(Math.random() * msgs.length)];
     }
     LB.finish({ game: 'blocks', value: score, resultTitle: 'No moves left', subtitle: msg, onPlayAgain: newGame });

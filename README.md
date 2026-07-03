@@ -1,6 +1,6 @@
 # Tranquil
 
-A small collection of clean, **ad-free** games. No ads, no pop-ups, no nags — ever.
+A small collection of clean, calm games.
 Built as zero-dependency, single-file web pages; no build step, no backend.
 
 ## Play it
