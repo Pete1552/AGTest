@@ -66,6 +66,22 @@
   .hist-axis { display: flex; justify-content: space-between; margin-top: 4px; color: var(--muted); font-size: 10px; }
   .no-data { color: var(--muted); font-size: 13px; padding: 6px 0; }
   .empty-state { text-align: center; color: var(--muted); padding: 40px 20px; font-size: 14px; }
+
+  .retention { background: var(--panel); border-radius: 16px; padding: 16px; margin-bottom: 14px; display: flex; gap: 10px; }
+  .retention .r-stat { flex: 1; text-align: center; }
+  .retention .r-val { font-family: var(--font-display); font-size: 22px; font-weight: 800; color: var(--accent); }
+  .retention .r-lbl { color: var(--muted); font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.6px; font-weight: 700; margin-top: 2px; }
+
+  .stat-row + .stat-row { margin-top: -8px; margin-bottom: 16px; }
+  .stat-tile.small .val { font-size: 12.5px; }
+
+  .callout { color: var(--muted); font-size: 12px; margin: -6px 0 14px; line-height: 1.4; }
+  .callout b { color: var(--ink); }
+
+  .section-lbl { color: var(--muted); font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.8px; font-weight: 700; margin: 4px 0 6px; }
+  .trend { display: flex; align-items: flex-end; gap: 2px; height: 36px; }
+  .trend-bar { flex: 1; background: var(--accent); opacity: 0.55; border-radius: 2px 2px 0 0; min-height: 1px; }
+  .trend-axis { display: flex; justify-content: space-between; margin-top: 3px; color: var(--muted); font-size: 9px; }
 </style>
 </head>
 <body>
@@ -97,7 +113,7 @@
   </div>
 </div>
 
-<script src="leaderboard.js?v=2"></script>
+<script src="leaderboard.js?v=3"></script>
 <script>
 (function () {
   "use strict";
@@ -176,6 +192,56 @@
     return g ? g.fmt(n) : String(n);
   }
   function niceName(gameId) { return (GAME_META[gameId] && GAME_META[gameId].name) || gameId; }
+  function fmtDate(d) {
+    var dt = new Date(d + "T00:00:00");
+    return dt.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  }
+  function relTime(iso) {
+    if (!iso) return "never";
+    var diff = (Date.now() - new Date(iso).getTime()) / 1000;
+    if (diff < 60) return "just now";
+    if (diff < 3600) return Math.floor(diff / 60) + "m ago";
+    if (diff < 86400) return Math.floor(diff / 3600) + "h ago";
+    return Math.floor(diff / 86400) + "d ago";
+  }
+
+  function retentionHtml(r) {
+    if (!r || !Number(r.unique_devices)) return "";
+    var unique = Number(r.unique_devices), returning = Number(r.returning_devices) || 0;
+    var pct = r.retention_pct != null ? Number(r.retention_pct) : (unique ? Math.round(100 * returning / unique) : 0);
+    return '<div class="retention">' +
+      '<div class="r-stat"><div class="r-val">' + unique + '</div><div class="r-lbl">Players</div></div>' +
+      '<div class="r-stat"><div class="r-val">' + returning + '</div><div class="r-lbl">Came back</div></div>' +
+      '<div class="r-stat"><div class="r-val">' + pct + '%</div><div class="r-lbl">Retention</div></div>' +
+      '</div>';
+  }
+
+  // "90% of runs end at X or lower" / "90% finish in X or less" -- phrased by
+  // the game's scoring direction so it always reads as the real difficulty wall.
+  function difficultyCallout(s) {
+    if (s.p90_value == null || s.p10_value == null) return "";
+    var dir = (GAME_META[s.game] && GAME_META[s.game].dir) || "desc";
+    if (dir === "desc") {
+      return '<div class="callout">90% of runs end at <b>' + esc(fmtVal(s.game, s.p90_value)) +
+        '</b> or lower · 90% at least reach <b>' + esc(fmtVal(s.game, s.p10_value)) + '</b></div>';
+    }
+    return '<div class="callout">90% of runs finish in <b>' + esc(fmtVal(s.game, s.p90_value)) +
+      '</b> or less · the fastest 10% beat <b>' + esc(fmtVal(s.game, s.p10_value)) + '</b></div>';
+  }
+
+  function trendHtml(rows) {
+    if (!rows || !rows.length) return "";
+    var max = 0;
+    rows.forEach(function (r) { if (Number(r.cnt) > max) max = Number(r.cnt); });
+    var h = '<div class="section-lbl">Last ' + rows.length + ' days</div><div class="trend">';
+    rows.forEach(function (r) {
+      var cnt = Number(r.cnt);
+      var hpx = max > 0 ? Math.max(1, Math.round((cnt / max) * 34)) : 1;
+      h += '<div class="trend-bar" style="height:' + hpx + 'px" title="' + esc(r.day) + ': ' + cnt + ' plays"></div>';
+    });
+    h += '</div><div class="trend-axis"><span>' + esc(fmtDate(rows[0].day)) + '</span><span>' + esc(fmtDate(rows[rows.length - 1].day)) + '</span></div>';
+    return h;
+  }
 
   function overviewHtml(summary) {
     var sorted = summary.slice().sort(function (a, b) { return b.plays - a.plays; });
@@ -209,30 +275,47 @@
     return h;
   }
 
-  function gameCardHtml(s, hist) {
-    var range = (s.min_value === s.max_value) ? String(Math.round(s.min_value)) : Math.round(s.min_value) + "–" + Math.round(s.max_value);
+  function gameCardHtml(s, hist, trend) {
+    var typical = (s.p10_value === s.p90_value) ? fmtVal(s.game, s.p10_value)
+      : fmtVal(s.game, s.p10_value) + "–" + fmtVal(s.game, s.p90_value);
+    var unique = Number(s.unique_devices) || 0, returning = Number(s.returning_devices) || 0;
+    var returnPct = unique ? Math.round(100 * returning / unique) + "%" : "–";
     return '<div class="game-card"><h3>' + esc(niceName(s.game)) + '</h3>' +
       '<div class="stat-row">' +
         '<div class="stat-tile"><div class="lbl">Plays</div><div class="val">' + s.plays + '</div></div>' +
-        '<div class="stat-tile"><div class="lbl">Average</div><div class="val">' + fmtVal(s.game, s.avg_value) + '</div></div>' +
-        '<div class="stat-tile"><div class="lbl">Median</div><div class="val">' + fmtVal(s.game, s.median_value) + '</div></div>' +
-        '<div class="stat-tile"><div class="lbl">Range</div><div class="val">' + esc(range) + '</div></div>' +
-      '</div>' + histHtml(hist) + '</div>';
+        '<div class="stat-tile"><div class="lbl">Average</div><div class="val">' + esc(fmtVal(s.game, s.avg_value)) + '</div></div>' +
+        '<div class="stat-tile"><div class="lbl">Median</div><div class="val">' + esc(fmtVal(s.game, s.median_value)) + '</div></div>' +
+        '<div class="stat-tile"><div class="lbl">Typical</div><div class="val">' + esc(typical) + '</div></div>' +
+      '</div>' +
+      '<div class="stat-row">' +
+        '<div class="stat-tile"><div class="lbl">Players</div><div class="val">' + unique + '</div></div>' +
+        '<div class="stat-tile"><div class="lbl">Returned</div><div class="val">' + returnPct + '</div></div>' +
+        '<div class="stat-tile small"><div class="lbl">Last played</div><div class="val">' + esc(relTime(s.last_played)) + '</div></div>' +
+      '</div>' +
+      difficultyCallout(s) + histHtml(hist) + trendHtml(trend) +
+      '</div>';
   }
 
   function loadDashboard() {
     dashBody.innerHTML = '<div class="empty-state">Loading…</div>';
-    rpc("admin_play_summary").then(function (summary) {
+    Promise.all([
+      rpc("admin_play_summary"),
+      rpc("admin_retention").catch(function () { return null; })
+    ]).then(function (results) {
+      var summary = results[0], retention = results[1];
       if (!summary || !summary.length) {
         dashBody.innerHTML = '<div class="empty-state">No play data recorded yet.<br>Once people play a few rounds, stats will show up here.</div>';
         return;
       }
       var sorted = summary.slice().sort(function (a, b) { return b.plays - a.plays; });
-      var html = overviewHtml(summary);
+      var html = retentionHtml(retention) + overviewHtml(summary);
       Promise.all(sorted.map(function (s) {
-        return rpc("admin_play_histogram", { p_game: s.game, p_buckets: 12 }).catch(function () { return []; });
-      })).then(function (hists) {
-        sorted.forEach(function (s, i) { html += gameCardHtml(s, hists[i]); });
+        return Promise.all([
+          rpc("admin_play_histogram", { p_game: s.game, p_buckets: 12 }).catch(function () { return []; }),
+          rpc("admin_play_trend", { p_game: s.game, p_days: 14 }).catch(function () { return []; })
+        ]);
+      })).then(function (pairs) {
+        sorted.forEach(function (s, i) { html += gameCardHtml(s, pairs[i][0], pairs[i][1]); });
         dashBody.innerHTML = html;
       });
     }).catch(function (e) {

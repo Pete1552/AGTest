@@ -73,10 +73,30 @@
 
   // ---- Analytics: log every completed round (not just top-10 qualifiers) to a
   // separate, admin-only table. Best-effort — never blocks or breaks gameplay.
+  //
+  // Each device gets one random, anonymous id (a UUID, no personal info)
+  // stored in localStorage, so the admin dashboard can tell "one person
+  // played 50 times" apart from "50 different people played once" and
+  // measure whether people come back on a later day. It carries nothing
+  // identifying and is never used for anything besides that aggregate count.
+  var DEVICE_KEY = "tranquil_device";
+  function deviceId() {
+    try {
+      var id = localStorage.getItem(DEVICE_KEY);
+      if (id) return id;
+      id = (window.crypto && crypto.randomUUID) ? crypto.randomUUID()
+        : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
+            var r = Math.random() * 16 | 0, v = c === "x" ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
+          });
+      localStorage.setItem(DEVICE_KEY, id);
+      return id;
+    } catch (e) { return "unknown"; }
+  }
   function logPlay(id, value, round) {
     if (!isGlobal()) return;
     try {
-      var row = { game: id, value: value };
+      var row = { game: id, value: value, device: deviceId() };
       if (round) row.round = round;
       fetch(CFG.url + "/rest/v1/plays", {
         method: "POST",
@@ -214,7 +234,7 @@
     isGlobal: isGlobal,
     getConfig: function () { return { url: CFG.url, anonKey: CFG.anonKey }; },
     gameList: function () {
-      return Object.keys(GAMES).map(function (id) { return { id: id, name: GAMES[id].name, fmt: GAMES[id].fmt }; });
+      return Object.keys(GAMES).map(function (id) { return { id: id, name: GAMES[id].name, dir: GAMES[id].dir, fmt: GAMES[id].fmt }; });
     }
   };
 })();
