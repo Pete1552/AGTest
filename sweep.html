@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#11151c" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Tranquil" />
+<link rel="apple-touch-icon" href="icon.png" />
+<link rel="manifest" href="manifest.json" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="shared.css" />
+<title>Sweep — Tranquil</title>
+<style>
+  #board {
+    background: var(--panel);
+    border-radius: 14px;
+    padding: 6px;
+    display: grid;
+    gap: 3px;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+  }
+  .cell {
+    position: relative;
+    background: var(--cell-empty);
+    border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-display); font-weight: 800;
+    font-size: clamp(10px, 3.6vw, 16px);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+  }
+  .cell.revealed { background: var(--grid); box-shadow: none; }
+  .cell.mine.revealed { background: #d9534f; }
+  .cell.mine.hit { background: #ff5c52; box-shadow: 0 0 0 2px rgba(255,255,255,0.6) inset; }
+  .cell.wrong-flag { background: var(--grid); }
+  .cell:active { filter: brightness(1.15); }
+  .n1 { color: #7aa2f7; } .n2 { color: #9ece6a; } .n3 { color: #e8735c; }
+  .n4 { color: #bb9af7; } .n5 { color: #e0a3c0; } .n6 { color: #5dd6c0; }
+  .n7 { color: var(--ink); } .n8 { color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="topbar">
+    <div class="brand">
+      <a href="index.html" class="icon-btn" aria-label="Back to games">‹</a>
+      <span class="title">Sweep</span>
+    </div>
+    <div class="bar-actions">
+      <button id="lb-btn" class="icon-btn" aria-label="High scores">🏆</button>
+      <button id="restart" class="icon-btn" aria-label="New game">🙂</button>
+      <button id="settings-btn" class="icon-btn" aria-label="Settings">⚙</button>
+    </div>
+  </header>
+  <div class="scores">
+    <div class="score-box"><div class="score-label">Mines</div><div class="score-val" id="mines">10</div></div>
+    <div class="score-box"><div class="score-label">Time</div><div class="score-val" id="time">0s</div></div>
+  </div>
+  <div class="play-area"><div id="board"></div></div>
+  <div class="tap-hint" id="hint" style="text-align:center; color:var(--muted); font-size:12px; min-height:16px; margin-top:6px;">Tap to clear · hold to flag</div>
+</div>
+
+<div id="settings-overlay" class="modal-overlay">
+  <div class="modal settings">
+    <h2>Sweep</h2>
+    <div class="setting-row">
+      <span class="label">Sound</span>
+      <button id="sound-toggle" class="toggle on">On</button>
+    </div>
+    <div class="how">
+      <p class="how-title">How to play</p>
+      <p class="body">Tap a tile to clear it. A number tells you how many mines touch it — flag those tiles instead of tapping them. Hold a tile down (or right-click on desktop) to flag or unflag it. Clear every safe tile without hitting a mine. Fastest clear wins.</p>
+    </div>
+    <button id="settings-share" class="share">Share the game</button>
+    <button id="settings-close" class="ghost-btn">Done</button>
+  </div>
+</div>
+
+<div id="overlay" class="modal-overlay">
+  <div class="modal">
+    <h2 id="result-title">Cleared!</h2>
+    <div class="final" id="final-time">0s</div>
+    <div class="final-sub" id="final-sub"></div>
+    <button id="play-again">Play again</button>
+  </div>
+</div>
+
+<script src="leaderboard.js?v=5"></script>
+<script>
+(function () {
+  "use strict";
+
+  var ROWS = 9, COLS = 9, MINES = 10;
+
+  var board = [];          // [r][c] = { mine, revealed, flagged, adj }
+  var started = false, over = false, won = false;
+  var revealedCount = 0, flagCount = 0;
+  var startTime = 0, elapsed = 0, timerId = 0;
+  var best = (function () {
+    var v = localStorage.getItem("tranquil_sweep_best");
+    return v === null ? null : Number(v);
+  })();
+
+  var boardEl = document.getElementById("board");
+  var playArea = document.querySelector(".play-area");
+  var minesEl = document.getElementById("mines");
+  var timeEl = document.getElementById("time");
+  var hintEl = document.getElementById("hint");
+  var overlay = document.getElementById("overlay");
+  var resultTitleEl = document.getElementById("result-title");
+  var finalTimeEl = document.getElementById("final-time");
+  var finalSubEl = document.getElementById("final-sub");
+  var settingsOverlay = document.getElementById("settings-overlay");
+  var soundToggle = document.getElementById("sound-toggle");
+  var restartBtn = document.getElementById("restart");
+
+  var cellEls = [];
+
+  // ---- Shared sound (collection-wide mute key) ----
+  var muted = localStorage.getItem("tranquil_muted") === "1";
+  var actx = null;
+  function audio() {
+    if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { actx = null; } }
+    if (actx && actx.state === "suspended") actx.resume();
+  }
+  function tone(f, d, t, g) {
+    if (muted || !actx) return;
+    var o = actx.createOscillator(), gn = actx.createGain();
+    o.type = t || "sine"; o.frequency.value = f;
+    gn.gain.setValueAtTime(0.0001, actx.currentTime);
+    gn.gain.exponentialRampToValueAtTime(g || 0.1, actx.currentTime + 0.01);
+    gn.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + d);
+    o.connect(gn); gn.connect(actx.destination); o.start(); o.stop(actx.currentTime + d + 0.02);
+  }
+  function sfxReveal() { tone(360, 0.04, "sine", 0.05); }
+  function sfxFlag() { tone(520, 0.05, "square", 0.05); }
+  function sfxUnflag() { tone(300, 0.05, "square", 0.04); }
+  function sfxWin() { [523, 659, 784, 1046].forEach(function (f, i) { setTimeout(function () { tone(f, 0.28, "sine", 0.11); }, i * 110); }); }
+  function sfxBoom() { [200, 140, 90].forEach(function (f, i) { setTimeout(function () { tone(f, 0.32, "sawtooth", 0.12); }, i * 110); }); }
+
+  // ---- Board setup ----
+  function emptyBoard() {
+    var b = [];
+    for (var r = 0; r < ROWS; r++) {
+      b[r] = [];
+      for (var c = 0; c < COLS; c++) b[r][c] = { mine: false, revealed: false, flagged: false, adj: 0 };
+    }
+    return b;
+  }
+
+  function neighbours(r, c) {
+    var out = [];
+    for (var dr = -1; dr <= 1; dr++)
+      for (var dc = -1; dc <= 1; dc++) {
+        if (dr === 0 && dc === 0) continue;
+        var nr = r + dr, nc = c + dc;
+        if (nr >= 0 && nr < ROWS && nc >= 0 && nc < COLS) out.push([nr, nc]);
+      }
+    return out;
+  }
+
+  function placeMines(safeR, safeC) {
+    var safe = {};
+    safe[safeR + "," + safeC] = true;
+    neighbours(safeR, safeC).forEach(function (p) { safe[p[0] + "," + p[1]] = true; });
+    var candidates = [];
+    for (var r = 0; r < ROWS; r++)
+      for (var c = 0; c < COLS; c++)
+        if (!safe[r + "," + c]) candidates.push([r, c]);
+    for (var i = candidates.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var tmp = candidates[i]; candidates[i] = candidates[j]; candidates[j] = tmp;
+    }
+    for (var m = 0; m < MINES && m < candidates.length; m++) {
+      var p2 = candidates[m];
+      board[p2[0]][p2[1]].mine = true;
+    }
+    for (var r2 = 0; r2 < ROWS; r2++)
+      for (var c2 = 0; c2 < COLS; c2++) {
+        if (board[r2][c2].mine) continue;
+        var n = 0;
+        neighbours(r2, c2).forEach(function (p) { if (board[p[0]][p[1]].mine) n++; });
+        board[r2][c2].adj = n;
+      }
+  }
+
+  // ---- Rendering ----
+  function classForCell(cell) {
+    var cls = "cell";
+    if (cell.revealed) {
+      cls += " revealed";
+      if (cell.mine) cls += " mine";
+    }
+    return cls;
+  }
+  function renderCell(r, c) {
+    var cell = board[r][c];
+    var el = cellEls[r][c];
+    el.className = classForCell(cell);
+    el.textContent = "";
+    if (cell.revealed) {
+      if (cell.mine) el.textContent = "💣";
+      else if (cell.adj > 0) { el.textContent = String(cell.adj); el.classList.add("n" + cell.adj); }
+    } else if (over && cell.wrongFlag) {
+      el.textContent = "❌";
+    } else if (cell.flagged) {
+      el.textContent = "🚩";
+    }
+  }
+  function renderBoard() {
+    for (var r = 0; r < ROWS; r++) for (var c = 0; c < COLS; c++) renderCell(r, c);
+  }
+
+  // ---- Flood reveal ----
+  function reveal(r, c) {
+    var cell = board[r][c];
+    if (cell.revealed || cell.flagged) return;
+    cell.revealed = true;
+    revealedCount++;
+    if (cell.adj === 0 && !cell.mine) {
+      neighbours(r, c).forEach(function (p) {
+        var nc = board[p[0]][p[1]];
+        if (!nc.revealed && !nc.flagged) reveal(p[0], p[1]);
+      });
+    }
+  }
+
+  function tapCell(r, c) {
+    if (over || won) return;
+    var cell = board[r][c];
+    if (cell.flagged || cell.revealed) return;
+    audio();
+    if (!started) {
+      started = true;
+      placeMines(r, c);
+      startTimer();
+    }
+    if (cell.mine) { loseGame(r, c); return; }
+    sfxReveal();
+    reveal(r, c);
+    renderBoard();
+    checkWin();
+  }
+
+  function toggleFlag(r, c) {
+    if (over || won) return;
+    var cell = board[r][c];
+    if (cell.revealed) return;
+    audio();
+    cell.flagged = !cell.flagged;
+    flagCount += cell.flagged ? 1 : -1;
+    minesEl.textContent = MINES - flagCount;
+    if (cell.flagged) sfxFlag(); else sfxUnflag();
+    renderCell(r, c);
+    if (navigator.vibrate) { try { navigator.vibrate(12); } catch (e) {} }
+  }
+
+  function checkWin() {
+    if (revealedCount === ROWS * COLS - MINES) win();
+  }
+
+  // ---- Timer ----
+  function startTimer() {
+    startTime = Date.now();
+    timerId = setInterval(function () {
+      elapsed = Math.floor((Date.now() - startTime) / 1000);
+      timeEl.textContent = elapsed + "s";
+    }, 250);
+  }
+  function stopTimer() { clearInterval(timerId); }
+
+  // ---- End states ----
+  function loseGame(hitR, hitC) {
+    over = true;
+    stopTimer();
+    sfxBoom();
+    restartBtn.textContent = "💀";
+    hintEl.textContent = "Boom — that was a mine.";
+    for (var r = 0; r < ROWS; r++)
+      for (var c = 0; c < COLS; c++) {
+        var cell = board[r][c];
+        if (cell.mine && !cell.flagged) cell.revealed = true;
+        if (!cell.mine && cell.flagged) cell.wrongFlag = true;
+      }
+    board[hitR][hitC].revealed = true;
+    renderBoard();
+    cellEls[hitR][hitC].classList.add("hit");
+    setTimeout(function () {
+      resultTitleEl.textContent = "💥 Boom!";
+      finalTimeEl.textContent = elapsed + "s";
+      finalSubEl.textContent = "A mine got you — try again.";
+      overlay.classList.add("show");
+    }, 500);
+  }
+
+  function win() {
+    won = true;
+    stopTimer();
+    sfxWin();
+    restartBtn.textContent = "😎";
+    hintEl.textContent = "Cleared!";
+    for (var r = 0; r < ROWS; r++)
+      for (var c = 0; c < COLS; c++) {
+        var cell = board[r][c];
+        if (cell.mine && !cell.flagged) { cell.flagged = true; flagCount++; }
+      }
+    minesEl.textContent = MINES - flagCount;
+    renderBoard();
+    var newBest = false;
+    if (best === null || elapsed < best) { best = elapsed; newBest = true; localStorage.setItem("tranquil_sweep_best", String(best)); }
+    setTimeout(function () {
+      LB.finish({ game: "sweep", value: elapsed, resultTitle: "Cleared!", subtitle: newBest ? "New personal best!" : "", onPlayAgain: newGame });
+    }, 450);
+  }
+
+  function newGame() {
+    board = emptyBoard();
+    started = false; over = false; won = false;
+    revealedCount = 0; flagCount = 0; elapsed = 0;
+    stopTimer();
+    minesEl.textContent = String(MINES);
+    timeEl.textContent = "0s";
+    hintEl.textContent = "Tap to clear · hold to flag";
+    restartBtn.textContent = "🙂";
+    overlay.classList.remove("show");
+    renderBoard();
+  }
+
+  // ---- Board construction + input ----
+  var LONG_PRESS = 450, MOVE_TOL = 10;
+  function buildBoard() {
+    boardEl.style.gridTemplateColumns = "repeat(" + COLS + ", 1fr)";
+    boardEl.style.gridTemplateRows = "repeat(" + ROWS + ", 1fr)";
+    boardEl.innerHTML = "";
+    cellEls = [];
+    for (var r = 0; r < ROWS; r++) {
+      cellEls[r] = [];
+      for (var c = 0; c < COLS; c++) {
+        (function (r, c) {
+          var d = document.createElement("div");
+          d.className = "cell";
+          var pressTimer = 0, longFired = false, sx = 0, sy = 0;
+          d.addEventListener("pointerdown", function (e) {
+            if (e.button === 2) return;
+            if (over || won) return;
+            sx = e.clientX; sy = e.clientY; longFired = false;
+            if (restartBtn.textContent === "🙂") restartBtn.textContent = "😮";
+            pressTimer = setTimeout(function () { longFired = true; toggleFlag(r, c); }, LONG_PRESS);
+          });
+          d.addEventListener("pointermove", function (e) {
+            if (Math.abs(e.clientX - sx) > MOVE_TOL || Math.abs(e.clientY - sy) > MOVE_TOL) clearTimeout(pressTimer);
+          });
+          function endPress() {
+            clearTimeout(pressTimer);
+            if (!over && !won) restartBtn.textContent = "🙂";
+          }
+          d.addEventListener("pointerup", function (e) {
+            if (e.button === 2) return;
+            var wasLong = longFired;
+            endPress();
+            if (!wasLong) tapCell(r, c);
+          });
+          d.addEventListener("pointercancel", endPress);
+          d.addEventListener("pointerleave", function () { clearTimeout(pressTimer); });
+          d.addEventListener("contextmenu", function (e) { e.preventDefault(); toggleFlag(r, c); });
+          boardEl.appendChild(d);
+          cellEls[r][c] = d;
+        })(r, c);
+      }
+    }
+  }
+
+  // ---- iOS touch/gesture hardening ----
+  boardEl.addEventListener("touchstart", function (e) { e.preventDefault(); }, { passive: false });
+  boardEl.addEventListener("touchmove", function (e) { e.preventDefault(); }, { passive: false });
+  document.addEventListener("gesturestart", function (e) { e.preventDefault(); });
+  var lastTouchEnd = 0;
+  document.addEventListener("touchend", function (e) { var n = Date.now(); if (n - lastTouchEnd <= 320) e.preventDefault(); lastTouchEnd = n; }, { passive: false });
+
+  // ---- Board auto-sizing (largest square that fits) ----
+  function sizeBoard() {
+    var r = playArea.getBoundingClientRect();
+    var s = Math.max(0, Math.floor(Math.min(r.width, r.height)));
+    boardEl.style.width = s + "px";
+    boardEl.style.height = s + "px";
+  }
+  window.addEventListener("resize", sizeBoard);
+  window.addEventListener("orientationchange", function () { setTimeout(sizeBoard, 150); });
+
+  // ---- Settings / sound toggle ----
+  function updateSoundToggle() { soundToggle.textContent = muted ? "Off" : "On"; soundToggle.classList.toggle("on", !muted); }
+  soundToggle.addEventListener("click", function () {
+    muted = !muted;
+    localStorage.setItem("tranquil_muted", muted ? "1" : "0");
+    updateSoundToggle();
+    if (!muted) { audio(); tone(360, 0.04, "sine", 0.05); }
+  });
+  document.getElementById("settings-btn").addEventListener("click", function () { updateSoundToggle(); settingsOverlay.classList.add("show"); });
+  document.getElementById("settings-close").addEventListener("click", function () { settingsOverlay.classList.remove("show"); });
+  settingsOverlay.addEventListener("click", function (e) { if (e.target === settingsOverlay) settingsOverlay.classList.remove("show"); });
+
+  async function shareGame() {
+    var text = "Sweep — a calm minesweeper-style puzzle with no ads. Play it:";
+    var url = "https://pete1552.github.io/AGTest/";
+    try { if (navigator.share) { await navigator.share({ title: "Sweep — Tranquil", text: text, url: url }); return; } } catch (e) { return; }
+    try {
+      await navigator.clipboard.writeText(text + " " + url);
+      var btn = document.getElementById("settings-share"), old = btn.textContent;
+      btn.textContent = "Link copied!"; setTimeout(function () { btn.textContent = old; }, 1500);
+    } catch (e) {}
+  }
+  document.getElementById("settings-share").addEventListener("click", shareGame);
+
+  document.getElementById("lb-btn").addEventListener("click", function () { LB.open("sweep"); });
+  restartBtn.addEventListener("click", newGame);
+  document.getElementById("play-again").addEventListener("click", newGame);
+
+  // ---- Boot ----
+  buildBoard();
+  updateSoundToggle();
+  newGame();
+  sizeBoard();
+  requestAnimationFrame(sizeBoard);
+  setTimeout(sizeBoard, 300);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(sizeBoard);
+})();
+</script>
+</body>
+</html>
