@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#11151c" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Tranquil" />
+<link rel="apple-touch-icon" href="icon.png" />
+<link rel="manifest" href="manifest.json" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="shared.css" />
+<title>Runway — Tranquil</title>
+<style>
+  #board-wrap { position: relative; }
+  #board {
+    position: relative;
+    background-color: var(--panel);
+    border-radius: 14px;
+    background-image:
+      repeating-linear-gradient(to right, rgba(255,255,255,0.06) 0, rgba(255,255,255,0.06) 1px, transparent 1px, transparent calc(100%/6)),
+      repeating-linear-gradient(to bottom, rgba(255,255,255,0.06) 0, rgba(255,255,255,0.06) 1px, transparent 1px, transparent calc(100%/6));
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    overflow: visible;
+  }
+  .exit-mark {
+    position: absolute; right: -3px; width: 8px;
+    top: 33.3334%; height: 16.6666%;
+    background: var(--accent); border-radius: 5px 0 0 5px;
+    box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 70%, transparent);
+  }
+  .piece {
+    position: absolute; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+    cursor: grab; touch-action: none;
+  }
+  .piece.blocker {
+    background: var(--grid);
+    box-shadow: inset 0 2px 0 rgba(255,255,255,0.12), inset 0 -2px 0 rgba(0,0,0,0.25);
+  }
+  .piece.target {
+    background: var(--accent); z-index: 2;
+    box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 60%, transparent);
+  }
+  .piece.settling { transition: left 150ms ease, top 150ms ease; }
+  .piece.exiting { transition: left 420ms ease-in; }
+  .piece.dragging { filter: brightness(1.12); z-index: 3; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="topbar">
+    <div class="brand">
+      <a href="index.html" class="icon-btn" aria-label="Back to games">‹</a>
+      <span class="title">Runway</span>
+    </div>
+    <div class="bar-actions">
+      <button id="lb-btn" class="icon-btn" aria-label="High scores">🏆</button>
+      <button id="restart" class="icon-btn" aria-label="New puzzle">↻</button>
+      <button id="settings-btn" class="icon-btn" aria-label="Settings">⚙</button>
+    </div>
+  </header>
+  <div class="scores">
+    <div class="score-box"><div class="score-label">Moves</div><div class="score-val" id="moves">0</div></div>
+    <div class="score-box best"><div class="score-label">Best</div><div class="score-val" id="best">–</div></div>
+  </div>
+  <div class="play-area">
+    <div id="board-wrap"><div id="board"><div class="exit-mark"></div></div></div>
+  </div>
+  <div class="tap-hint" id="hint" style="text-align:center; color:var(--muted); font-size:12px; min-height:16px; margin-top:6px;">Slide the other planes clear of the runway</div>
+</div>
+
+<div id="settings-overlay" class="modal-overlay">
+  <div class="modal settings">
+    <h2>Runway</h2>
+    <div class="setting-row">
+      <span class="label">Sound</span>
+      <button id="sound-toggle" class="toggle on">On</button>
+    </div>
+    <div class="how">
+      <p class="how-title">How to play</p>
+      <p class="body">Your plane (the bright one) needs a clear path to the runway on the right. Drag any plane along its own line — horizontal ones only move sideways, vertical ones only up and down. Clear a path and slide your plane out. Fewest moves wins.</p>
+    </div>
+    <button id="settings-share" class="share">Share the game</button>
+    <button id="settings-close" class="ghost-btn">Done</button>
+  </div>
+</div>
+
+<div id="overlay" class="modal-overlay">
+  <div class="modal">
+    <h2>Cleared for takeoff!</h2>
+    <div class="final" id="final-moves">0</div>
+    <div class="final-sub" id="final-sub"></div>
+    <button id="play-again">Play again</button>
+  </div>
+</div>
+
+<script src="leaderboard.js?v=7"></script>
+<script>
+(function () {
+  "use strict";
+
+  var GRID = 6, EXIT_ROW = 2, TARGET_LEN = 2;
+  var GEN_BLOCKERS = 6, GEN_NODE_CAP = 900, GEN_MIN_DEPTH = 4, GEN_MAX_ATTEMPTS = 30;
+  var GAP = 3;
+
+  var pieces = [];   // { id, orient:'h'|'v', len, row, col, isTarget }
+  var moves = 0, solved = false;
+  var best = (function () {
+    var v = localStorage.getItem("tranquil_runway_best");
+    return v === null ? null : Number(v);
+  })();
+
+  var boardEl = document.getElementById("board");
+  var boardWrap = document.getElementById("board-wrap");
+  var playArea = document.querySelector(".play-area");
+  var movesEl = document.getElementById("moves");
+  var bestEl = document.getElementById("best");
+  var hintEl = document.getElementById("hint");
+  var overlay = document.getElementById("overlay");
+  var finalMovesEl = document.getElementById("final-moves");
+  var finalSubEl = document.getElementById("final-sub");
+  var settingsOverlay = document.getElementById("settings-overlay");
+  var soundToggle = document.getElementById("sound-toggle");
+
+  var pieceEls = {}; // id -> element
+
+  // ---- Shared sound (collection-wide mute key) ----
+  var muted = localStorage.getItem("tranquil_muted") === "1";
+  var actx = null;
+  function audio() {
+    if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { actx = null; } }
+    if (actx && actx.state === "suspended") actx.resume();
+  }
+  function tone(f, d, t, g) {
+    if (muted || !actx) return;
+    var o = actx.createOscillator(), gn = actx.createGain();
+    o.type = t || "sine"; o.frequency.value = f;
+    gn.gain.setValueAtTime(0.0001, actx.currentTime);
+    gn.gain.exponentialRampToValueAtTime(g || 0.1, actx.currentTime + 0.01);
+    gn.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + d);
+    o.connect(gn); gn.connect(actx.destination); o.start(); o.stop(actx.currentTime + d + 0.02);
+  }
+  function sfxSlide() { tone(340, 0.05, "sine", 0.05); }
+  function sfxWin() { [523, 659, 784, 1046].forEach(function (f, i) { setTimeout(function () { tone(f, 0.28, "sine", 0.11); }, i * 110); }); }
+
+  // ---- Puzzle model (mirrors the validated standalone generator/solver) ----
+  function cellsOf(p, row, col) {
+    var out = [];
+    for (var i = 0; i < p.len; i++) out.push(p.orient === "h" ? (row + "," + (col + i)) : ((row + i) + "," + col));
+    return out;
+  }
+  function occupancy(list, excludeId) {
+    var set = {};
+    list.forEach(function (p) { if (p.id === excludeId) return; cellsOf(p, p.row, p.col).forEach(function (k) { set[k] = true; }); });
+    return set;
+  }
+  function legalMoves(list) {
+    var out = [];
+    list.forEach(function (p) {
+      var occ = occupancy(list, p.id);
+      if (p.orient === "h") {
+        var c = p.col - 1;
+        while (c >= 0 && !cellsOf(p, p.row, c).some(function (k) { return occ[k]; })) { out.push({ id: p.id, row: p.row, col: c }); c--; }
+        var maxCol = GRID - p.len;
+        c = p.col + 1;
+        while (c <= maxCol && !cellsOf(p, p.row, c).some(function (k) { return occ[k]; })) { out.push({ id: p.id, row: p.row, col: c }); c++; }
+      } else {
+        var r = p.row - 1;
+        while (r >= 0 && !cellsOf(p, r, p.col).some(function (k) { return occ[k]; })) { out.push({ id: p.id, row: r, col: p.col }); r--; }
+        var maxRow = GRID - p.len;
+        r = p.row + 1;
+        while (r <= maxRow && !cellsOf(p, r, p.col).some(function (k) { return occ[k]; })) { out.push({ id: p.id, row: r, col: p.col }); r++; }
+      }
+    });
+    return out;
+  }
+  function applyMove(list, mv) { return list.map(function (p) { return p.id === mv.id ? Object.assign({}, p, { row: mv.row, col: mv.col }) : p; }); }
+  function stateKey(list) { return list.slice().sort(function (a, b) { return a.id - b.id; }).map(function (p) { return p.row + "_" + p.col; }).join("|"); }
+  function isSolvedState(list) { var t = list.filter(function (p) { return p.isTarget; })[0]; return t.col === GRID - t.len; }
+
+  function makeSolvedLayout(numBlockers) {
+    var list = [{ id: 0, orient: "h", len: TARGET_LEN, row: EXIT_ROW, col: GRID - TARGET_LEN, isTarget: true }];
+    var attempts = 0;
+    while (list.length < numBlockers + 1 && attempts < 3000) {
+      attempts++;
+      var orient = Math.random() < 0.5 ? "h" : "v";
+      var len = Math.random() < 0.6 ? 2 : 3;
+      var maxRow = orient === "v" ? GRID - len : GRID - 1;
+      var maxCol = orient === "h" ? GRID - len : GRID - 1;
+      var row = Math.floor(Math.random() * (maxRow + 1));
+      var col = Math.floor(Math.random() * (maxCol + 1));
+      var cand = { id: list.length, orient: orient, len: len, row: row, col: col, isTarget: false };
+      var occ = occupancy(list, -1);
+      var ok = true;
+      cellsOf(cand, row, col).forEach(function (k) { if (occ[k]) ok = false; });
+      if (ok) list.push(cand);
+    }
+    return list;
+  }
+
+  function bfsAll(startList, nodeCap) {
+    var startKey = stateKey(startList);
+    var depthOf = {}; depthOf[startKey] = 0;
+    var listOf = {}; listOf[startKey] = startList;
+    var frontier = [startList];
+    var depth = 0;
+    var count = 1;
+    while (frontier.length && count < nodeCap) {
+      depth++;
+      var next = [];
+      for (var i = 0; i < frontier.length; i++) {
+        var st = frontier[i];
+        var mvs = legalMoves(st);
+        for (var j = 0; j < mvs.length; j++) {
+          var ns = applyMove(st, mvs[j]);
+          var k = stateKey(ns);
+          if (!(k in depthOf)) {
+            depthOf[k] = depth; listOf[k] = ns; next.push(ns); count++;
+            if (count >= nodeCap) break;
+          }
+        }
+        if (count >= nodeCap) break;
+      }
+      frontier = next;
+    }
+    return { depthOf: depthOf, listOf: listOf };
+  }
+
+  // The win condition only cares about the target piece's column — blocker
+  // positions are free — so many different states count as "solved". Distance
+  // from one arbitrary reference solved layout is NOT the true solve length;
+  // it overstates difficulty by ignoring closer alternate win states. This
+  // does a second, multi-source BFS seeded from every win state actually
+  // found in the explored component, giving the true shortest solve length.
+  function trueDistances(listOf, winKeys) {
+    var dist = {};
+    var frontier = winKeys.slice();
+    winKeys.forEach(function (k) { dist[k] = 0; });
+    var depth = 0;
+    while (frontier.length) {
+      depth++;
+      var next = [];
+      for (var i = 0; i < frontier.length; i++) {
+        var st = listOf[frontier[i]];
+        var mvs = legalMoves(st);
+        for (var j = 0; j < mvs.length; j++) {
+          var ns = applyMove(st, mvs[j]);
+          var nk = stateKey(ns);
+          if (!(nk in dist) && (nk in listOf)) { dist[nk] = depth; next.push(nk); }
+        }
+      }
+      frontier = next;
+    }
+    return dist;
+  }
+
+  // One attempt's worth of work. Returns a puzzle on success, or null to keep trying.
+  function generatePuzzleAttempt() {
+    var seed = makeSolvedLayout(GEN_BLOCKERS); // one known win state, to discover a connected component
+    var res = bfsAll(seed, GEN_NODE_CAP);
+    var winKeys = [];
+    for (var k in res.listOf) if (isSolvedState(res.listOf[k])) winKeys.push(k);
+    var trueDist = trueDistances(res.listOf, winKeys);
+    var maxTrue = -1;
+    for (var k3 in trueDist) if (trueDist[k3] > maxTrue) maxTrue = trueDist[k3];
+    if (maxTrue < GEN_MIN_DEPTH) return null;
+    var floor = Math.max(GEN_MIN_DEPTH, maxTrue - 3);
+    var pool = [];
+    for (var k2 in trueDist) if (trueDist[k2] >= floor) pool.push(k2);
+    var chosen = pool[Math.floor(Math.random() * pool.length)];
+    return res.listOf[chosen];
+  }
+
+  // Cheap fallback scramble (no BFS) for the rare case every timed-out attempt
+  // missed the difficulty floor — never hand back an already-solved board.
+  function blindScramble(list, count) {
+    for (var i = 0; i < count; i++) {
+      var mvs = legalMoves(list);
+      if (!mvs.length) break;
+      list = applyMove(list, mvs[Math.floor(Math.random() * mvs.length)]);
+    }
+    return list;
+  }
+
+  // Runs attempts one per event-loop tick (instead of a tight synchronous loop)
+  // so a run of unlucky retries never freezes the page in a single long block.
+  function generatePuzzleAsync(done) {
+    var attempt = 0;
+    function tick() {
+      var result = generatePuzzleAttempt();
+      if (result) { done(result); return; }
+      attempt++;
+      if (attempt >= GEN_MAX_ATTEMPTS) { done(blindScramble(makeSolvedLayout(GEN_BLOCKERS), 10)); return; }
+      setTimeout(tick, 0);
+    }
+    tick();
+  }
+
+  // ---- Rendering ----
+  function cellPitch() {
+    var pad = 6;
+    return (boardEl.clientWidth - pad * 2) / GRID;
+  }
+  function layoutPiece(el, p, animate) {
+    var pad = 6, pitch = cellPitch();
+    el.classList.toggle("settling", !!animate);
+    if (p.orient === "h") {
+      el.style.width = (p.len * pitch - GAP) + "px";
+      el.style.height = (pitch - GAP) + "px";
+      el.style.left = (pad + p.col * pitch + GAP / 2) + "px";
+      el.style.top = (pad + p.row * pitch + GAP / 2) + "px";
+    } else {
+      el.style.width = (pitch - GAP) + "px";
+      el.style.height = (p.len * pitch - GAP) + "px";
+      el.style.left = (pad + p.col * pitch + GAP / 2) + "px";
+      el.style.top = (pad + p.row * pitch + GAP / 2) + "px";
+    }
+  }
+  function buildPieces() {
+    Object.keys(pieceEls).forEach(function (id) { pieceEls[id].remove(); });
+    pieceEls = {};
+    pieces.forEach(function (p) {
+      var el = document.createElement("div");
+      el.className = "piece " + (p.isTarget ? "target" : "blocker");
+      if (p.isTarget) el.textContent = "✈️";
+      boardEl.appendChild(el);
+      pieceEls[p.id] = el;
+      attachDrag(el, p.id);
+      layoutPiece(el, p, false);
+    });
+  }
+  function renderAll(animate) {
+    pieces.forEach(function (p) { layoutPiece(pieceEls[p.id], p, animate); });
+  }
+
+  function pieceById(id) { return pieces.filter(function (p) { return p.id === id; })[0]; }
+
+  // ---- Drag & drop (axis-constrained slide, clamped to the currently free range) ----
+  var drag = null;
+  function attachDrag(el, id) {
+    el.addEventListener("pointerdown", function (e) {
+      if (solved) return;
+      e.preventDefault();
+      audio();
+      var p = pieceById(id);
+      var occ = occupancy(pieces, p.id);
+      var lo, hi;
+      if (p.orient === "h") {
+        lo = p.col; while (lo > 0 && !cellsOf(p, p.row, lo - 1).some(function (k) { return occ[k]; })) lo--;
+        hi = p.col; var maxCol = GRID - p.len;
+        while (hi < maxCol && !cellsOf(p, p.row, hi + 1).some(function (k) { return occ[k]; })) hi++;
+      } else {
+        lo = p.row; while (lo > 0 && !cellsOf(p, lo - 1, p.col).some(function (k) { return occ[k]; })) lo--;
+        hi = p.row; var maxRow = GRID - p.len;
+        while (hi < maxRow && !cellsOf(p, hi + 1, p.col).some(function (k) { return occ[k]; })) hi++;
+      }
+      drag = { id: id, orient: p.orient, startX: e.clientX, startY: e.clientY, origin: p.orient === "h" ? p.col : p.row, lo: lo, hi: hi, pitch: cellPitch(), finalPos: p.orient === "h" ? p.col : p.row };
+      el.classList.add("dragging");
+      document.addEventListener("pointermove", onMove);
+      document.addEventListener("pointerup", onUp, { once: true });
+    });
+  }
+  function onMove(e) {
+    if (!drag) return;
+    var el = pieceEls[drag.id];
+    var deltaPx = drag.orient === "h" ? (e.clientX - drag.startX) : (e.clientY - drag.startY);
+    var proposed = drag.origin + deltaPx / drag.pitch;
+    proposed = Math.max(drag.lo, Math.min(drag.hi, proposed));
+    drag.finalPos = proposed;
+    var pad = 6, pitch = drag.pitch;
+    if (drag.orient === "h") el.style.left = (pad + proposed * pitch + GAP / 2) + "px";
+    else el.style.top = (pad + proposed * pitch + GAP / 2) + "px";
+  }
+  function onUp() {
+    document.removeEventListener("pointermove", onMove);
+    if (!drag) return;
+    var el = pieceEls[drag.id];
+    el.classList.remove("dragging");
+    var snapped = Math.round(drag.finalPos);
+    var p = pieceById(drag.id);
+    var changed = snapped !== drag.origin;
+    if (drag.orient === "h") p.col = snapped; else p.row = snapped;
+    layoutPiece(el, p, true);
+    if (changed) {
+      moves++;
+      movesEl.textContent = moves;
+      sfxSlide();
+      if (p.isTarget && isSolvedState(pieces)) { setTimeout(win, 160); }
+    }
+    drag = null;
+  }
+
+  function win() {
+    solved = true;
+    var t = pieces.filter(function (p) { return p.isTarget; })[0];
+    var el = pieceEls[t.id];
+    el.classList.add("exiting");
+    var pitch = cellPitch();
+    el.style.left = (boardEl.clientWidth + 40) + "px";
+    sfxWin();
+    hintEl.textContent = "Cleared for takeoff!";
+    var newBest = false;
+    if (best === null || moves < best) { best = moves; newBest = true; localStorage.setItem("tranquil_runway_best", String(best)); }
+    updateBestLabel();
+    setTimeout(function () {
+      LB.finish({ game: "runway", value: moves, resultTitle: "Cleared for takeoff!", subtitle: newBest ? "New personal best!" : "", onPlayAgain: newGame });
+    }, 500);
+  }
+
+  function updateBestLabel() { bestEl.textContent = best === null ? "–" : best; }
+
+  function newGame() {
+    solved = false;
+    moves = 0;
+    movesEl.textContent = "0";
+    overlay.classList.remove("show");
+    hintEl.textContent = "Shuffling the apron…";
+    requestAnimationFrame(function () {
+      generatePuzzleAsync(function (result) {
+        pieces = result;
+        buildPieces();
+        hintEl.textContent = "Slide the other planes clear of the runway";
+        updateBestLabel();
+      });
+    });
+  }
+
+  // ---- iOS touch/gesture hardening ----
+  boardEl.addEventListener("touchstart", function (e) { e.preventDefault(); }, { passive: false });
+  boardEl.addEventListener("touchmove", function (e) { e.preventDefault(); }, { passive: false });
+  document.addEventListener("gesturestart", function (e) { e.preventDefault(); });
+  var lastTouchEnd = 0;
+  document.addEventListener("touchend", function (e) { var n = Date.now(); if (n - lastTouchEnd <= 320) e.preventDefault(); lastTouchEnd = n; }, { passive: false });
+
+  // ---- Board auto-sizing (largest square that fits) ----
+  function sizeBoard() {
+    var r = playArea.getBoundingClientRect();
+    var s = Math.max(0, Math.floor(Math.min(r.width, r.height)));
+    boardWrap.style.width = s + "px";
+    boardWrap.style.height = s + "px";
+    boardEl.style.width = s + "px";
+    boardEl.style.height = s + "px";
+    renderAll(false);
+  }
+  window.addEventListener("resize", sizeBoard);
+  window.addEventListener("orientationchange", function () { setTimeout(sizeBoard, 150); });
+
+  // ---- Settings / sound toggle ----
+  function updateSoundToggle() { soundToggle.textContent = muted ? "Off" : "On"; soundToggle.classList.toggle("on", !muted); }
+  soundToggle.addEventListener("click", function () {
+    muted = !muted;
+    localStorage.setItem("tranquil_muted", muted ? "1" : "0");
+    updateSoundToggle();
+    if (!muted) { audio(); tone(340, 0.05, "sine", 0.05); }
+  });
+  document.getElementById("settings-btn").addEventListener("click", function () { updateSoundToggle(); settingsOverlay.classList.add("show"); });
+  document.getElementById("settings-close").addEventListener("click", function () { settingsOverlay.classList.remove("show"); });
+  settingsOverlay.addEventListener("click", function (e) { if (e.target === settingsOverlay) settingsOverlay.classList.remove("show"); });
+
+  async function shareGame() {
+    var text = "Runway — a calm sliding-puzzle with no ads. Play it:";
+    var url = "https://pete1552.github.io/AGTest/";
+    try { if (navigator.share) { await navigator.share({ title: "Runway — Tranquil", text: text, url: url }); return; } } catch (e) { return; }
+    try {
+      await navigator.clipboard.writeText(text + " " + url);
+      var btn = document.getElementById("settings-share"), old = btn.textContent;
+      btn.textContent = "Link copied!"; setTimeout(function () { btn.textContent = old; }, 1500);
+    } catch (e) {}
+  }
+  document.getElementById("settings-share").addEventListener("click", shareGame);
+
+  document.getElementById("lb-btn").addEventListener("click", function () { LB.open("runway"); });
+  document.getElementById("restart").addEventListener("click", newGame);
+  document.getElementById("play-again").addEventListener("click", newGame);
+
+  // ---- Boot ----
+  updateSoundToggle();
+  sizeBoard();
+  newGame();
+  requestAnimationFrame(sizeBoard);
+  setTimeout(sizeBoard, 300);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(sizeBoard);
+})();
+</script>
+</body>
+</html>

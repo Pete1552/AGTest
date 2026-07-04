@@ -28,7 +28,8 @@
     breaker:{ name: "Breaker", dir: "desc", fmt: function (v) { return String(v); } },
     aegis:  { name: "Aegis",   dir: "desc", fmt: function (v) { return String(v); } },
     sweep:  { name: "Sweep",   dir: "asc",  fmt: function (v) { return v + "s"; } },
-    nibble: { name: "Nibble",  dir: "desc", fmt: function (v) { return String(v); } }
+    nibble: { name: "Nibble",  dir: "desc", fmt: function (v) { return String(v); } },
+    runway: { name: "Runway",  dir: "asc",  fmt: function (v) { return v + " moves"; } }
   };
   var MAX = 10;
 
