@@ -27,7 +27,8 @@
     lantern:{ name: "Lantern", dir: "asc", fmt: function (v) { return v + "s"; } },
     breaker:{ name: "Breaker", dir: "desc", fmt: function (v) { return String(v); } },
     aegis:  { name: "Aegis",   dir: "desc", fmt: function (v) { return String(v); } },
-    sweep:  { name: "Sweep",   dir: "asc",  fmt: function (v) { return v + "s"; } }
+    sweep:  { name: "Sweep",   dir: "asc",  fmt: function (v) { return v + "s"; } },
+    nibble: { name: "Nibble",  dir: "desc", fmt: function (v) { return String(v); } }
   };
   var MAX = 10;
 

@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#11151c" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Tranquil" />
+<link rel="apple-touch-icon" href="icon.png" />
+<link rel="manifest" href="manifest.json" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="shared.css" />
+<title>Nibble — Tranquil</title>
+<style>
+  #board {
+    background: var(--panel);
+    border-radius: 14px;
+    padding: 6px;
+    display: grid;
+    gap: 1px;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+  }
+  .cell { position: relative; background: var(--cell-empty); border-radius: 3px; }
+  .cell.snake-body { background: color-mix(in srgb, var(--accent) 55%, var(--cell-empty)); border-radius: 4px; }
+  .cell.snake-head { background: var(--accent); border-radius: 5px; box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 60%, transparent); }
+  .cell.food { background: var(--cell-empty); }
+  .cell.food::after {
+    content: ""; position: absolute; inset: 22%; border-radius: 50%;
+    background: #e8735c; box-shadow: 0 0 6px rgba(232,115,92,0.7);
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="topbar">
+    <div class="brand">
+      <a href="index.html" class="icon-btn" aria-label="Back to games">‹</a>
+      <span class="title">Nibble</span>
+    </div>
+    <div class="bar-actions">
+      <button id="lb-btn" class="icon-btn" aria-label="High scores">🏆</button>
+      <button id="restart" class="icon-btn" aria-label="New game">↻</button>
+      <button id="settings-btn" class="icon-btn" aria-label="Settings">⚙</button>
+    </div>
+  </header>
+  <div class="scores">
+    <div class="score-box"><div class="score-label">Score</div><div class="score-val" id="score">0</div></div>
+    <div class="score-box best"><div class="score-label">Best</div><div class="score-val" id="best">0</div></div>
+  </div>
+  <div class="play-area"><div id="board"></div></div>
+  <div class="tap-hint" id="hint" style="text-align:center; color:var(--muted); font-size:12px; min-height:16px; margin-top:6px;">Swipe or use arrow keys to steer</div>
+</div>
+
+<div id="settings-overlay" class="modal-overlay">
+  <div class="modal settings">
+    <h2>Nibble</h2>
+    <div class="setting-row">
+      <span class="label">Sound</span>
+      <button id="sound-toggle" class="toggle on">On</button>
+    </div>
+    <div class="how">
+      <p class="how-title">How to play</p>
+      <p class="body">Swipe (or use arrow keys) to steer. Eat the dots to grow — don't hit a wall or yourself. Every few dots the board speeds up a little.</p>
+    </div>
+    <button id="settings-share" class="share">Share the game</button>
+    <button id="settings-close" class="ghost-btn">Done</button>
+  </div>
+</div>
+
+<div id="overlay" class="modal-overlay">
+  <div class="modal">
+    <h2 id="result-title">Game over</h2>
+    <div class="final" id="final-score">0</div>
+    <div class="final-sub" id="final-sub"></div>
+    <button id="play-again">Play again</button>
+  </div>
+</div>
+
+<script src="leaderboard.js?v=6"></script>
+<script>
+(function () {
+  "use strict";
+
+  var GRID = 13;
+  var TICK_START = 170, TICK_MIN = 80, TICK_STEP = 5, SPEEDUP_EVERY = 4;
+
+  var snake, dir, queuedDir, food, score, over, won, tickMs, tickTimer;
+  var best = Number(localStorage.getItem("tranquil_nibble_best") || 0) || 0;
+
+  var boardEl = document.getElementById("board");
+  var playArea = document.querySelector(".play-area");
+  var scoreEl = document.getElementById("score");
+  var bestEl = document.getElementById("best");
+  var hintEl = document.getElementById("hint");
+  var overlay = document.getElementById("overlay");
+  var resultTitleEl = document.getElementById("result-title");
+  var finalScoreEl = document.getElementById("final-score");
+  var finalSubEl = document.getElementById("final-sub");
+  var settingsOverlay = document.getElementById("settings-overlay");
+  var soundToggle = document.getElementById("sound-toggle");
+
+  var cellEls = [];
+
+  // ---- Shared sound (collection-wide mute key) ----
+  var muted = localStorage.getItem("tranquil_muted") === "1";
+  var actx = null;
+  function audio() {
+    if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { actx = null; } }
+    if (actx && actx.state === "suspended") actx.resume();
+  }
+  function tone(f, d, t, g) {
+    if (muted || !actx) return;
+    var o = actx.createOscillator(), gn = actx.createGain();
+    o.type = t || "sine"; o.frequency.value = f;
+    gn.gain.setValueAtTime(0.0001, actx.currentTime);
+    gn.gain.exponentialRampToValueAtTime(g || 0.1, actx.currentTime + 0.01);
+    gn.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + d);
+    o.connect(gn); gn.connect(actx.destination); o.start(); o.stop(actx.currentTime + d + 0.02);
+  }
+  function sfxEat() { tone(560, 0.05, "sine", 0.08); }
+  function sfxWin() { [523, 659, 784, 1046].forEach(function (f, i) { setTimeout(function () { tone(f, 0.28, "sine", 0.11); }, i * 110); }); }
+  function sfxOver() { [280, 200, 130].forEach(function (f, i) { setTimeout(function () { tone(f, 0.3, "sawtooth", 0.1); }, i * 120); }); }
+
+  // ---- Board DOM ----
+  function buildBoard() {
+    boardEl.style.gridTemplateColumns = "repeat(" + GRID + ", 1fr)";
+    boardEl.style.gridTemplateRows = "repeat(" + GRID + ", 1fr)";
+    boardEl.innerHTML = "";
+    cellEls = [];
+    for (var r = 0; r < GRID; r++) {
+      cellEls[r] = [];
+      for (var c = 0; c < GRID; c++) {
+        var d = document.createElement("div");
+        d.className = "cell";
+        boardEl.appendChild(d);
+        cellEls[r][c] = d;
+      }
+    }
+  }
+
+  function render() {
+    for (var r = 0; r < GRID; r++) for (var c = 0; c < GRID; c++) cellEls[r][c].className = "cell";
+    if (food) cellEls[food.r][food.c].className = "cell food";
+    for (var i = snake.length - 1; i >= 0; i--) {
+      var seg = snake[i];
+      cellEls[seg.r][seg.c].className = "cell " + (i === 0 ? "snake-head" : "snake-body");
+    }
+  }
+
+  // ---- Game logic ----
+  function oppositeDir(a, b) { return a.dr === -b.dr && a.dc === -b.dc; }
+
+  function occupied() {
+    var s = {};
+    snake.forEach(function (p) { s[p.r + "," + p.c] = true; });
+    return s;
+  }
+
+  function spawnFood() {
+    var occ = occupied();
+    var empty = [];
+    for (var r = 0; r < GRID; r++)
+      for (var c = 0; c < GRID; c++)
+        if (!occ[r + "," + c]) empty.push({ r: r, c: c });
+    if (!empty.length) return false;
+    food = empty[Math.floor(Math.random() * empty.length)];
+    return true;
+  }
+
+  function setDirection(nd) {
+    if (over || won) return;
+    var ref = queuedDir || dir;
+    if (!oppositeDir(nd, ref)) queuedDir = nd;
+  }
+
+  function tick() {
+    if (over || won) return;
+    if (queuedDir) { dir = queuedDir; queuedDir = null; }
+    var head = snake[0];
+    var nr = head.r + dir.dr, nc = head.c + dir.dc;
+    if (nr < 0 || nr >= GRID || nc < 0 || nc >= GRID) { endGame(false); return; }
+    var eating = food && nr === food.r && nc === food.c;
+    for (var i = 0; i < snake.length; i++) {
+      var seg = snake[i];
+      if (seg.r === nr && seg.c === nc) {
+        if (!eating && i === snake.length - 1) continue;
+        endGame(false); return;
+      }
+    }
+    snake.unshift({ r: nr, c: nc });
+    if (eating) {
+      score++;
+      scoreEl.textContent = score;
+      audio(); sfxEat();
+      var placed = spawnFood();
+      if (!placed) { endGame(true); return; }
+      if (score % SPEEDUP_EVERY === 0 && tickMs > TICK_MIN) {
+        tickMs = Math.max(TICK_MIN, tickMs - TICK_STEP);
+        restartTimer();
+      }
+    } else {
+      snake.pop();
+    }
+    render();
+  }
+
+  function restartTimer() {
+    clearInterval(tickTimer);
+    tickTimer = setInterval(tick, tickMs);
+  }
+
+  function endGame(isWin) {
+    won = isWin; over = !isWin;
+    clearInterval(tickTimer);
+    render();
+    if (isWin) sfxWin(); else sfxOver();
+    var newBest = false;
+    if (score > best) { best = score; newBest = true; localStorage.setItem("tranquil_nibble_best", String(best)); bestEl.textContent = best; }
+    hintEl.textContent = isWin ? "Board cleared!" : "Game over";
+    setTimeout(function () {
+      LB.finish({
+        game: "nibble", value: score,
+        resultTitle: isWin ? "Board cleared!" : "Game over",
+        subtitle: isWin ? "You filled the whole board!" : (newBest ? "New personal best!" : ""),
+        onPlayAgain: newGame
+      });
+    }, 450);
+  }
+
+  function newGame() {
+    var mid = Math.floor(GRID / 2);
+    snake = [{ r: mid, c: mid }, { r: mid, c: mid - 1 }, { r: mid, c: mid - 2 }];
+    dir = { dr: 0, dc: 1 };
+    queuedDir = null;
+    score = 0; over = false; won = false;
+    tickMs = TICK_START;
+    scoreEl.textContent = "0";
+    bestEl.textContent = best;
+    hintEl.textContent = "Swipe or use arrow keys to steer";
+    overlay.classList.remove("show");
+    spawnFood();
+    render();
+    restartTimer();
+  }
+
+  // ---- Input: keyboard ----
+  window.addEventListener("keydown", function (e) {
+    var k = e.key;
+    if (k === "ArrowUp" || k === "w" || k === "W") setDirection({ dr: -1, dc: 0 });
+    else if (k === "ArrowDown" || k === "s" || k === "S") setDirection({ dr: 1, dc: 0 });
+    else if (k === "ArrowLeft" || k === "a" || k === "A") setDirection({ dr: 0, dc: -1 });
+    else if (k === "ArrowRight" || k === "d" || k === "D") setDirection({ dr: 0, dc: 1 });
+    else return;
+    audio();
+    e.preventDefault();
+  });
+
+  // ---- Input: swipe (drag-to-steer, re-anchors after each registered swipe) ----
+  var SWIPE_THRESHOLD = 22;
+  var trackingId = null, sx = 0, sy = 0;
+  boardEl.addEventListener("pointerdown", function (e) {
+    audio();
+    trackingId = e.pointerId; sx = e.clientX; sy = e.clientY;
+  });
+  boardEl.addEventListener("pointermove", function (e) {
+    if (trackingId === null || e.pointerId !== trackingId) return;
+    var dx = e.clientX - sx, dy = e.clientY - sy;
+    var adx = Math.abs(dx), ady = Math.abs(dy);
+    if (Math.max(adx, ady) < SWIPE_THRESHOLD) return;
+    if (adx > ady) setDirection({ dr: 0, dc: dx > 0 ? 1 : -1 });
+    else setDirection({ dr: dy > 0 ? 1 : -1, dc: 0 });
+    sx = e.clientX; sy = e.clientY;
+  });
+  function endTracking(e) { if (e.pointerId === trackingId) trackingId = null; }
+  boardEl.addEventListener("pointerup", endTracking);
+  boardEl.addEventListener("pointercancel", endTracking);
+
+  // ---- iOS touch/gesture hardening ----
+  boardEl.addEventListener("touchstart", function (e) { e.preventDefault(); }, { passive: false });
+  boardEl.addEventListener("touchmove", function (e) { e.preventDefault(); }, { passive: false });
+  document.addEventListener("gesturestart", function (e) { e.preventDefault(); });
+  var lastTouchEnd = 0;
+  document.addEventListener("touchend", function (e) { var n = Date.now(); if (n - lastTouchEnd <= 320) e.preventDefault(); lastTouchEnd = n; }, { passive: false });
+
+  // ---- Board auto-sizing (largest square that fits) ----
+  function sizeBoard() {
+    var r = playArea.getBoundingClientRect();
+    var s = Math.max(0, Math.floor(Math.min(r.width, r.height)));
+    boardEl.style.width = s + "px";
+    boardEl.style.height = s + "px";
+  }
+  window.addEventListener("resize", sizeBoard);
+  window.addEventListener("orientationchange", function () { setTimeout(sizeBoard, 150); });
+
+  // ---- Settings / sound toggle ----
+  function updateSoundToggle() { soundToggle.textContent = muted ? "Off" : "On"; soundToggle.classList.toggle("on", !muted); }
+  soundToggle.addEventListener("click", function () {
+    muted = !muted;
+    localStorage.setItem("tranquil_muted", muted ? "1" : "0");
+    updateSoundToggle();
+    if (!muted) { audio(); tone(560, 0.05, "sine", 0.08); }
+  });
+  document.getElementById("settings-btn").addEventListener("click", function () { updateSoundToggle(); settingsOverlay.classList.add("show"); });
+  document.getElementById("settings-close").addEventListener("click", function () { settingsOverlay.classList.remove("show"); });
+  settingsOverlay.addEventListener("click", function (e) { if (e.target === settingsOverlay) settingsOverlay.classList.remove("show"); });
+
+  async function shareGame() {
+    var text = "Nibble — a calm snake-style puzzle with no ads. Play it:";
+    var url = "https://pete1552.github.io/AGTest/";
+    try { if (navigator.share) { await navigator.share({ title: "Nibble — Tranquil", text: text, url: url }); return; } } catch (e) { return; }
+    try {
+      await navigator.clipboard.writeText(text + " " + url);
+      var btn = document.getElementById("settings-share"), old = btn.textContent;
+      btn.textContent = "Link copied!"; setTimeout(function () { btn.textContent = old; }, 1500);
+    } catch (e) {}
+  }
+  document.getElementById("settings-share").addEventListener("click", shareGame);
+
+  document.getElementById("lb-btn").addEventListener("click", function () { LB.open("nibble"); });
+  document.getElementById("restart").addEventListener("click", newGame);
+  document.getElementById("play-again").addEventListener("click", newGame);
+
+  // ---- Boot ----
+  buildBoard();
+  updateSoundToggle();
+  newGame();
+  sizeBoard();
+  requestAnimationFrame(sizeBoard);
+  setTimeout(sizeBoard, 300);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(sizeBoard);
+})();
+</script>
+</body>
+</html>
