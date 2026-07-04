@@ -103,7 +103,7 @@
   </div>
 </div>
 
-<script src="leaderboard.js?v=7"></script>
+<script src="leaderboard.js?v=8"></script>
 <script>
 (function () {
   "use strict";
@@ -113,9 +113,9 @@
   var GAP = 3;
 
   var pieces = [];   // { id, orient:'h'|'v', len, row, col, isTarget }
-  var moves = 0, solved = false;
+  var moves = 0, solved = false, par = 0;
   var best = (function () {
-    var v = localStorage.getItem("tranquil_runway_best");
+    var v = localStorage.getItem("tranquil_runway_best_v2");
     return v === null ? null : Number(v);
   })();
 
@@ -277,7 +277,7 @@
     var pool = [];
     for (var k2 in trueDist) if (trueDist[k2] >= floor) pool.push(k2);
     var chosen = pool[Math.floor(Math.random() * pool.length)];
-    return res.listOf[chosen];
+    return { pieces: res.listOf[chosen], par: trueDist[chosen] };
   }
 
   // Cheap fallback scramble (no BFS) for the rare case every timed-out attempt
@@ -291,6 +291,19 @@
     return list;
   }
 
+  // Par for the rare fallback path: explore forward from the exact scrambled
+  // state (Runway's slide moves are reversible, so this is a true distance,
+  // not an overstated one) and take the closest win state actually found.
+  function parForFallback(pieces) {
+    var res = bfsAll(pieces, GEN_NODE_CAP);
+    var min = -1;
+    for (var k in res.listOf) {
+      if (!isSolvedState(res.listOf[k])) continue;
+      if (min === -1 || res.depthOf[k] < min) min = res.depthOf[k];
+    }
+    return min === -1 ? 0 : min; // couldn't confirm a distance: don't penalize the player for it
+  }
+
   // Runs attempts one per event-loop tick (instead of a tight synchronous loop)
   // so a run of unlucky retries never freezes the page in a single long block.
   function generatePuzzleAsync(done) {
@@ -299,7 +312,11 @@
       var result = generatePuzzleAttempt();
       if (result) { done(result); return; }
       attempt++;
-      if (attempt >= GEN_MAX_ATTEMPTS) { done(blindScramble(makeSolvedLayout(GEN_BLOCKERS), 10)); return; }
+      if (attempt >= GEN_MAX_ATTEMPTS) {
+        var pieces = blindScramble(makeSolvedLayout(GEN_BLOCKERS), 10);
+        done({ pieces: pieces, par: parForFallback(pieces) });
+        return;
+      }
       setTimeout(tick, 0);
     }
     tick();
@@ -408,15 +425,20 @@
     el.style.left = (boardEl.clientWidth + 40) + "px";
     sfxWin();
     hintEl.textContent = "Cleared for takeoff!";
+    var overPar = Math.max(0, moves - par);
     var newBest = false;
-    if (best === null || moves < best) { best = moves; newBest = true; localStorage.setItem("tranquil_runway_best", String(best)); }
+    if (best === null || overPar < best) { best = overPar; newBest = true; localStorage.setItem("tranquil_runway_best_v2", String(best)); }
     updateBestLabel();
     setTimeout(function () {
-      LB.finish({ game: "runway", value: moves, resultTitle: "Cleared for takeoff!", subtitle: newBest ? "New personal best!" : "", onPlayAgain: newGame });
+      LB.finish({
+        game: "runway", value: overPar, resultTitle: "Cleared for takeoff!",
+        subtitle: overPar === 0 ? "Perfect solve — matched the minimum!" : moves + " moves (" + par + " was the minimum)",
+        onPlayAgain: newGame
+      });
     }, 500);
   }
 
-  function updateBestLabel() { bestEl.textContent = best === null ? "–" : best; }
+  function updateBestLabel() { bestEl.textContent = best === null ? "–" : (best === 0 ? "Perfect" : "+" + best); }
 
   function newGame() {
     solved = false;
@@ -426,7 +448,8 @@
     hintEl.textContent = "Shuffling the apron…";
     requestAnimationFrame(function () {
       generatePuzzleAsync(function (result) {
-        pieces = result;
+        pieces = result.pieces;
+        par = result.par;
         buildPieces();
         hintEl.textContent = "Slide the other planes clear of the runway";
         updateBestLabel();

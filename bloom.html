@@ -120,18 +120,20 @@
   </div>
 </div>
 
-<script src="leaderboard.js?v=7"></script>
+<script src="leaderboard.js?v=8"></script>
 <script>
 (function () {
   "use strict";
 
   const GRID = 9;
-  const PAR = 25;
   const COLORS = ["#5dd6c0", "#f2b35e", "#7aa2f7", "#e06c9f", "#9ece6a", "#bb9af7"];
-  const BEST_KEY = "tranquil_bloom_best";
+  const BEST_KEY = "tranquil_bloom_best_v2";
 
   let grid = [];            // GRID x GRID of color index
   let moves = 0;
+  let par = 0;              // best-effort minimum for THIS board (Flood-It has no
+                             // cheap exact solver at this size, so this is an
+                             // estimate from two greedy heuristics, not a proof)
   let best = (function () {
     const v = localStorage.getItem(BEST_KEY);
     return v === null ? null : Number(v);
@@ -211,6 +213,83 @@
     return { cells, color: target, seen };
   }
 
+  // ---- Par estimator: Flood-It has no cheap exact solver at 9x9/6 colours
+  // (it's NP-hard in general), so this runs two greedy heuristics and takes
+  // whichever does better, as a consistent (if not provably optimal) baseline
+  // so different random boards are comparable on the leaderboard. ----
+  function territoryOf(g) {
+    const target = g[0][0];
+    const seen = Array.from({ length: GRID }, () => Array(GRID).fill(false));
+    const stack = [[0, 0]];
+    seen[0][0] = true;
+    const cells = [[0, 0]];
+    while (stack.length) {
+      const [r, c] = stack.pop();
+      const nb = [[r - 1, c], [r + 1, c], [r, c - 1], [r, c + 1]];
+      for (const [nr, nc] of nb) {
+        if (nr < 0 || nr >= GRID || nc < 0 || nc >= GRID) continue;
+        if (seen[nr][nc] || g[nr][nc] !== target) continue;
+        seen[nr][nc] = true;
+        stack.push([nr, nc]);
+        cells.push([nr, nc]);
+      }
+    }
+    return { cells, color: target };
+  }
+  function applyColorOf(g, cells, color) {
+    const ng = g.map((row) => row.slice());
+    for (const [r, c] of cells) ng[r][c] = color;
+    return ng;
+  }
+  function isWonOf(g) {
+    const first = g[0][0];
+    for (let r = 0; r < GRID; r++) for (let c = 0; c < GRID; c++) if (g[r][c] !== first) return false;
+    return true;
+  }
+  // 1-ply greedy: pick whichever colour leaves the largest territory.
+  function greedyPar1(startGrid) {
+    let g = startGrid, moves = 0;
+    while (!isWonOf(g) && moves < 80) {
+      const terr = territoryOf(g);
+      let bestColor = -1, bestSize = -1;
+      for (let c = 0; c < COLORS.length; c++) {
+        if (c === terr.color) continue;
+        const size = territoryOf(applyColorOf(g, terr.cells, c)).cells.length;
+        if (size > bestSize) { bestSize = size; bestColor = c; }
+      }
+      g = applyColorOf(g, terr.cells, bestColor);
+      moves++;
+    }
+    return moves;
+  }
+  // 2-ply greedy: look one extra move ahead before committing.
+  function greedyPar2(startGrid) {
+    let g = startGrid, moves = 0;
+    while (!isWonOf(g) && moves < 80) {
+      const terr = territoryOf(g);
+      let bestColor = -1, bestScore = -1;
+      for (let c1 = 0; c1 < COLORS.length; c1++) {
+        if (c1 === terr.color) continue;
+        const g1 = applyColorOf(g, terr.cells, c1);
+        if (isWonOf(g1)) { bestColor = c1; bestScore = Infinity; break; }
+        const terr1 = territoryOf(g1);
+        let best2 = -1;
+        for (let c2 = 0; c2 < COLORS.length; c2++) {
+          if (c2 === terr1.color) continue;
+          const size = territoryOf(applyColorOf(g1, terr1.cells, c2)).cells.length;
+          if (size > best2) best2 = size;
+        }
+        if (best2 > bestScore) { bestScore = best2; bestColor = c1; }
+      }
+      g = applyColorOf(g, terr.cells, bestColor);
+      moves++;
+    }
+    return moves;
+  }
+  function estimatePar(startGrid) {
+    return Math.min(greedyPar1(startGrid), greedyPar2(startGrid));
+  }
+
   function renderBoard() {
     const terr = territory();
     for (let r = 0; r < GRID; r++) {
@@ -273,18 +352,20 @@
 
   function winGame() {
     won = true;
+    const overPar = Math.max(0, moves - par);
     let newBest = false;
-    if (best === null || moves < best) {
-      best = moves;
+    if (best === null || overPar < best) {
+      best = overPar;
       newBest = true;
       localStorage.setItem(BEST_KEY, String(best));
     }
-    bestEl.textContent = best;
+    bestEl.textContent = best === 0 ? "Perfect" : "+" + best;
     document.getElementById("final-moves").textContent = moves;
-    document.getElementById("final-sub").textContent =
-      newBest ? "New best!" : "Best: " + best + " moves";
+    document.getElementById("final-sub").textContent = overPar === 0
+      ? "Perfect solve — matched our best estimate!"
+      : moves + " moves (~" + par + " was our best estimate)";
     setTimeout(sfxWin, 60);
-    setTimeout(() => LB.finish({ game: 'bloom', value: moves, resultTitle: 'Filled!', onPlayAgain: newGame }), 360);
+    setTimeout(() => LB.finish({ game: 'bloom', value: overPar, resultTitle: 'Filled!', onPlayAgain: newGame }), 360);
   }
 
   function newGame() {
@@ -292,8 +373,9 @@
     moves = 0;
     grid = Array.from({ length: GRID }, () =>
       Array.from({ length: GRID }, () => Math.floor(Math.random() * COLORS.length)));
+    par = estimatePar(grid);
     movesEl.textContent = "0";
-    bestEl.textContent = (best === null ? "–" : best);
+    bestEl.textContent = (best === null ? "–" : (best === 0 ? "Perfect" : "+" + best));
     buildBoard();
     renderBoard();
     buildPalette();

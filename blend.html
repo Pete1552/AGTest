@@ -90,7 +90,7 @@
   </div>
 </div>
 
-<script src="leaderboard.js?v=7"></script>
+<script src="leaderboard.js?v=8"></script>
 <script>
 (function () {
   "use strict";
@@ -103,7 +103,11 @@
   var cur = [];          // current rgb string per index
   var locked = [];       // boolean per index (corners)
   var swaps = 0;
-  var best = Number(localStorage.getItem("tranquil_blend_best") || 0) || 0;
+  var par = 0;           // minimum swaps for THIS shuffle (n - cycle count)
+  var best = (function () {
+    var v = localStorage.getItem("tranquil_blend_best_v2");
+    return v === null ? null : Number(v);
+  })();
   var selected = -1;
   var won = false;
 
@@ -194,25 +198,35 @@
     return true;
   }
 
+  // The minimum number of arbitrary-pair swaps to sort a permutation back to
+  // identity is n - (number of cycles) — a closed-form par, no search needed.
+  function cycleCount(perm) {
+    var n = perm.length, seen = new Array(n).fill(false), cycles = 0;
+    for (var i = 0; i < n; i++) {
+      if (seen[i]) continue;
+      cycles++;
+      var j = i;
+      while (!seen[j]) { seen[j] = true; j = perm[j]; }
+    }
+    return cycles;
+  }
+
   // ---- Shuffle non-corner colours among their own positions ----
   function shuffle() {
     var movable = [];
     for (var i = 0; i < N; i++) if (!locked[i]) movable.push(i);
-    var colors = movable.map(function (i) { return target[i]; });
-    // Fisher-Yates until not already solved (and there is something to move)
+    var perm = movable.map(function (_, idx) { return idx; });
+    // Fisher-Yates until not already solved (identity permutation)
     var tries = 0;
     do {
-      for (var k = colors.length - 1; k > 0; k--) {
+      for (var k = perm.length - 1; k > 0; k--) {
         var j = Math.floor(Math.random() * (k + 1));
-        var tmp = colors[k]; colors[k] = colors[j]; colors[j] = tmp;
+        var tmp = perm[k]; perm[k] = perm[j]; perm[j] = tmp;
       }
       tries++;
-    } while (isArrangementSolved(movable, colors) && tries < 50);
-    for (var m = 0; m < movable.length; m++) cur[movable[m]] = colors[m];
-  }
-  function isArrangementSolved(movable, colors) {
-    for (var m = 0; m < movable.length; m++) if (colors[m] !== target[movable[m]]) return false;
-    return true;
+    } while (cycleCount(perm) === perm.length && tries < 50);
+    par = movable.length - cycleCount(perm);
+    for (var m = 0; m < movable.length; m++) cur[movable[m]] = target[movable[perm[m]]];
   }
 
   function buildBoard() {
@@ -239,7 +253,7 @@
       el.classList.toggle("sel", i === selected);
     }
     swapsEl.textContent = swaps;
-    bestEl.textContent = best > 0 ? best : "—";
+    bestEl.textContent = best === null ? "—" : (best === 0 ? "Perfect" : "+" + best);
   }
 
   function onTile(i) {
@@ -266,8 +280,9 @@
 
   function doWin() {
     won = true;
-    if (best === 0 || swaps < best) { best = swaps; localStorage.setItem("tranquil_blend_best", String(best)); }
-    bestEl.textContent = best;
+    var overPar = Math.max(0, swaps - par);
+    if (best === null || overPar < best) { best = overPar; localStorage.setItem("tranquil_blend_best_v2", String(best)); }
+    bestEl.textContent = best === 0 ? "Perfect" : "+" + best;
     for (var i = 0; i < N; i++) {
       (function (el, delay) {
         setTimeout(function () { el.classList.add("win"); }, delay);
@@ -277,9 +292,9 @@
     setTimeout(function () {
       LB.finish({
         game: "blend",
-        value: swaps,
+        value: overPar,
         resultTitle: "Blended!",
-        subtitle: "Best · " + best + " swaps",
+        subtitle: overPar === 0 ? "Perfect solve — matched the minimum!" : swaps + " swaps (" + par + " was the minimum)",
         onPlayAgain: newGame
       });
     }, 800);

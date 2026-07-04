@@ -12,16 +12,21 @@
   };
   function isGlobal() { return !!(CFG.url && CFG.anonKey); }
 
+  // Shared formatter for games scored as "moves/swaps/pours over par" (0 =
+  // matched the puzzle's own computed minimum) rather than a raw count, so
+  // puzzle instances of different difficulty are comparable on one board.
+  function fmtOverPar(v) { return v === 0 ? "Perfect" : "+" + v; }
+
   // Per-game rules: dir 'desc' = higher is better, 'asc' = lower is better.
   var GAMES = {
     blocks: { name: "Blocks", dir: "desc", fmt: function (v) { return String(v); } },
-    bloom:  { name: "Bloom",  dir: "asc",  fmt: function (v) { return v + " moves"; } },
+    bloom:  { name: "Bloom",  dir: "asc",  fmt: fmtOverPar },
     ripple: { name: "Ripple", dir: "asc",  fmt: function (v) { return v + " moves"; } },
     trace:  { name: "Trace",  dir: "asc",  fmt: function (v) { return v + "s"; } },
     fuse:   { name: "Fuse",   dir: "desc", fmt: function (v) { return String(v); } },
-    blend:  { name: "Blend",  dir: "asc",  fmt: function (v) { return v + " swaps"; } },
+    blend:  { name: "Blend",  dir: "asc",  fmt: fmtOverPar },
     mix:    { name: "Mix",    dir: "desc", fmt: function (v) { return String(v); } },
-    sort:   { name: "Sort",   dir: "asc",  fmt: function (v) { return v + " pours"; } },
+    sort:   { name: "Sort",   dir: "asc",  fmt: fmtOverPar },
     tower:  { name: "Tower",  dir: "desc", fmt: function (v) { return String(v); } },
     defense:{ name: "Defense", dir: "desc", fmt: function (v) { return "Wave " + v; } },
     lantern:{ name: "Lantern", dir: "asc", fmt: function (v) { return v + "s"; } },
@@ -29,7 +34,7 @@
     aegis:  { name: "Aegis",   dir: "desc", fmt: function (v) { return String(v); } },
     sweep:  { name: "Sweep",   dir: "asc",  fmt: function (v) { return v + "s"; } },
     nibble: { name: "Nibble",  dir: "desc", fmt: function (v) { return String(v); } },
-    runway: { name: "Runway",  dir: "asc",  fmt: function (v) { return v + " moves"; } }
+    runway: { name: "Runway",  dir: "asc",  fmt: fmtOverPar }
   };
   var MAX = 10;
 

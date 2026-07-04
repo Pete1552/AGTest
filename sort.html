@@ -105,7 +105,7 @@
   </div>
 </div>
 
-<script src="leaderboard.js?v=7"></script>
+<script src="leaderboard.js?v=8"></script>
 <script>
 (function () {
   "use strict";
@@ -120,7 +120,11 @@
 
   var tubes = [];   // array of arrays, each bottom->top of colour indices
   var pours = 0;
-  var best = Number(localStorage.getItem("tranquil_sort_best") || 0) || 0;
+  var par = 0;      // minimum pours to solve THIS scramble (computed by search)
+  var best = (function () {
+    var v = localStorage.getItem("tranquil_sort_best_v2");
+    return v === null ? null : Number(v);
+  })();
   var selected = -1;
   var won = false;
 
@@ -203,14 +207,90 @@
     }
   }
 
+  // ---- Solver: BFS from the scrambled state to the nearest solved state ----
+  // scramble() moves colour onto a mismatched tube (never legal during actual
+  // play), so a scrambled board is NOT guaranteed solvable by legal pours —
+  // this both verifies solvability and gives the true minimum pour count.
+  function tubeKey(t) { return t.map(function (a) { return a.join(","); }).join("|"); }
+  function topRunOf(t, i) {
+    var a = t[i]; if (!a.length) return 0;
+    var c = a[a.length - 1], n = 1;
+    for (var k = a.length - 2; k >= 0; k--) { if (a[k] === c) n++; else break; }
+    return n;
+  }
+  function legalPoursOf(t) {
+    var moves = [];
+    for (var s = 0; s < t.length; s++) {
+      if (!t[s].length) continue;
+      var col = t[s][t[s].length - 1];
+      for (var d = 0; d < t.length; d++) {
+        if (d === s) continue;
+        var free = CAP - t[d].length;
+        if (free <= 0) continue;
+        if (t[d].length > 0 && t[d][t[d].length - 1] !== col) continue;
+        moves.push({ s: s, d: d });
+      }
+    }
+    return moves;
+  }
+  function applyPourOf(t, mv) {
+    var nt = t.map(function (a) { return a.slice(); });
+    var col = nt[mv.s][nt[mv.s].length - 1];
+    var run = topRunOf(nt, mv.s);
+    var free = CAP - nt[mv.d].length;
+    var n = Math.min(run, free);
+    for (var q = 0; q < n; q++) { nt[mv.s].pop(); nt[mv.d].push(col); }
+    return nt;
+  }
+  function isSolvedTubes(t) {
+    for (var i = 0; i < t.length; i++) {
+      var a = t[i]; if (!a.length) continue;
+      if (a.length !== CAP) return false;
+      for (var k = 1; k < a.length; k++) if (a[k] !== a[0]) return false;
+    }
+    return true;
+  }
+  var SOLVE_NODE_CAP = 200000;
+  // Returns the minimum pours to solve, or -1 if confirmed unsolvable within the cap.
+  function solveMinPours(start) {
+    if (isSolvedTubes(start)) return 0;
+    var seen = {}; seen[tubeKey(start)] = true;
+    var frontier = [start], depth = 0, nodes = 1;
+    while (frontier.length) {
+      depth++;
+      var next = [];
+      for (var i = 0; i < frontier.length; i++) {
+        var st = frontier[i];
+        var mvs = legalPoursOf(st);
+        for (var j = 0; j < mvs.length; j++) {
+          var ns = applyPourOf(st, mvs[j]);
+          if (isSolvedTubes(ns)) return depth;
+          var k = tubeKey(ns);
+          if (!seen[k]) {
+            seen[k] = true; next.push(ns); nodes++;
+            if (nodes > SOLVE_NODE_CAP) return -1;
+          }
+        }
+      }
+      frontier = next;
+    }
+    return -1; // frontier exhausted with no solved state found: truly unsolvable
+  }
+
   function newGame() {
     won = false;
     selected = -1;
     pours = 0;
+    var attempts = 0, solved = false;
     do {
-      makeSolved();
-      scramble();
-    } while (isSolved());
+      attempts++;
+      do {
+        makeSolved();
+        scramble();
+      } while (isSolved());
+      var result = solveMinPours(tubes);
+      if (result >= 0) { par = result; solved = true; }
+    } while (!solved && attempts < 10);
     buildTubes();
     render();
   }
@@ -254,15 +334,16 @@
 
   function win() {
     won = true;
-    if (best === 0 || pours < best) { best = pours; localStorage.setItem("tranquil_sort_best", String(best)); }
+    var overPar = Math.max(0, pours - par);
+    if (best === null || overPar < best) { best = overPar; localStorage.setItem("tranquil_sort_best_v2", String(best)); }
     render();
     sfxWin();
     setTimeout(function () {
       LB.finish({
         game: "sort",
-        value: pours,
+        value: overPar,
         resultTitle: "All sorted",
-        subtitle: "Best · " + best + " pours",
+        subtitle: overPar === 0 ? "Perfect solve — matched the minimum!" : pours + " pours (" + par + " was the minimum)",
         onPlayAgain: newGame
       });
     }, 400);
@@ -307,7 +388,7 @@
       }
     }
     poursEl.textContent = pours;
-    bestEl.textContent = best > 0 ? best : "—";
+    bestEl.textContent = best === null ? "—" : (best === 0 ? "Perfect" : "+" + best);
   }
 
   // ---- Settings / sound ----
