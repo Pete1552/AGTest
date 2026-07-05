@@ -19,11 +19,23 @@
   #board-wrap { position: relative; }
   #board {
     position: relative;
-    background-color: var(--panel);
+    background-color: #24262b;
     border-radius: 14px;
     background-image:
-      repeating-linear-gradient(to right, rgba(255,255,255,0.06) 0, rgba(255,255,255,0.06) 1px, transparent 1px, transparent calc(100%/6)),
-      repeating-linear-gradient(to bottom, rgba(255,255,255,0.06) 0, rgba(255,255,255,0.06) 1px, transparent 1px, transparent calc(100%/6));
+      /* faint asphalt mottling */
+      radial-gradient(circle at 18% 22%, rgba(255,255,255,0.025) 0, transparent 38%),
+      radial-gradient(circle at 78% 65%, rgba(255,255,255,0.02) 0, transparent 42%),
+      radial-gradient(circle at 45% 85%, rgba(0,0,0,0.15) 0, transparent 40%),
+      /* runway centreline through the exit row: one dash per cell */
+      repeating-linear-gradient(to right,
+        transparent 0, transparent calc(100%/6 * 0.32),
+        color-mix(in srgb, var(--accent) 65%, transparent) calc(100%/6 * 0.32), color-mix(in srgb, var(--accent) 65%, transparent) calc(100%/6 * 0.68),
+        transparent calc(100%/6 * 0.68), transparent calc(100%/6)),
+      repeating-linear-gradient(to right, rgba(255,255,255,0.055) 0, rgba(255,255,255,0.055) 1px, transparent 1px, transparent calc(100%/6)),
+      repeating-linear-gradient(to bottom, rgba(255,255,255,0.055) 0, rgba(255,255,255,0.055) 1px, transparent 1px, transparent calc(100%/6));
+    background-size: 100% 100%, 100% 100%, 100% 100%, 100% calc(100%/6), 100% 100%, 100% 100%;
+    background-position: 0 0, 0 0, 0 0, 0 calc(100%/6 * 2), 0 0, 0 0;
+    background-repeat: no-repeat, no-repeat, no-repeat, no-repeat, repeat, repeat;
     touch-action: none;
     user-select: none;
     -webkit-user-select: none;
@@ -31,24 +43,64 @@
     overflow: visible;
   }
   .exit-mark {
-    position: absolute; right: -3px; width: 8px;
+    position: absolute; right: -6px; width: 14px;
     top: 33.3334%; height: 16.6666%;
-    background: var(--accent); border-radius: 5px 0 0 5px;
-    box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 70%, transparent);
+    border-radius: 3px 6px 6px 3px;
+    background: repeating-linear-gradient(to bottom,
+      var(--accent) 0, var(--accent) 22%,
+      #0c0f14 22%, #0c0f14 44%);
+    box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 70%, transparent);
   }
   .piece {
     position: absolute; border-radius: 8px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 18px;
     cursor: grab; touch-action: none;
   }
-  .piece.blocker {
-    background: var(--grid);
-    box-shadow: inset 0 2px 0 rgba(255,255,255,0.12), inset 0 -2px 0 rgba(0,0,0,0.25);
+  .piece.blocker.len2 {
+    background: linear-gradient(var(--veh-dir, to right), #93a2b8 0%, #6b7890 55%, #5c6880 100%);
+    box-shadow: inset 0 2px 0 rgba(255,255,255,0.16), inset 0 -2px 0 rgba(0,0,0,0.3);
   }
+  .piece.blocker.len3 {
+    background: linear-gradient(var(--veh-dir, to right), #c9a15c 0%, #ab8548 55%, #94713d 100%);
+    box-shadow: inset 0 2px 0 rgba(255,255,255,0.16), inset 0 -2px 0 rgba(0,0,0,0.3);
+  }
+  .piece.blocker.h { --veh-dir: to right; }
+  .piece.blocker.v { --veh-dir: to bottom; }
+  .piece.blocker::before {
+    content: ""; position: absolute; border-radius: 3px;
+    background: rgba(255,255,255,0.22);
+  }
+  .piece.blocker.h::before { left: 12%; right: 12%; top: 16%; height: 26%; }
+  .piece.blocker.v::before { top: 12%; bottom: 12%; left: 16%; width: 26%; }
+  .piece.blocker::after {
+    /* undercarriage shadow line along the trailing long edge */
+    content: ""; position: absolute; border-radius: 3px;
+    background: rgba(10,12,16,0.4);
+  }
+  .piece.blocker.h::after { left: 8%; right: 8%; bottom: 8%; height: 10%; }
+  .piece.blocker.v::after { top: 8%; bottom: 8%; right: 8%; width: 10%; }
   .piece.target {
-    background: var(--accent); z-index: 2;
-    box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 60%, transparent);
+    background: linear-gradient(to right, color-mix(in srgb, var(--accent) 80%, white 10%) 0%, var(--accent) 60%, color-mix(in srgb, var(--accent) 85%, black) 100%);
+    z-index: 2;
+    box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 70%, transparent);
+    animation: engineGlow 1.6s ease-in-out infinite;
+  }
+  .piece.target::before {
+    /* nose cone, pointing right toward the exit */
+    content: ""; position: absolute; top: 18%; bottom: 18%; right: -34%;
+    width: 40%;
+    background: var(--accent);
+    clip-path: polygon(0 0, 100% 50%, 0 100%);
+    filter: brightness(1.08);
+  }
+  .piece.target::after {
+    /* faint contrail trailing away from the exit */
+    content: ""; position: absolute; top: 32%; bottom: 32%; right: 100%; left: -70%;
+    background: linear-gradient(to left, color-mix(in srgb, var(--accent) 45%, transparent), transparent);
+    border-radius: 999px;
+  }
+  @keyframes engineGlow {
+    0%, 100% { box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 60%, transparent); }
+    50% { box-shadow: 0 0 16px color-mix(in srgb, var(--accent) 85%, transparent); }
   }
   .piece.settling { transition: left 150ms ease, top 150ms ease; }
   .piece.exiting { transition: left 420ms ease-in; }
@@ -108,8 +160,7 @@
 (function () {
   "use strict";
 
-  var GRID = 6, EXIT_ROW = 2, TARGET_LEN = 2;
-  var GEN_BLOCKERS = 6, GEN_NODE_CAP = 900, GEN_MIN_DEPTH = 4, GEN_MAX_ATTEMPTS = 30;
+  var GRID = 6;
   var GAP = 3;
 
   var pieces = [];   // { id, orient:'h'|'v', len, row, col, isTarget }
@@ -163,163 +214,29 @@
     list.forEach(function (p) { if (p.id === excludeId) return; cellsOf(p, p.row, p.col).forEach(function (k) { set[k] = true; }); });
     return set;
   }
-  function legalMoves(list) {
-    var out = [];
-    list.forEach(function (p) {
-      var occ = occupancy(list, p.id);
-      if (p.orient === "h") {
-        var c = p.col - 1;
-        while (c >= 0 && !cellsOf(p, p.row, c).some(function (k) { return occ[k]; })) { out.push({ id: p.id, row: p.row, col: c }); c--; }
-        var maxCol = GRID - p.len;
-        c = p.col + 1;
-        while (c <= maxCol && !cellsOf(p, p.row, c).some(function (k) { return occ[k]; })) { out.push({ id: p.id, row: p.row, col: c }); c++; }
-      } else {
-        var r = p.row - 1;
-        while (r >= 0 && !cellsOf(p, r, p.col).some(function (k) { return occ[k]; })) { out.push({ id: p.id, row: r, col: p.col }); r--; }
-        var maxRow = GRID - p.len;
-        r = p.row + 1;
-        while (r <= maxRow && !cellsOf(p, r, p.col).some(function (k) { return occ[k]; })) { out.push({ id: p.id, row: r, col: p.col }); r++; }
-      }
-    });
-    return out;
-  }
-  function applyMove(list, mv) { return list.map(function (p) { return p.id === mv.id ? Object.assign({}, p, { row: mv.row, col: mv.col }) : p; }); }
-  function stateKey(list) { return list.slice().sort(function (a, b) { return a.id - b.id; }).map(function (p) { return p.row + "_" + p.col; }).join("|"); }
   function isSolvedState(list) { var t = list.filter(function (p) { return p.isTarget; })[0]; return t.col === GRID - t.len; }
 
-  function makeSolvedLayout(numBlockers) {
-    var list = [{ id: 0, orient: "h", len: TARGET_LEN, row: EXIT_ROW, col: GRID - TARGET_LEN, isTarget: true }];
-    var attempts = 0;
-    while (list.length < numBlockers + 1 && attempts < 3000) {
-      attempts++;
-      var orient = Math.random() < 0.5 ? "h" : "v";
-      var len = Math.random() < 0.6 ? 2 : 3;
-      var maxRow = orient === "v" ? GRID - len : GRID - 1;
-      var maxCol = orient === "h" ? GRID - len : GRID - 1;
-      var row = Math.floor(Math.random() * (maxRow + 1));
-      var col = Math.floor(Math.random() * (maxCol + 1));
-      var cand = { id: list.length, orient: orient, len: len, row: row, col: col, isTarget: false };
-      var occ = occupancy(list, -1);
-      var ok = true;
-      cellsOf(cand, row, col).forEach(function (k) { if (occ[k]) ok = false; });
-      if (ok) list.push(cand);
-    }
-    return list;
-  }
+  // ---- Curated puzzle pool ----
+  // Runtime generation (BFS from a solved reference) turned out to have a
+  // hard ceiling on real difficulty: the win condition only cares about the
+  // target's column, so blocker positions are free, and more blockers just
+  // means more alternate easy win states, not harder ones — cranking up
+  // generation parameters made puzzles slower to build without reliably
+  // making them harder (verified: even at 9 blockers / minDepth 8, some
+  // "accepted" puzzles solved in 0 true moves once independently checked).
+  // Pre-verifying a pool offline sidesteps that entirely: each entry's par
+  // is a proven true-shortest-solve (multi-source BFS from every win state
+  // in the fully-explored component, then independently re-verified with an
+  // unrestricted fresh search), computed with a far bigger search budget
+  // than any phone should wait for. Picking from the pool is instant.
+  var PUZZLES = [{"par":6,"pieces":[["h",2,2,0,1],["v",2,1,4,0],["v",2,1,2,0],["h",3,0,0,0],["h",2,3,1,0],["v",2,2,5,0],["v",3,2,3,0]]},{"par":5,"pieces":[["h",2,2,0,1],["v",2,4,1,0],["v",2,2,4,0],["h",2,5,3,0],["v",3,2,3,0],["v",2,0,1,0],["v",3,2,2,0]]},{"par":5,"pieces":[["h",2,2,0,1],["h",2,1,0,0],["h",3,5,1,0],["v",2,1,2,0],["v",3,2,3,0],["h",3,0,3,0],["v",2,4,0,0]]},{"par":5,"pieces":[["h",2,2,0,1],["v",2,1,2,0],["v",2,4,1,0],["v",2,1,3,0],["h",3,0,0,0],["v",2,2,4,0],["h",2,3,2,0]]},{"par":5,"pieces":[["h",2,2,0,1],["h",3,0,1,0],["h",2,0,4,0],["v",2,2,5,0],["h",2,3,2,0],["h",2,4,4,0],["v",2,1,2,0],["v",3,3,0,0]]},{"par":5,"pieces":[["h",2,2,0,1],["v",3,3,0,0],["v",3,3,3,0],["v",3,2,2,0],["h",3,1,3,0],["v",2,0,2,0],["h",2,5,1,0],["v",2,0,0,0]]},{"par":6,"pieces":[["h",2,2,0,1],["h",2,3,3,0],["h",2,4,3,0],["v",3,0,3,0],["v",2,3,1,0],["h",2,5,3,0],["h",2,1,0,0],["v",3,2,2,0]]},{"par":5,"pieces":[["h",2,2,0,1],["h",2,3,2,0],["h",3,5,2,0],["v",3,0,2,0],["h",3,4,2,0],["v",3,3,0,0],["h",2,0,0,0]]},{"par":9,"pieces":[["h",2,2,2,1],["v",3,3,2,0],["v",2,1,1,0],["v",3,2,4,0],["h",2,5,4,0],["v",2,2,0,0],["v",2,4,3,0],["v",2,0,4,0]]},{"par":12,"pieces":[["h",2,2,0,1],["v",2,4,0,0],["v",2,4,2,0],["v",3,1,3,0],["v",3,1,5,0],["v",2,0,1,0],["h",3,3,0,0],["h",3,4,3,0],["v",2,1,4,0]]},{"par":7,"pieces":[["h",2,2,0,1],["h",3,5,3,0],["v",3,3,0,0],["v",2,0,1,0],["h",2,5,1,0],["v",2,1,2,0],["h",2,1,3,0],["v",3,2,5,0]]},{"par":8,"pieces":[["h",2,2,0,1],["v",3,0,3,0],["h",2,5,2,0],["h",3,3,1,0],["v",3,3,0,0],["v",2,1,5,0],["h",2,4,2,0]]},{"par":7,"pieces":[["h",2,2,0,1],["h",2,5,0,0],["h",2,3,1,0],["v",3,0,2,0],["v",2,4,5,0],["h",3,5,2,0],["h",2,3,4,0],["v",2,1,3,0]]},{"par":11,"pieces":[["h",2,2,0,1],["h",2,3,1,0],["v",3,2,5,0],["h",2,1,4,0],["v",3,0,2,0],["h",3,4,2,0],["h",2,5,2,0]]},{"par":7,"pieces":[["h",2,2,0,1],["v",3,0,2,0],["v",2,4,1,0],["h",2,1,0,0],["v",2,3,3,0],["v",2,3,4,0],["v",2,1,3,0],["h",2,0,3,0],["h",3,3,0,0]]},{"par":8,"pieces":[["h",2,2,0,1],["h",3,1,2,0],["v",2,2,3,0],["h",2,5,1,0],["v",2,0,1,0],["h",2,4,3,0],["v",3,2,2,0],["v",2,2,4,0]]},{"par":7,"pieces":[["h",2,2,2,1],["h",3,0,3,0],["h",2,5,4,0],["v",2,4,1,0],["v",3,3,3,0],["h",2,1,0,0],["v",3,2,4,0]]},{"par":7,"pieces":[["h",2,2,2,1],["h",3,1,1,0],["h",3,3,0,0],["h",2,0,3,0],["v",2,0,0,0],["h",3,5,2,0],["h",2,4,4,0],["v",3,1,4,0],["v",2,3,3,0]]},{"par":11,"pieces":[["h",2,2,0,1],["v",2,3,0,0],["h",3,0,2,0],["h",3,3,3,0],["v",2,4,4,0],["h",2,4,2,0],["v",3,1,2,0],["h",2,5,2,0]]},{"par":14,"pieces":[["h",2,2,2,1],["h",2,0,1,0],["v",3,3,3,0],["v",2,3,2,0],["v",3,2,0,0],["v",2,2,4,0],["h",3,5,0,0],["h",3,0,3,0],["h",2,4,4,0]]},{"par":11,"pieces":[["h",2,2,1,1],["h",2,1,2,0],["h",2,3,4,0],["v",2,0,1,0],["h",3,0,2,0],["v",3,0,5,0],["v",3,2,3,0]]},{"par":15,"pieces":[["h",2,2,1,1],["h",3,4,2,0],["h",2,1,4,0],["h",3,0,3,0],["v",2,0,2,0],["v",2,1,3,0],["h",2,5,4,0],["v",3,3,1,0],["v",3,2,5,0]]},{"par":11,"pieces":[["h",2,2,0,1],["v",3,1,2,0],["h",3,4,2,0],["v",2,1,3,0],["h",2,5,2,0],["h",2,0,2,0],["v",3,2,5,0]]},{"par":10,"pieces":[["h",2,2,0,1],["h",2,4,2,0],["v",2,4,0,0],["h",3,5,1,0],["v",2,1,4,0],["v",3,1,3,0],["h",3,3,0,0]]},{"par":11,"pieces":[["h",2,2,0,1],["h",3,4,2,0],["v",2,3,1,0],["v",2,1,2,0],["v",2,2,4,0],["v",2,4,5,0],["v",2,1,5,0],["h",3,0,2,0]]},{"par":12,"pieces":[["h",2,2,1,1],["v",3,1,3,0],["v",2,3,2,0],["v",3,0,0,0],["h",2,5,3,0],["h",3,4,3,0],["h",2,3,0,0]]},{"par":13,"pieces":[["h",2,2,0,1],["v",2,3,2,0],["h",2,3,4,0],["v",3,3,0,0],["v",2,2,3,0],["v",2,4,5,0],["h",3,0,2,0],["h",2,4,3,0],["v",2,1,2,0]]},{"par":12,"pieces":[["h",2,2,1,1],["h",3,5,3,0],["v",2,1,4,0],["v",3,1,3,0],["h",3,3,0,0],["v",2,4,2,0],["v",3,0,0,0]]},{"par":11,"pieces":[["h",2,2,0,1],["h",2,1,0,0],["v",2,3,1,0],["h",2,4,2,0],["v",2,1,5,0],["v",3,1,2,0],["h",2,5,1,0],["v",2,4,4,0],["h",3,3,3,0]]},{"par":10,"pieces":[["h",2,2,1,1],["h",3,5,3,0],["h",3,0,1,0],["v",3,0,0,0],["v",3,1,5,0],["h",2,4,4,0],["v",3,3,2,0],["h",2,1,2,0],["v",2,2,3,0]]},{"par":10,"pieces":[["h",2,2,1,1],["v",2,0,2,0],["h",2,5,2,0],["v",2,3,3,0],["v",2,4,4,0],["h",2,1,4,0],["v",2,2,4,0],["v",2,1,3,0],["h",2,4,1,0]]},{"par":10,"pieces":[["h",2,2,1,1],["v",2,0,1,0],["v",2,3,1,0],["h",3,4,3,0],["v",2,0,4,0],["v",2,1,3,0],["v",3,0,5,0],["h",2,0,2,0]]}];
 
-  function bfsAll(startList, nodeCap) {
-    var startKey = stateKey(startList);
-    var depthOf = {}; depthOf[startKey] = 0;
-    var listOf = {}; listOf[startKey] = startList;
-    var frontier = [startList];
-    var depth = 0;
-    var count = 1;
-    while (frontier.length && count < nodeCap) {
-      depth++;
-      var next = [];
-      for (var i = 0; i < frontier.length; i++) {
-        var st = frontier[i];
-        var mvs = legalMoves(st);
-        for (var j = 0; j < mvs.length; j++) {
-          var ns = applyMove(st, mvs[j]);
-          var k = stateKey(ns);
-          if (!(k in depthOf)) {
-            depthOf[k] = depth; listOf[k] = ns; next.push(ns); count++;
-            if (count >= nodeCap) break;
-          }
-        }
-        if (count >= nodeCap) break;
-      }
-      frontier = next;
-    }
-    return { depthOf: depthOf, listOf: listOf };
-  }
-
-  // The win condition only cares about the target piece's column — blocker
-  // positions are free — so many different states count as "solved". Distance
-  // from one arbitrary reference solved layout is NOT the true solve length;
-  // it overstates difficulty by ignoring closer alternate win states. This
-  // does a second, multi-source BFS seeded from every win state actually
-  // found in the explored component, giving the true shortest solve length.
-  function trueDistances(listOf, winKeys) {
-    var dist = {};
-    var frontier = winKeys.slice();
-    winKeys.forEach(function (k) { dist[k] = 0; });
-    var depth = 0;
-    while (frontier.length) {
-      depth++;
-      var next = [];
-      for (var i = 0; i < frontier.length; i++) {
-        var st = listOf[frontier[i]];
-        var mvs = legalMoves(st);
-        for (var j = 0; j < mvs.length; j++) {
-          var ns = applyMove(st, mvs[j]);
-          var nk = stateKey(ns);
-          if (!(nk in dist) && (nk in listOf)) { dist[nk] = depth; next.push(nk); }
-        }
-      }
-      frontier = next;
-    }
-    return dist;
-  }
-
-  // One attempt's worth of work. Returns a puzzle on success, or null to keep trying.
-  function generatePuzzleAttempt() {
-    var seed = makeSolvedLayout(GEN_BLOCKERS); // one known win state, to discover a connected component
-    var res = bfsAll(seed, GEN_NODE_CAP);
-    var winKeys = [];
-    for (var k in res.listOf) if (isSolvedState(res.listOf[k])) winKeys.push(k);
-    var trueDist = trueDistances(res.listOf, winKeys);
-    var maxTrue = -1;
-    for (var k3 in trueDist) if (trueDist[k3] > maxTrue) maxTrue = trueDist[k3];
-    if (maxTrue < GEN_MIN_DEPTH) return null;
-    var floor = Math.max(GEN_MIN_DEPTH, maxTrue - 3);
-    var pool = [];
-    for (var k2 in trueDist) if (trueDist[k2] >= floor) pool.push(k2);
-    var chosen = pool[Math.floor(Math.random() * pool.length)];
-    return { pieces: res.listOf[chosen], par: trueDist[chosen] };
-  }
-
-  // Cheap fallback scramble (no BFS) for the rare case every timed-out attempt
-  // missed the difficulty floor — never hand back an already-solved board.
-  function blindScramble(list, count) {
-    for (var i = 0; i < count; i++) {
-      var mvs = legalMoves(list);
-      if (!mvs.length) break;
-      list = applyMove(list, mvs[Math.floor(Math.random() * mvs.length)]);
-    }
-    return list;
-  }
-
-  // Par for the rare fallback path: explore forward from the exact scrambled
-  // state (Runway's slide moves are reversible, so this is a true distance,
-  // not an overstated one) and take the closest win state actually found.
-  function parForFallback(pieces) {
-    var res = bfsAll(pieces, GEN_NODE_CAP);
-    var min = -1;
-    for (var k in res.listOf) {
-      if (!isSolvedState(res.listOf[k])) continue;
-      if (min === -1 || res.depthOf[k] < min) min = res.depthOf[k];
-    }
-    return min === -1 ? 0 : min; // couldn't confirm a distance: don't penalize the player for it
-  }
-
-  // Runs attempts one per event-loop tick (instead of a tight synchronous loop)
-  // so a run of unlucky retries never freezes the page in a single long block.
-  function generatePuzzleAsync(done) {
-    var attempt = 0;
-    function tick() {
-      var result = generatePuzzleAttempt();
-      if (result) { done(result); return; }
-      attempt++;
-      if (attempt >= GEN_MAX_ATTEMPTS) {
-        var pieces = blindScramble(makeSolvedLayout(GEN_BLOCKERS), 10);
-        done({ pieces: pieces, par: parForFallback(pieces) });
-        return;
-      }
-      setTimeout(tick, 0);
-    }
-    tick();
+  function pickPuzzle() {
+    var entry = PUZZLES[Math.floor(Math.random() * PUZZLES.length)];
+    var pieces = entry.pieces.map(function (p, idx) {
+      return { id: idx, orient: p[0], len: p[1], row: p[2], col: p[3], isTarget: !!p[4] };
+    });
+    return { pieces: pieces, par: entry.par };
   }
 
   // ---- Rendering ----
@@ -347,8 +264,9 @@
     pieceEls = {};
     pieces.forEach(function (p) {
       var el = document.createElement("div");
-      el.className = "piece " + (p.isTarget ? "target" : "blocker");
-      if (p.isTarget) el.textContent = "✈️";
+      el.className = p.isTarget
+        ? "piece target " + p.orient
+        : "piece blocker " + p.orient + " len" + p.len;
       boardEl.appendChild(el);
       pieceEls[p.id] = el;
       attachDrag(el, p.id);
@@ -445,16 +363,12 @@
     moves = 0;
     movesEl.textContent = "0";
     overlay.classList.remove("show");
-    hintEl.textContent = "Shuffling the apron…";
-    requestAnimationFrame(function () {
-      generatePuzzleAsync(function (result) {
-        pieces = result.pieces;
-        par = result.par;
-        buildPieces();
-        hintEl.textContent = "Slide the other planes clear of the runway";
-        updateBestLabel();
-      });
-    });
+    var result = pickPuzzle();
+    pieces = result.pieces;
+    par = result.par;
+    buildPieces();
+    hintEl.textContent = "Slide the other planes clear of the runway";
+    updateBestLabel();
   }
 
   // ---- iOS touch/gesture hardening ----
