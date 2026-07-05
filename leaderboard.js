@@ -34,7 +34,8 @@
     aegis:  { name: "Aegis",   dir: "desc", fmt: function (v) { return String(v); } },
     sweep:  { name: "Sweep",   dir: "asc",  fmt: function (v) { return v + "s"; } },
     nibble: { name: "Nibble",  dir: "desc", fmt: function (v) { return String(v); } },
-    runway: { name: "Runway",  dir: "asc",  fmt: fmtOverPar }
+    runway: { name: "Runway",  dir: "asc",  fmt: fmtOverPar },
+    jigsaw: { name: "Jigsaw",  dir: "asc",  fmt: function (v) { return v + "s"; } }
   };
   var MAX = 10;
 

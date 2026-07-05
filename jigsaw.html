@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#11151c" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Tranquil" />
+<link rel="apple-touch-icon" href="icon.png" />
+<link rel="manifest" href="manifest.json" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="shared.css" />
+<title>Jigsaw — Tranquil</title>
+<style>
+  #target-wrap { flex: 0 0 auto; display: flex; justify-content: center; margin: 6px 0; position: relative; }
+  #target-frame { position: relative; overflow: hidden; border-radius: 12px; background: var(--panel); }
+  #target { position: absolute; top: 0; left: 0; transform-origin: top left; }
+  #tray-wrap {
+    flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch;
+    display: flex; flex-wrap: wrap; align-content: flex-start; justify-content: center;
+    gap: 6px; padding: 6px 2px;
+  }
+  .tray-slot { position: relative; overflow: visible; }
+  .piece {
+    position: absolute; top: 0; left: 0; transform-origin: top left;
+    cursor: grab; touch-action: none;
+  }
+  .piece-shape {
+    width: 100%; height: 100%;
+    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.4));
+  }
+  #ghost { position: fixed; top: 0; left: 0; pointer-events: none; z-index: 60; transform-origin: top left; opacity: 0.96; }
+  .home-slot {
+    position: absolute; box-sizing: border-box;
+    border: 1.5px dashed rgba(255,255,255,0.08); border-radius: 4px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="topbar">
+    <div class="brand">
+      <a href="index.html" class="icon-btn" aria-label="Back to games">‹</a>
+      <span class="title">Jigsaw</span>
+    </div>
+    <div class="bar-actions">
+      <button id="lb-btn" class="icon-btn" aria-label="High scores">🏆</button>
+      <button id="restart" class="icon-btn" aria-label="New puzzle">↻</button>
+      <button id="settings-btn" class="icon-btn" aria-label="Settings">⚙</button>
+    </div>
+  </header>
+  <div class="scores">
+    <div class="score-box"><div class="score-label">Placed</div><div class="score-val" id="placed">0/20</div></div>
+    <div class="score-box"><div class="score-label">Time</div><div class="score-val" id="time">0s</div></div>
+  </div>
+  <div id="target-wrap"><div id="target-frame"><div id="target"></div></div></div>
+  <div id="tray-wrap"></div>
+</div>
+
+<div id="settings-overlay" class="modal-overlay">
+  <div class="modal settings">
+    <h2>Jigsaw</h2>
+    <div class="setting-row">
+      <span class="label">Sound</span>
+      <button id="sound-toggle" class="toggle on">On</button>
+    </div>
+    <div class="how">
+      <p class="how-title">How to play</p>
+      <p class="body">Drag pieces from the tray up onto the picture. Drop a piece near its correct spot and it clicks into place. A new scene is generated every time — fastest completion wins.</p>
+    </div>
+    <button id="settings-share" class="share">Share the game</button>
+    <button id="settings-close" class="ghost-btn">Done</button>
+  </div>
+</div>
+
+<script src="leaderboard.js?v=9"></script>
+<script>
+(function () {
+  "use strict";
+
+  var COLS = 5, ROWS = 4;
+  var LC = 100;                 // logical cell size (design resolution, scaled to fit via CSS transform)
+  var KNOB = 0.24, NECK = 0.11; // jigsaw tab proportions, as fractions of edge length
+  var MARGIN = Math.round(LC * KNOB * 1.05); // per-piece bounding-box margin for tab overflow
+  var PIC_W = COLS * LC, PIC_H = ROWS * LC;
+  var TOTAL = COLS * ROWS;
+
+  var pieces = [];        // { id, r, c, placed, el, homeX, homeY, w, h, pathD }
+  var placedCount = 0, over = false;
+  var startTime = 0, elapsed = 0, timerId = 0;
+  var targetScale = 1, trayScale = 1;
+  var pictureUrl = "";
+
+  var targetFrame = document.getElementById("target-frame");
+  var targetEl = document.getElementById("target");
+  var targetWrap = document.getElementById("target-wrap");
+  var trayWrap = document.getElementById("tray-wrap");
+  var placedEl = document.getElementById("placed");
+  var timeEl = document.getElementById("time");
+  var settingsOverlay = document.getElementById("settings-overlay");
+  var soundToggle = document.getElementById("sound-toggle");
+  var ghostEl = null;
+
+  // ---- Shared sound (collection-wide mute key) ----
+  var muted = localStorage.getItem("tranquil_muted") === "1";
+  var actx = null;
+  function audio() {
+    if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { actx = null; } }
+    if (actx && actx.state === "suspended") actx.resume();
+  }
+  function tone(f, d, t, g) {
+    if (muted || !actx) return;
+    var o = actx.createOscillator(), gn = actx.createGain();
+    o.type = t || "sine"; o.frequency.value = f;
+    gn.gain.setValueAtTime(0.0001, actx.currentTime);
+    gn.gain.exponentialRampToValueAtTime(g || 0.1, actx.currentTime + 0.01);
+    gn.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + d);
+    o.connect(gn); gn.connect(actx.destination); o.start(); o.stop(actx.currentTime + d + 0.02);
+  }
+  function sfxPlace() { tone(480, 0.06, "sine", 0.07); }
+  function sfxWin() { [523, 659, 784, 1046].forEach(function (f, i) { setTimeout(function () { tone(f, 0.28, "sine", 0.11); }, i * 110); }); }
+
+  // ---- Procedural picture: a calm generative sunset/moonrise scene, so no
+  // external image asset is needed. A fresh hue + hill shape every game. ----
+  function hslStr(h, s, l) { return "hsl(" + ((h % 360 + 360) % 360) + "," + s + "%," + l + "%)"; }
+  function drawPicture() {
+    var c = document.createElement("canvas");
+    c.width = PIC_W; c.height = PIC_H;
+    var ctx = c.getContext("2d");
+    var hue = Math.random() * 360;
+    var g = ctx.createLinearGradient(0, 0, 0, PIC_H);
+    g.addColorStop(0, hslStr(hue + 200, 45, 16));
+    g.addColorStop(0.55, hslStr(hue + 30, 50, 32));
+    g.addColorStop(1, hslStr(hue + 10, 58, 54));
+    ctx.fillStyle = g; ctx.fillRect(0, 0, PIC_W, PIC_H);
+
+    var sunY = PIC_H * 0.42, sunR = PIC_H * 0.12;
+    var sg = ctx.createRadialGradient(PIC_W * 0.5, sunY, 0, PIC_W * 0.5, sunY, sunR * 2.4);
+    sg.addColorStop(0, hslStr(hue + 40, 80, 78));
+    sg.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = sg; ctx.beginPath(); ctx.arc(PIC_W * 0.5, sunY, sunR * 2.4, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = hslStr(hue + 40, 85, 86);
+    ctx.beginPath(); ctx.arc(PIC_W * 0.5, sunY, sunR, 0, Math.PI * 2); ctx.fill();
+
+    ctx.fillStyle = "rgba(255,255,255,0.85)";
+    for (var k = 0; k < 22; k++) {
+      var sx = Math.random() * PIC_W, sy = Math.random() * PIC_H * 0.38;
+      ctx.globalAlpha = 0.25 + Math.random() * 0.5;
+      ctx.beginPath(); ctx.arc(sx, sy, 0.8 + Math.random() * 1.1, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    var layers = 3;
+    for (var i = 0; i < layers; i++) {
+      var t = i / (layers - 1);
+      var baseY = PIC_H * (0.56 + t * 0.15);
+      ctx.beginPath();
+      ctx.moveTo(0, PIC_H);
+      ctx.lineTo(0, baseY);
+      var segs = 4, prevX = 0, prevY = baseY;
+      for (var s = 1; s <= segs; s++) {
+        var x = PIC_W * s / segs;
+        var y = baseY + (Math.random() - 0.5) * PIC_H * 0.09;
+        ctx.quadraticCurveTo((prevX + x) / 2, prevY, x, y);
+        prevX = x; prevY = y;
+      }
+      ctx.lineTo(PIC_W, PIC_H); ctx.closePath();
+      ctx.fillStyle = hslStr(hue + 165, 32, 13 + i * 7);
+      ctx.fill();
+    }
+    return c.toDataURL("image/png");
+  }
+
+  // ---- Jigsaw piece-edge geometry ----
+  // Every internal seam has one shared "absolute bulge direction" (+1/-1),
+  // looked up by whichever piece traces it; only the sweep-flag (which of the
+  // two arc directions) changes with traversal direction (left-to-right vs
+  // right-to-left, top-to-bottom vs bottom-to-top) — verified by rendering a
+  // test grid and confirming every seam interlocks with no gaps or overlaps.
+  var hTab = [], vTab = [];
+  function buildSeams() {
+    hTab = []; vTab = [];
+    for (var r = 0; r < ROWS; r++) { hTab[r] = []; for (var c = 0; c < COLS - 1; c++) hTab[r][c] = Math.random() < 0.5 ? 1 : -1; }
+    for (var r2 = 0; r2 < ROWS - 1; r2++) { vTab[r2] = []; for (var c2 = 0; c2 < COLS; c2++) vTab[r2][c2] = Math.random() < 0.5 ? 1 : -1; }
+  }
+  function arcParams(L) {
+    var A = KNOB * L, NH = NECK * L;
+    return { R: (NH * NH + A * A) / (2 * A), NH: NH };
+  }
+  function hEdgeLR(x0, x1, y, sign) {
+    var p = arcParams(x1 - x0), mid = (x0 + x1) / 2, sweep = sign > 0 ? 1 : 0;
+    return "L " + (mid - p.NH) + " " + y + " A " + p.R + " " + p.R + " 0 1 " + sweep + " " + (mid + p.NH) + " " + y + " L " + x1 + " " + y;
+  }
+  function hEdgeRL(x1, x0, y, sign) {
+    var p = arcParams(x1 - x0), mid = (x0 + x1) / 2, sweep = sign > 0 ? 0 : 1;
+    return "L " + (mid + p.NH) + " " + y + " A " + p.R + " " + p.R + " 0 1 " + sweep + " " + (mid - p.NH) + " " + y + " L " + x0 + " " + y;
+  }
+  function vEdgeTB(y0, y1, x, sign) {
+    var p = arcParams(y1 - y0), mid = (y0 + y1) / 2, sweep = sign > 0 ? 0 : 1;
+    return "L " + x + " " + (mid - p.NH) + " A " + p.R + " " + p.R + " 0 1 " + sweep + " " + x + " " + (mid + p.NH) + " L " + x + " " + y1;
+  }
+  function vEdgeBT(y1, y0, x, sign) {
+    var p = arcParams(y1 - y0), mid = (y0 + y1) / 2, sweep = sign > 0 ? 1 : 0;
+    return "L " + x + " " + (mid + p.NH) + " A " + p.R + " " + p.R + " 0 1 " + sweep + " " + x + " " + (mid - p.NH) + " L " + x + " " + y0;
+  }
+  // Build the SVG path string with coordinates already local to the piece's
+  // own bounding box (so the piece can be its own positioned element) by
+  // translating every input coordinate by the piece's box origin.
+  function localPiecePath(r, c) {
+    var dx = c * LC - MARGIN, dy = r * LC - MARGIN;
+    var x0 = c * LC, x1 = (c + 1) * LC, y0 = r * LC, y1 = (r + 1) * LC;
+    var d = "M " + (x0 - dx) + " " + (y0 - dy) + " ";
+    d += (r === 0) ? ("L " + (x1 - dx) + " " + (y0 - dy) + " ") : hEdgeLR(x0 - dx, x1 - dx, y0 - dy, vTab[r - 1][c]) + " ";
+    d += (c === COLS - 1) ? ("L " + (x1 - dx) + " " + (y1 - dy) + " ") : vEdgeTB(y0 - dy, y1 - dy, x1 - dx, hTab[r][c]) + " ";
+    d += (r === ROWS - 1) ? ("L " + (x0 - dx) + " " + (y1 - dy) + " ") : hEdgeRL(x1 - dx, x0 - dx, y1 - dy, vTab[r][c]) + " ";
+    d += (c === 0) ? ("L " + (x0 - dx) + " " + (y0 - dy) + " ") : vEdgeBT(y1 - dy, y0 - dy, x0 - dx, hTab[r][c - 1]) + " ";
+    return d + "Z";
+  }
+
+  function makePieceEl(r, c) {
+    var w = LC + 2 * MARGIN, h = LC + 2 * MARGIN;
+    var el = document.createElement("div");
+    el.className = "piece";
+    el.style.width = w + "px"; el.style.height = h + "px";
+    var shape = document.createElement("div");
+    shape.className = "piece-shape";
+    shape.style.clipPath = "path('" + localPiecePath(r, c) + "')";
+    shape.style.backgroundImage = "url(" + pictureUrl + ")";
+    shape.style.backgroundSize = PIC_W + "px " + PIC_H + "px";
+    shape.style.backgroundPosition = (-(c * LC - MARGIN)) + "px " + (-(r * LC - MARGIN)) + "px";
+    el.appendChild(shape);
+    return { el: el, w: w, h: h };
+  }
+
+  // ---- Layout / sizing (design at fixed logical resolution, scale via CSS) ----
+  function sizeBoard() {
+    var wrapRect = document.querySelector(".wrap").getBoundingClientRect();
+    var availW = Math.min(wrapRect.width - 4, 440);
+    targetScale = availW / PIC_W;
+    var dispW = PIC_W * targetScale, dispH = PIC_H * targetScale;
+    targetFrame.style.width = dispW + "px";
+    targetFrame.style.height = dispH + "px";
+    targetEl.style.width = PIC_W + "px";
+    targetEl.style.height = PIC_H + "px";
+    targetEl.style.transform = "scale(" + targetScale + ")";
+
+    var trayPieceTarget = 76; // desired on-screen tray piece size in px
+    trayScale = trayPieceTarget / (LC + 2 * MARGIN);
+    pieces.forEach(function (p) {
+      if (!p.placed) layoutTraySlot(p);
+      else layoutPlacedPiece(p);
+    });
+  }
+  function layoutTraySlot(p) {
+    var slot = p.slotEl;
+    if (!slot) return;
+    slot.style.width = (p.w * trayScale) + "px";
+    slot.style.height = (p.h * trayScale) + "px";
+    p.el.style.transform = "scale(" + trayScale + ")";
+  }
+  function layoutPlacedPiece(p) {
+    p.el.style.left = (p.c * LC - MARGIN) + "px";
+    p.el.style.top = (p.r * LC - MARGIN) + "px";
+    p.el.style.transform = "scale(1)";
+  }
+  window.addEventListener("resize", sizeBoard);
+  window.addEventListener("orientationchange", function () { setTimeout(sizeBoard, 150); });
+
+  // ---- Drag & drop (screen-space hit testing; the target's own bounding
+  // rect already reflects its CSS scale, so no manual scale math is needed) ----
+  var drag = null;
+  function attachDrag(p) {
+    p.el.addEventListener("pointerdown", function (e) {
+      if (over || p.placed) return;
+      e.preventDefault();
+      audio();
+      drag = { piece: p, startX: e.clientX, startY: e.clientY };
+      p.slotEl.style.visibility = "hidden";
+      buildGhost(p);
+      moveGhost(e.clientX, e.clientY);
+      document.addEventListener("pointermove", onMove);
+      document.addEventListener("pointerup", onUp, { once: true });
+    });
+  }
+  function buildGhost(p) {
+    if (ghostEl) ghostEl.remove();
+    ghostEl = document.createElement("div");
+    ghostEl.id = "ghost";
+    ghostEl.style.width = p.w + "px";
+    ghostEl.style.height = p.h + "px";
+    ghostEl.appendChild(p.shapeEl.cloneNode(true));
+    ghostEl.style.transform = "scale(" + trayScale + ")";
+    document.body.appendChild(ghostEl);
+  }
+  function moveGhost(x, y) {
+    var p = drag.piece;
+    var w = p.w * trayScale, h = p.h * trayScale;
+    ghostEl.style.left = (x - w / 2) + "px";
+    ghostEl.style.top = (y - h / 2 - 40) + "px";
+  }
+  function onMove(e) { if (drag) moveGhost(e.clientX, e.clientY); }
+  function onUp(e) {
+    document.removeEventListener("pointermove", onMove);
+    if (!drag) return;
+    var p = drag.piece;
+    var w = p.w * trayScale, h = p.h * trayScale;
+    var ghostCX = e.clientX, ghostCY = e.clientY - 40;
+    var frameRect = targetFrame.getBoundingClientRect();
+    var homeCX = frameRect.left + (p.c * LC - MARGIN + p.w / 2) * targetScale;
+    var homeCY = frameRect.top + (p.r * LC - MARGIN + p.h / 2) * targetScale;
+    var dist = Math.hypot(ghostCX - homeCX, ghostCY - homeCY);
+    var tolerance = Math.max(28, LC * targetScale * 0.6);
+    if (ghostEl) { ghostEl.remove(); ghostEl = null; }
+    if (dist < tolerance) placePiece(p); else { p.slotEl.style.visibility = "visible"; }
+    drag = null;
+  }
+
+  function placePiece(p) {
+    p.placed = true;
+    p.slotEl.remove();
+    p.el.style.position = "absolute";
+    targetEl.appendChild(p.el);
+    layoutPlacedPiece(p);
+    placedCount++;
+    placedEl.textContent = placedCount + "/" + TOTAL;
+    sfxPlace();
+    if (placedCount === TOTAL) setTimeout(win, 250);
+  }
+
+  function win() {
+    over = true;
+    stopTimer();
+    sfxWin();
+    setTimeout(function () {
+      LB.finish({ game: "jigsaw", value: elapsed, resultTitle: "Picture complete!", onPlayAgain: newGame });
+    }, 500);
+  }
+
+  // ---- Timer ----
+  function startTimer() {
+    startTime = Date.now();
+    timerId = setInterval(function () {
+      elapsed = Math.floor((Date.now() - startTime) / 1000);
+      timeEl.textContent = elapsed + "s";
+    }, 250);
+  }
+  function stopTimer() { clearInterval(timerId); }
+
+  function newGame() {
+    over = false; placedCount = 0; elapsed = 0;
+    stopTimer();
+    timeEl.textContent = "0s";
+    placedEl.textContent = "0/" + TOTAL;
+    targetEl.innerHTML = "";
+    trayWrap.innerHTML = "";
+    pieces = [];
+    buildSeams();
+    pictureUrl = drawPicture();
+    targetFrame.style.backgroundImage =
+      "linear-gradient(rgba(17,21,28,0.72), rgba(17,21,28,0.72))," +
+      "repeating-linear-gradient(to right, rgba(255,255,255,0.08) 0, rgba(255,255,255,0.08) 1px, transparent 1px, transparent " + (100 / COLS) + "%)," +
+      "repeating-linear-gradient(to bottom, rgba(255,255,255,0.08) 0, rgba(255,255,255,0.08) 1px, transparent 1px, transparent " + (100 / ROWS) + "%)," +
+      "url(" + pictureUrl + ")";
+    targetFrame.style.backgroundSize = "100% 100%, 100% 100%, 100% 100%, 100% 100%";
+
+    var order = [];
+    for (var r = 0; r < ROWS; r++) for (var c = 0; c < COLS; c++) order.push([r, c]);
+    for (var i = order.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var tmp = order[i]; order[i] = order[j]; order[j] = tmp; }
+
+    order.forEach(function (rc, idx) {
+      var r = rc[0], c = rc[1];
+      var built = makePieceEl(r, c);
+      var slot = document.createElement("div");
+      slot.className = "tray-slot";
+      slot.appendChild(built.el);
+      trayWrap.appendChild(slot);
+      var p = { id: idx, r: r, c: c, placed: false, el: built.el, shapeEl: built.el.firstChild, slotEl: slot, w: built.w, h: built.h };
+      pieces.push(p);
+      attachDrag(p);
+    });
+
+    sizeBoard();
+    requestAnimationFrame(sizeBoard);
+    setTimeout(sizeBoard, 300);
+    startTimer();
+  }
+
+  // ---- iOS touch/gesture hardening ----
+  trayWrap.addEventListener("touchstart", function (e) {}, { passive: true });
+  document.addEventListener("gesturestart", function (e) { e.preventDefault(); });
+  var lastTouchEnd = 0;
+  document.addEventListener("touchend", function (e) { var n = Date.now(); if (n - lastTouchEnd <= 320) e.preventDefault(); lastTouchEnd = n; }, { passive: false });
+
+  // ---- Settings / sound toggle ----
+  function updateSoundToggle() { soundToggle.textContent = muted ? "Off" : "On"; soundToggle.classList.toggle("on", !muted); }
+  soundToggle.addEventListener("click", function () {
+    muted = !muted;
+    localStorage.setItem("tranquil_muted", muted ? "1" : "0");
+    updateSoundToggle();
+    if (!muted) { audio(); tone(480, 0.06, "sine", 0.07); }
+  });
+  document.getElementById("settings-btn").addEventListener("click", function () { updateSoundToggle(); settingsOverlay.classList.add("show"); });
+  document.getElementById("settings-close").addEventListener("click", function () { settingsOverlay.classList.remove("show"); });
+  settingsOverlay.addEventListener("click", function (e) { if (e.target === settingsOverlay) settingsOverlay.classList.remove("show"); });
+
+  async function shareGame() {
+    var text = "Jigsaw — a calm generative jigsaw puzzle with no ads. Play it:";
+    var url = "https://pete1552.github.io/AGTest/";
+    try { if (navigator.share) { await navigator.share({ title: "Jigsaw — Tranquil", text: text, url: url }); return; } } catch (e) { return; }
+    try {
+      await navigator.clipboard.writeText(text + " " + url);
+      var btn = document.getElementById("settings-share"), old = btn.textContent;
+      btn.textContent = "Link copied!"; setTimeout(function () { btn.textContent = old; }, 1500);
+    } catch (e) {}
+  }
+  document.getElementById("settings-share").addEventListener("click", shareGame);
+
+  document.getElementById("lb-btn").addEventListener("click", function () { LB.open("jigsaw"); });
+  document.getElementById("restart").addEventListener("click", newGame);
+
+  // ---- Boot ----
+  updateSoundToggle();
+  newGame();
+})();
+</script>
+</body>
+</html>
