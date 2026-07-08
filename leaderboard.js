@@ -9,7 +9,7 @@
   // bottom of every settings popup so you can tell at a glance whether a
   // device has picked up the latest deploy. Bump alongside the ?v= query on
   // the <script> tags so caches refetch this file. ====
-  var VERSION = "2026-07-08";
+  var VERSION = "2026-07-08.2";
 
   // ==== CONFIG: set these to enable the GLOBAL leaderboard (empty = on-device) ====
   var CFG = {
@@ -41,7 +41,8 @@
     sweep:  { name: "Sweep",   dir: "asc",  fmt: function (v) { return v + "s"; } },
     nibble: { name: "Nibble",  dir: "desc", fmt: function (v) { return String(v); } },
     runway: { name: "Runway",  dir: "asc",  fmt: fmtOverPar },
-    jigsaw: { name: "Jigsaw",  dir: "asc",  fmt: function (v) { return v + "s"; } }
+    jigsaw: { name: "Jigsaw",  dir: "asc",  fmt: function (v) { return v + "s"; } },
+    dodge:  { name: "Dodge",   dir: "desc", fmt: function (v) { return v + "s"; } }
   };
   var MAX = 10;
 

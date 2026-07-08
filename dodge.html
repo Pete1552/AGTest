@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#11151c" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Tranquil" />
+<link rel="apple-touch-icon" href="icon.png" />
+<link rel="icon" href="icon.png" />
+<link rel="manifest" href="manifest.json" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="shared.css" />
+<title>Dodge — Tranquil</title>
+<style>
+  .play-area { touch-action: none; margin: 6px 0; }
+  #stage {
+    display: block; width: 100%; height: 100%; border-radius: 16px;
+    background: linear-gradient(180deg, #161d28 0%, #10151d 100%);
+    touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+  }
+  .tap-hint { text-align: center; color: var(--muted); font-size: 12px; min-height: 16px; margin-top: 6px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="topbar">
+    <div class="brand">
+      <a href="index.html" class="icon-btn" aria-label="Back to games">‹</a>
+      <span class="title">Dodge</span>
+    </div>
+    <div class="bar-actions">
+      <button id="lb-btn" class="icon-btn" aria-label="High scores">🏆</button>
+      <button id="restart" class="icon-btn" aria-label="New game">↻</button>
+      <button id="settings-btn" class="icon-btn" aria-label="Settings">⚙</button>
+    </div>
+  </header>
+
+  <div class="scores">
+    <div class="score-box"><div class="score-label">Time</div><div class="score-val" id="time">0s</div></div>
+    <div class="score-box best"><div class="score-label">Best</div><div class="score-val" id="best">0s</div></div>
+  </div>
+
+  <div class="play-area"><canvas id="stage"></canvas></div>
+  <div class="tap-hint" id="hint">Drag to slide · dodge the rolling balls</div>
+</div>
+
+<div id="settings-overlay" class="modal-overlay">
+  <div class="modal settings">
+    <h2>Dodge</h2>
+    <div class="setting-row">
+      <span class="label">Sound</span>
+      <button id="sound-toggle" class="toggle on">On</button>
+    </div>
+    <div class="how">
+      <p class="how-title">How to play</p>
+      <p class="body">Balls roll up the court straight at you — drag left and right (or use the arrow keys) to slip out of their path. They come faster and more often the longer you last. One touch and you're out. Longest run wins.</p>
+    </div>
+    <button id="settings-share" class="share">Share the game</button>
+    <button id="settings-close" class="ghost-btn">Done</button>
+    <div class="version-tag" id="app-version"></div>
+  </div>
+</div>
+
+<script src="leaderboard.js?v=11"></script>
+<script>
+(function () {
+  "use strict";
+
+  // Geometry as fractions: x is a fraction of canvas width, y of height.
+  // Radii are fractions of the canvas' shorter side so balls stay round-ish
+  // in feel regardless of aspect.
+  var PLAYER_Y = 0.86;
+  var PLAYER_R = 0.032;
+  var BALL_R_MIN = 0.032, BALL_R_MAX = 0.055;
+  var SPEED0 = 0.22, SPEED_RAMP = 0.0055, SPEED_MAX = 0.6;   // ball speed, fraction of height/s
+  var SPAWN0 = 1.15, SPAWN_MIN = 0.38, SPAWN_RAMP = 0.011;   // seconds between balls
+  var PLAYER_MAX_SPEED = 1.4;                                 // fraction of width/s
+  var BALL_COLORS = ["#e06c9f", "#f2b35e", "#8fb4f0", "#9ece6a", "#bb9af7", "#e8735c"];
+  var muted = localStorage.getItem("tranquil_muted") === "1";
+
+  var player = { x: 0.5, targetX: 0.5 };
+  var balls = [];          // {x,y,vx,vy,r,roll,color,missed}
+  var particles = [];      // {x,y,vx,vy,alpha,color}  (px-space burst on a hit)
+  var elapsed = 0, dodged = 0, over = false, running = false;
+  var spawnTimer = 1.0, keyDir = 0;
+  var best = Number(localStorage.getItem("tranquil_dodge_best") || 0) || 0;
+
+  var playArea = document.querySelector(".play-area");
+  var canvas = document.getElementById("stage");
+  var ctx = canvas.getContext("2d");
+  var timeEl = document.getElementById("time");
+  var bestEl = document.getElementById("best");
+  var settingsOverlay = document.getElementById("settings-overlay");
+  var soundToggle = document.getElementById("sound-toggle");
+  var W = 300, H = 460, dpr = window.devicePixelRatio || 1;
+
+  // ---- Sound ----
+  var actx = null;
+  function audio() {
+    if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { actx = null; } }
+    if (actx && actx.state === "suspended") actx.resume();
+  }
+  function tone(f, d, t, g) {
+    if (muted || !actx) return;
+    var o = actx.createOscillator(), gn = actx.createGain();
+    o.type = t || "sine"; o.frequency.value = f;
+    gn.gain.setValueAtTime(0.0001, actx.currentTime);
+    gn.gain.exponentialRampToValueAtTime(g || 0.1, actx.currentTime + 0.01);
+    gn.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + d);
+    o.connect(gn); gn.connect(actx.destination); o.start(); o.stop(actx.currentTime + d + 0.02);
+  }
+  function sfxWhoosh() { tone(520, 0.05, "sine", 0.035); }
+  function sfxHit() { tone(150, 0.22, "sawtooth", 0.1); }
+  function sfxOver() { [330, 247, 175].forEach(function (f, i) { setTimeout(function () { tone(f, 0.3, "sine", 0.09); }, i * 130); }); }
+
+  // ---- Spawning ----
+  function ballSpeed() { return Math.min(SPEED_MAX, SPEED0 + elapsed * SPEED_RAMP); }
+  function spawnInterval() { return Math.max(SPAWN_MIN, SPAWN0 - elapsed * SPAWN_RAMP); }
+  function spawnBall() {
+    var r = BALL_R_MIN + Math.random() * (BALL_R_MAX - BALL_R_MIN);
+    var x = 0.08 + Math.random() * 0.84;
+    // aim the roll loosely at where the player is right now, with jitter, so
+    // standing still is never safe but every ball stays a straight dodgeable line
+    var vy = ballSpeed() * (0.9 + Math.random() * 0.25);
+    var travel = (PLAYER_Y + 0.2) / vy; // seconds until it reaches the player's line
+    var aimX = player.x + (Math.random() - 0.5) * 0.3;
+    var vx = Math.max(-0.14, Math.min(0.14, (aimX - x) / travel));
+    balls.push({ x: x, y: -r - 0.02, vx: vx, vy: vy, r: r, roll: Math.random() * 100,
+      color: BALL_COLORS[Math.floor(Math.random() * BALL_COLORS.length)], missed: false });
+  }
+
+  // ---- Update ----
+  var lastT = 0, rafId = 0;
+  function loop(ts) {
+    var dt = lastT ? Math.min(0.032, (ts - lastT) / 1000) : 0.016;
+    lastT = ts;
+    if (running && !over) update(dt);
+    render();
+    rafId = requestAnimationFrame(loop);
+  }
+  function update(dt) {
+    elapsed += dt;
+    timeEl.textContent = Math.floor(elapsed) + "s";
+
+    spawnTimer -= dt;
+    if (spawnTimer <= 0) { spawnBall(); spawnTimer = spawnInterval(); }
+
+    // player slides toward the pointer target (or steers by held arrow key)
+    if (keyDir) player.targetX = player.x + keyDir * 0.6;
+    var minDim = Math.min(W, H);
+    var pr = PLAYER_R * minDim;
+    var half = pr / W;
+    player.targetX = Math.max(half, Math.min(1 - half, player.targetX));
+    var dx = player.targetX - player.x;
+    var maxStep = PLAYER_MAX_SPEED * dt;
+    player.x += Math.max(-maxStep, Math.min(maxStep, dx));
+
+    for (var i = balls.length - 1; i >= 0; i--) {
+      var b = balls[i];
+      b.x += b.vx * dt;
+      b.y += b.vy * dt;
+      var R = b.r * minDim;
+      // kerb-bounce off the court's side walls so angled rolls stay in play
+      if (b.x * W < R) { b.x = R / W; b.vx = Math.abs(b.vx); }
+      if (b.x * W > W - R) { b.x = (W - R) / W; b.vx = -Math.abs(b.vx); }
+      // roll phase advances with distance actually travelled (px)
+      b.roll += Math.hypot(b.vx * W, b.vy * H) * dt;
+      if (b.y * H - R > H + 10) { balls.splice(i, 1); dodged++; continue; }
+      var ddx = (b.x - player.x) * W, ddy = (b.y - PLAYER_Y) * H;
+      var dist = Math.hypot(ddx, ddy);
+      if (dist < R + pr * 0.9) { hit(); return; }
+      if (!b.missed && b.y > PLAYER_Y && dist < R + pr + minDim * 0.05) { b.missed = true; sfxWhoosh(); }
+    }
+
+    for (var pI = particles.length - 1; pI >= 0; pI--) {
+      var p = particles[pI];
+      p.x += p.vx * dt; p.y += p.vy * dt; p.vy += H * 1.2 * dt; p.alpha -= dt * 1.8;
+      if (p.alpha <= 0) particles.splice(pI, 1);
+    }
+  }
+
+  function hit() {
+    over = true;
+    sfxHit(); sfxOver();
+    var minDim = Math.min(W, H);
+    for (var i = 0; i < 14; i++) {
+      var a = Math.random() * Math.PI * 2, sp = minDim * (0.2 + Math.random() * 0.5);
+      particles.push({ x: player.x * W, y: PLAYER_Y * H, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - minDim * 0.2, alpha: 1, color: "#5dd6c0" });
+    }
+    var score = Math.floor(elapsed);
+    var newBest = false;
+    if (score > best) { best = score; newBest = true; localStorage.setItem("tranquil_dodge_best", String(best)); bestEl.textContent = best + "s"; }
+    document.getElementById("hint").textContent = "Tagged!";
+    setTimeout(function () {
+      LB.finish({ game: "dodge", value: score, resultTitle: "Tagged!",
+        subtitle: "Dodged " + dodged + " ball" + (dodged === 1 ? "" : "s") + (newBest ? " · New personal best!" : ""),
+        onPlayAgain: newGame });
+    }, 600);
+  }
+
+  // ---- Render ----
+  function render() {
+    ctx.clearRect(0, 0, W, H);
+    var minDim = Math.min(W, H);
+
+    // faint court lines give the ground a surface to roll over
+    ctx.strokeStyle = "rgba(255,255,255,0.035)"; ctx.lineWidth = 1;
+    for (var gy = 0.18; gy < 1; gy += 0.16) {
+      ctx.beginPath(); ctx.moveTo(8, gy * H); ctx.lineTo(W - 8, gy * H); ctx.stroke();
+    }
+
+    // balls, far-to-near so nearer balls overlap correctly
+    var sorted = balls.slice().sort(function (a, b) { return a.y - b.y; });
+    for (var i = 0; i < sorted.length; i++) drawBall(sorted[i], minDim);
+
+    drawPlayer(minDim);
+
+    for (var pI = 0; pI < particles.length; pI++) {
+      var p = particles[pI];
+      ctx.globalAlpha = Math.max(0, p.alpha); ctx.fillStyle = p.color;
+      ctx.beginPath(); ctx.arc(p.x, p.y, 2.6, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  // A ball that reads as ROLLING, not flying: it sits on a grounded contact
+  // shadow, and curved latitude bands scroll around the sphere in its
+  // direction of travel (band positions come from real distance travelled).
+  function drawBall(b, minDim) {
+    var R = b.r * minDim, bx = b.x * W, by = b.y * H;
+
+    // grounded contact shadow, directly under the ball and touching it
+    ctx.fillStyle = "rgba(0,0,0,0.32)";
+    ctx.beginPath(); ctx.ellipse(bx, by + R * 0.88, R * 0.92, R * 0.3, 0, 0, Math.PI * 2); ctx.fill();
+
+    ctx.save();
+    ctx.beginPath(); ctx.arc(bx, by, R, 0, Math.PI * 2); ctx.clip();
+    // base colour with a soft top-light
+    var g = ctx.createRadialGradient(bx - R * 0.35, by - R * 0.45, R * 0.15, bx, by, R * 1.25);
+    g.addColorStop(0, "rgba(255,255,255,0.28)");
+    g.addColorStop(0.35, "rgba(255,255,255,0)");
+    g.addColorStop(1, "rgba(0,0,0,0.3)");
+    ctx.fillStyle = b.color; ctx.fillRect(bx - R, by - R, R * 2, R * 2);
+    ctx.fillStyle = g; ctx.fillRect(bx - R, by - R, R * 2, R * 2);
+    // scrolling latitude bands (wrap over the 2R sphere height)
+    var span = 2 * R, spacing = span / 2.6;
+    var phase = b.roll % spacing;
+    ctx.fillStyle = "rgba(0,0,0,0.20)";
+    for (var k = -2; k <= 2; k++) {
+      var bandY = -R + ((phase + (k + 2) * spacing) % span);
+      var chord = Math.sqrt(Math.max(0, R * R - bandY * bandY));
+      if (chord < 1) continue;
+      ctx.beginPath();
+      ctx.ellipse(bx, by + bandY, chord, Math.max(1.5, R * 0.11), 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+    // rim
+    ctx.strokeStyle = "rgba(0,0,0,0.25)"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(bx, by, R - 0.5, 0, Math.PI * 2); ctx.stroke();
+  }
+
+  function drawPlayer(minDim) {
+    var pr = PLAYER_R * minDim, px = player.x * W, py = PLAYER_Y * H;
+    ctx.fillStyle = "rgba(0,0,0,0.32)";
+    ctx.beginPath(); ctx.ellipse(px, py + pr * 1.15, pr * 0.95, pr * 0.3, 0, 0, Math.PI * 2); ctx.fill();
+    // body: a little capsule figure in the collection's accent colour
+    ctx.fillStyle = "#5dd6c0";
+    ctx.beginPath();
+    ctx.moveTo(px - pr * 0.62, py + pr * 1.1);
+    ctx.arcTo(px - pr * 0.62, py - pr * 0.5, px, py - pr * 0.5, pr * 0.62);
+    ctx.arcTo(px + pr * 0.62, py - pr * 0.5, px + pr * 0.62, py + pr * 1.1, pr * 0.62);
+    ctx.lineTo(px + pr * 0.62, py + pr * 1.1);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,0.25)";
+    ctx.fillRect(px - pr * 0.5, py - pr * 0.42, pr, Math.max(1, pr * 0.2));
+    // head
+    ctx.fillStyle = "#7fe3d1";
+    ctx.beginPath(); ctx.arc(px, py - pr * 0.95, pr * 0.46, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // ---- Input ----
+  function xFromEvent(e) {
+    var r = canvas.getBoundingClientRect();
+    return Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+  }
+  var dragging = false;
+  canvas.addEventListener("pointerdown", function (e) {
+    e.preventDefault();
+    if (over) return;
+    audio();
+    dragging = true;
+    player.targetX = xFromEvent(e);
+    try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+  });
+  canvas.addEventListener("pointermove", function (e) {
+    if (!dragging || over) return;
+    e.preventDefault();
+    player.targetX = xFromEvent(e);
+  });
+  canvas.addEventListener("pointerup", function (e) { dragging = false; try { canvas.releasePointerCapture(e.pointerId); } catch (err) {} });
+  canvas.addEventListener("pointercancel", function () { dragging = false; });
+  window.addEventListener("keydown", function (e) {
+    if (e.key === "ArrowLeft") { keyDir = -1; audio(); e.preventDefault(); }
+    else if (e.key === "ArrowRight") { keyDir = 1; audio(); e.preventDefault(); }
+  });
+  window.addEventListener("keyup", function (e) {
+    if ((e.key === "ArrowLeft" && keyDir === -1) || (e.key === "ArrowRight" && keyDir === 1)) keyDir = 0;
+  });
+  canvas.addEventListener("touchstart", function (e) { e.preventDefault(); }, { passive: false });
+  canvas.addEventListener("touchmove", function (e) { e.preventDefault(); }, { passive: false });
+  document.addEventListener("gesturestart", function (e) { e.preventDefault(); });
+  var lastTouchEnd = 0;
+  document.addEventListener("touchend", function (e) { var n = Date.now(); if (n - lastTouchEnd <= 320) e.preventDefault(); lastTouchEnd = n; }, { passive: false });
+
+  // ---- Sizing ----
+  function sizeStage() {
+    var r = playArea.getBoundingClientRect();
+    W = Math.max(40, Math.floor(r.width)); H = Math.max(40, Math.floor(r.height));
+    dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    render();
+  }
+  window.addEventListener("resize", sizeStage);
+  window.addEventListener("orientationchange", function () { setTimeout(sizeStage, 150); });
+
+  // ---- Settings / sound ----
+  function updateSoundToggle() { soundToggle.textContent = muted ? "Off" : "On"; soundToggle.classList.toggle("on", !muted); }
+  async function shareGame() {
+    var text = "Dodge — a calm dodgeball game with no ads. Play it:";
+    var url = "https://pete1552.github.io/AGTest/";
+    try { if (navigator.share) { await navigator.share({ title: "Dodge — Tranquil", text: text, url: url }); return; } } catch (e) { return; }
+    try {
+      await navigator.clipboard.writeText(text + " " + url);
+      var b = document.getElementById("settings-share"), old = b.textContent; b.textContent = "Link copied!";
+      setTimeout(function () { b.textContent = old; }, 1500);
+    } catch (e) {}
+  }
+  soundToggle.addEventListener("click", function () {
+    muted = !muted; localStorage.setItem("tranquil_muted", muted ? "1" : "0"); updateSoundToggle();
+    if (!muted) { audio(); tone(420, 0.05, "sine", 0.07); }
+  });
+  document.getElementById("settings-btn").addEventListener("click", function () { updateSoundToggle(); settingsOverlay.classList.add("show"); });
+  document.getElementById("settings-close").addEventListener("click", function () { settingsOverlay.classList.remove("show"); });
+  settingsOverlay.addEventListener("click", function (e) { if (e.target === settingsOverlay) settingsOverlay.classList.remove("show"); });
+  document.getElementById("settings-share").addEventListener("click", shareGame);
+  document.getElementById("lb-btn").addEventListener("click", function () { LB.open("dodge"); });
+  document.getElementById("restart").addEventListener("click", newGame);
+
+  // ---- Lifecycle ----
+  function newGame() {
+    balls = []; particles = [];
+    elapsed = 0; dodged = 0; over = false; running = true;
+    spawnTimer = 1.0; keyDir = 0;
+    player.x = 0.5; player.targetX = 0.5;
+    timeEl.textContent = "0s"; bestEl.textContent = best + "s";
+    document.getElementById("hint").textContent = "Drag to slide · dodge the rolling balls";
+  }
+
+  updateSoundToggle();
+  sizeStage();
+  newGame();
+  rafId = requestAnimationFrame(loop);
+  setTimeout(sizeStage, 300);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(sizeStage);
+})();
+</script>
+</body>
+</html>
