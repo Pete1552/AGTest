@@ -9,6 +9,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="apple-mobile-web-app-title" content="Tranquil" />
 <link rel="apple-touch-icon" href="icon.png" />
+<link rel="icon" href="icon.png" />
 <link rel="manifest" href="manifest.json" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -395,7 +396,12 @@
   // ---- Sizing ----
   function sizeStage() {
     var r = playArea.getBoundingClientRect();
-    W = Math.max(40, Math.floor(r.width)); H = Math.max(40, Math.floor(r.height));
+    W = Math.max(40, Math.floor(r.width));
+    // Fit the canvas to the tile pyramid rather than the whole column, so the
+    // tiles don't float small in a sea of empty stage on tall screens.
+    var cellW = W / (COLS + 1);
+    H = Math.max(40, Math.floor(Math.min(r.height, cellW * (ROWS + 1))));
+    canvas.style.height = H + "px";
     dpr = window.devicePixelRatio || 1;
     canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);

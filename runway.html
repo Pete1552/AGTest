@@ -9,6 +9,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="apple-mobile-web-app-title" content="Tranquil" />
 <link rel="apple-touch-icon" href="icon.png" />
+<link rel="icon" href="icon.png" />
 <link rel="manifest" href="manifest.json" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -30,17 +31,36 @@
     -webkit-touch-callout: none;
     overflow: visible;
   }
-  .exit-mark {
-    position: absolute; right: -3px; width: 8px;
+  /* The exit row reads as an actual runway: faint tarmac + dashed centreline */
+  .runway-strip {
+    position: absolute; left: 0; right: 0;
     top: 33.3334%; height: 16.6666%;
-    background: var(--accent); border-radius: 5px 0 0 5px;
-    box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 70%, transparent);
+    background: rgba(255,255,255,0.035); pointer-events: none;
+  }
+  .runway-strip::after {
+    content: ""; position: absolute; left: 3%; right: 3%; top: 50%;
+    border-top: 2px dashed rgba(255,255,255,0.14);
+  }
+  .exit-mark {
+    position: absolute; right: -4px; width: 10px;
+    top: 33.3334%; height: 16.6666%;
+    background: var(--accent); border-radius: 6px 0 0 6px;
+    box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 80%, transparent);
   }
   .piece {
     position: absolute; border-radius: 8px;
     cursor: grab; touch-action: none;
     box-shadow: inset 0 2px 0 rgba(255,255,255,0.12), inset 0 -2px 0 rgba(0,0,0,0.25);
   }
+  /* Plane silhouette on every piece, pointing along its axis of travel */
+  .piece::after {
+    content: ""; position: absolute; left: 50%; top: 50%;
+    height: 64%; aspect-ratio: 1 / 1;
+    transform: translate(-50%, -50%) rotate(90deg);
+    background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="%23000000" fill-opacity="0.34" d="M21 16v-2l-8-5V3.5C13 2.67 12.33 2 11.5 2S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/></svg>') center / contain no-repeat;
+    pointer-events: none;
+  }
+  .piece.v::after { height: auto; width: 64%; transform: translate(-50%, -50%); }
   .piece.blocker.len2 { background: #6b7890; }
   .piece.blocker.len3 { background: #ab8548; }
   .piece.target {
@@ -70,7 +90,7 @@
     <div class="score-box best"><div class="score-label">Best</div><div class="score-val" id="best">–</div></div>
   </div>
   <div class="play-area">
-    <div id="board-wrap"><div id="board"><div class="exit-mark"></div></div></div>
+    <div id="board-wrap"><div id="board"><div class="runway-strip"></div><div class="exit-mark"></div></div></div>
   </div>
   <div class="tap-hint" id="hint" style="text-align:center; color:var(--muted); font-size:12px; min-height:16px; margin-top:6px;">Slide the other planes clear of the runway</div>
 </div>
