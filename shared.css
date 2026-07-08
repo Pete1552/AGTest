@@ -100,7 +100,8 @@ body {
   padding: 12px 0; border-top: 1px solid rgba(255,255,255,0.06);
 }
 .setting-row .label { font-size: 15px; font-weight: 600; }
-.toggle {
+/* .modal .toggle needed: .modal button { width:100% } outranks a bare .toggle */
+.toggle, .modal .toggle {
   width: auto; min-width: 64px; padding: 7px 16px; border-radius: 999px;
   font-size: 13px; font-weight: 700; cursor: pointer; border: none;
   background: var(--grid); color: var(--muted);
@@ -124,6 +125,12 @@ body {
   0% { opacity: 0; transform: translate(-50%, -30%) scale(0.6); }
   20% { opacity: 1; transform: translate(-50%, -55%) scale(1.05); }
   100% { opacity: 0; transform: translate(-50%, -130%) scale(1); }
+}
+
+/* ---- Version tag (bottom of settings popups, filled by leaderboard.js) ---- */
+.version-tag {
+  text-align: center; color: var(--muted); opacity: 0.55;
+  font-size: 10.5px; letter-spacing: 0.4px; margin-top: 10px; min-height: 13px;
 }
 
 /* ---- Leaderboard (leaderboard.js) ---- */

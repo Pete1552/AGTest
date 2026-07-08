@@ -5,6 +5,12 @@
 (function () {
   "use strict";
 
+  // ==== Collection version (date code). Single source of truth — shown at the
+  // bottom of every settings popup so you can tell at a glance whether a
+  // device has picked up the latest deploy. Bump alongside the ?v= query on
+  // the <script> tags so caches refetch this file. ====
+  var VERSION = "2026-07-08";
+
   // ==== CONFIG: set these to enable the GLOBAL leaderboard (empty = on-device) ====
   var CFG = {
     url: "https://qgmfmalbcnqhyrshopgc.supabase.co",
@@ -236,7 +242,15 @@
     });
   }
 
+  // Stamp the version into any page that carries the placeholder (the
+  // settings popups); this script is included after the modal markup.
+  try {
+    var vEl = document.getElementById("app-version");
+    if (vEl) vEl.textContent = "v" + VERSION;
+  } catch (e) {}
+
   window.LB = {
+    version: VERSION,
     open: open,
     finish: finish,
     logPlay: logPlay,
