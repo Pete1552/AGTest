@@ -851,6 +851,7 @@
   }
 
   function aiSellOrKeep(sailor, lot, bid) {
+    if (sailor.cash < bid) return "sell"; // can't afford to keep (humans get this button disabled)
     // keep value: island worth to me (partial premium) minus bid paid to bank
     var mine = countBy(sailor.island);
     var keepWorth = sum(lot, function (c) {
@@ -1018,19 +1019,21 @@
   // ==================================================================
   //  MODALS
   // ==================================================================
-  function openModal(html) {
+  var modalLocked = false; // must-answer modals (auction prompts) ignore backdrop taps
+  function openModal(html, locked) {
     // Replace the modal node with a fresh clone so delegated listeners from a
     // previous modal don't accumulate on the persistent element.
     var old = $("modal");
     var fresh = old.cloneNode(false);
     fresh.innerHTML = html;
     old.parentNode.replaceChild(fresh, old);
+    modalLocked = !!locked;
     $("overlay").classList.add("show");
   }
-  function closeModal() { $("overlay").classList.remove("show"); }
+  function closeModal() { modalLocked = false; $("overlay").classList.remove("show"); }
 
   $("overlay").addEventListener("click", function (e) {
-    if (e.target === $("overlay")) closeModal();
+    if (e.target === $("overlay") && !modalLocked) closeModal();
   });
 
   // ---- Produce modal ----
@@ -1263,7 +1266,8 @@
           '<input class="bid-input" id="bidv" type="number" min="0" max="' + p.cash + '" value="0" /></div>' +
         '<p class="hint">You can bid 0. You only pay if you win and the seller sells to you.</p>' +
       '</div>' +
-      '<div class="m-foot"><button class="btn primary" id="m-ok">Submit bid</button></div>'
+      '<div class="m-foot"><button class="btn primary" id="m-ok">Submit bid</button></div>',
+      true // dismissing this without answering would deadlock the auction
     );
     var input = $("bidv");
     input.focus(); input.select();
@@ -1289,7 +1293,8 @@
       '<div class="m-foot">' +
         '<button class="btn" id="m-keep"' + (sailor.cash >= high.amount ? "" : " disabled") + '>Keep (pay ' + high.amount + ')</button>' +
         '<button class="btn primary" id="m-sell">Sell (+' + (high.amount * 2) + ')</button>' +
-      '</div>'
+      '</div>',
+      true // dismissing this without answering would deadlock the auction
     );
     $("m-sell").addEventListener("click", function () { closeModal(); done("sell"); });
     var k = $("m-keep");

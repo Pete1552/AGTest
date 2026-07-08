@@ -160,6 +160,7 @@
   var target = [255, 255, 255];
   var drops = [];
   var locked = false;
+  var advanceTimer = 0; // pending round-advance timeout (cancelled on restart)
 
   var targetSwatch = document.getElementById("target-swatch");
   var mixSwatch = document.getElementById("mix-swatch");
@@ -275,7 +276,7 @@
     if (acc >= 88) sfxChord(); else tone(330, 0.25, "sine", 0.1);
     for (var i = 0; i < paintBtns.length; i++) paintBtns[i].disabled = true;
     checkBtn.disabled = true; clearBtn.disabled = true; undoBtn.disabled = true;
-    setTimeout(function () {
+    advanceTimer = setTimeout(function () {
       if (roundNum >= ROUNDS) gameOver();
       else { roundNum++; nextRound(); }
     }, 1200);
@@ -294,6 +295,7 @@
     });
   }
   function newGame() {
+    clearTimeout(advanceTimer); // a restart mid-pause must not skip round 1
     totalScore = 0; roundNum = 1; locked = false; drops = [];
     target = makeTarget();
     targetSwatch.style.background = rgbStr(target);

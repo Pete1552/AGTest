@@ -62,7 +62,19 @@
   }
   .cell.on .num { background: #06231e; color: #eafffb; box-shadow: 0 0 0 2px rgba(255,255,255,0.3); }
   .cell.next .num { box-shadow: 0 0 0 2px var(--accent); }
-  .mode-btn { padding: 7px 18px; }
+  /* Daily/Practice toggle (same look as the Blocks mode switch) */
+  .modes {
+    display: inline-flex; margin: 10px auto 0; background: var(--panel);
+    border-radius: 999px; padding: 4px; gap: 3px;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.3);
+  }
+  .mode-btn {
+    background: transparent; color: var(--muted); border: none; cursor: pointer;
+    padding: 7px 18px; border-radius: 999px; font-size: 13px; font-weight: 700;
+    transition: background 140ms ease, color 140ms ease;
+  }
+  .mode-btn.active { background: var(--accent); color: #06231e; box-shadow: 0 2px 8px rgba(93,214,192,0.3); }
+  .daily-info { color: var(--muted); font-size: 11.5px; margin: 7px 0 0; min-height: 14px; }
 </style>
 </head>
 <body>

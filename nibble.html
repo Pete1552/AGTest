@@ -182,7 +182,10 @@
 
   function tick() {
     if (over || won) return;
-    if (queuedDir) { dir = queuedDir; queuedDir = null; }
+    // Re-validate at apply time: two quick inputs in one tick can leave an
+    // exact-reversal queued (e.g. Up then Left while moving right), which
+    // would drive the head straight into the neck.
+    if (queuedDir) { if (!oppositeDir(queuedDir, dir)) dir = queuedDir; queuedDir = null; }
     var head = snake[0];
     var nr = head.r + dir.dr, nc = head.c + dir.dc;
     if (nr < 0 || nr >= GRID || nc < 0 || nc >= GRID) { endGame(false); return; }

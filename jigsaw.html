@@ -275,7 +275,7 @@
   var drag = null;
   function attachDrag(p) {
     p.el.addEventListener("pointerdown", function (e) {
-      if (over || p.placed) return;
+      if (over || p.placed || drag) return; // ignore a second finger mid-drag
       e.preventDefault();
       audio();
       drag = { piece: p, startX: e.clientX, startY: e.clientY };
@@ -283,8 +283,23 @@
       buildGhost(p);
       moveGhost(e.clientX, e.clientY);
       document.addEventListener("pointermove", onMove);
-      document.addEventListener("pointerup", onUp, { once: true });
+      document.addEventListener("pointerup", onUp);
+      document.addEventListener("pointercancel", onCancel);
     });
+  }
+  function detachDragListeners() {
+    document.removeEventListener("pointermove", onMove);
+    document.removeEventListener("pointerup", onUp);
+    document.removeEventListener("pointercancel", onCancel);
+  }
+  // iOS fires pointercancel (not pointerup) when the OS takes over the touch;
+  // without this the slot stays hidden and the piece is lost for good.
+  function onCancel() {
+    detachDragListeners();
+    if (!drag) return;
+    if (ghostEl) { ghostEl.remove(); ghostEl = null; }
+    drag.piece.slotEl.style.visibility = "visible";
+    drag = null;
   }
   function buildGhost(p) {
     if (ghostEl) ghostEl.remove();
@@ -304,7 +319,7 @@
   }
   function onMove(e) { if (drag) moveGhost(e.clientX, e.clientY); }
   function onUp(e) {
-    document.removeEventListener("pointermove", onMove);
+    detachDragListeners();
     if (!drag) return;
     var p = drag.piece;
     var w = p.w * trayScale, h = p.h * trayScale;
@@ -351,6 +366,7 @@
   function stopTimer() { clearInterval(timerId); }
 
   function newGame() {
+    onCancel(); // abort any in-flight drag so its ghost doesn't outlive the board
     over = false; placedCount = 0; elapsed = 0;
     stopTimer();
     timeEl.textContent = "0s";
