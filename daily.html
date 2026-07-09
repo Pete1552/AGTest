@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#11151c" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Tranquil" />
+<link rel="apple-touch-icon" href="icon.png" />
+<link rel="icon" href="icon.png" />
+<link rel="manifest" href="manifest.json" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="shared.css" />
+<title>Daily Set — Tranquil</title>
+<style>
+  /* this page scrolls (like admin.html), unlike the fixed game pages */
+  html, body { overflow-y: auto; }
+  body { position: static; height: auto; min-height: 100%; }
+  .wrap { height: auto; min-height: 100%; overflow: visible; padding-bottom: 30px; }
+
+  .day-sub { text-align: center; color: var(--muted); font-size: 12px; margin: 8px 0 0; }
+
+  .games-panel { background: var(--panel); border-radius: 16px; padding: 4px 12px; margin-top: 10px; }
+  .game-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
+  .game-row:last-child { border-bottom: none; }
+  .g-icon {
+    width: 38px; height: 38px; border-radius: 10px; flex: none;
+    background: var(--grid); display: flex; align-items: center; justify-content: center; font-size: 20px;
+  }
+  .g-info { flex: 1; min-width: 0; }
+  .g-name { font-weight: 700; font-family: var(--font-display); font-size: 15px; }
+  .g-result { color: var(--muted); font-size: 12px; }
+  .g-pts { font-family: var(--font-display); font-weight: 700; color: var(--accent); width: 58px; text-align: right; flex: none; font-size: 15px; }
+  .g-pts.zero { color: var(--muted); opacity: 0.6; }
+  .play-btn {
+    background: var(--accent); color: #06231e; border: none; border-radius: 999px;
+    padding: 8px 16px; font-weight: 700; font-size: 13px; cursor: pointer;
+    text-decoration: none; flex: none;
+  }
+  .play-btn.replay { background: var(--grid); color: var(--ink); }
+  .play-btn:active { transform: translateY(1px); }
+
+  .submit-row { margin: 14px 0 4px; text-align: center; }
+  .submit-row .lb-input { max-width: 240px; margin: 0 auto 8px; display: block; }
+  .submit-btn {
+    background: var(--accent); color: #06231e; border: none; border-radius: 999px;
+    padding: 12px 28px; font-weight: 700; font-size: 15px; cursor: pointer;
+  }
+  .submit-btn:disabled { opacity: 0.45; cursor: default; }
+  .submit-note { color: var(--muted); font-size: 12px; margin-top: 8px; min-height: 15px; }
+  .submit-note.ok { color: var(--accent); font-weight: 700; }
+
+  .board-tabs { display: flex; justify-content: center; margin: 18px 0 8px; }
+  .modes {
+    display: inline-flex; background: var(--panel); border-radius: 999px; padding: 4px; gap: 3px;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.3);
+  }
+  .mode-btn {
+    background: transparent; color: var(--muted); border: none; cursor: pointer;
+    padding: 7px 20px; border-radius: 999px; font-size: 13px; font-weight: 700;
+    transition: background 140ms ease, color 140ms ease;
+  }
+  .mode-btn.active { background: var(--accent); color: #06231e; box-shadow: 0 2px 8px rgba(93,214,192,0.3); }
+
+  .board-panel { background: var(--panel); border-radius: 16px; padding: 10px 12px; }
+  .board-title { color: var(--muted); font-size: 11px; letter-spacing: 0.4px; text-align: center; margin: 2px 0 8px; }
+  .lb-days { color: var(--muted); font-size: 11px; font-weight: 600; margin-left: 6px; }
+  .foot-note { text-align: center; color: var(--muted); font-size: 11px; opacity: 0.7; margin-top: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="topbar">
+    <div class="brand">
+      <a href="index.html" class="icon-btn" aria-label="Back to games">‹</a>
+      <span class="title">Daily Set</span>
+    </div>
+    <div class="bar-actions">
+      <button id="refresh" class="icon-btn" aria-label="Refresh">↻</button>
+    </div>
+  </header>
+
+  <div class="day-sub" id="day-sub"></div>
+
+  <div class="scores">
+    <div class="score-box best"><div class="score-label">Your points</div><div class="score-val" id="pts">0</div></div>
+    <div class="score-box"><div class="score-label">Games done</div><div class="score-val" id="done">0/0</div></div>
+  </div>
+
+  <div class="games-panel" id="game-list"></div>
+
+  <div class="submit-row" id="submit-area"></div>
+
+  <div class="board-tabs"><div class="modes">
+    <button id="tab-today" class="mode-btn active">Today's leaders</button>
+    <button id="tab-week" class="mode-btn">This week</button>
+  </div></div>
+  <div class="board-panel"><div class="board-title" id="board-title"></div><div class="lb-list" id="board"></div></div>
+
+  <div class="foot-note">Every game scores up to 100 points · the set and puzzles are the same for everyone · new set at midnight</div>
+</div>
+
+<script src="leaderboard.js?v=12"></script>
+<script>
+(function () {
+  "use strict";
+
+  var CFG = LB.getConfig();
+  function isGlobal() { return !!(CFG.url && CFG.anonKey); }
+  function headers() { return { apikey: CFG.anonKey, Authorization: "Bearer " + CFG.anonKey, "Content-Type": "application/json" }; }
+  function esc(s) {
+    return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; });
+  }
+
+  // ---- Per-game daily scoring: raw result -> 0..100 points. First-pass
+  // calibration: ~100 is a strong-but-reachable result for each game. ----
+  function clampPts(x) { return Math.max(0, Math.min(100, Math.round(x))); }
+  var GAME_INFO = {
+    blocks: { icon: "🟦", pts: function (v) { return clampPts(v / 8); } },        // 800 score
+    bloom:  { icon: "🌸", pts: function (v) { return clampPts(100 - 12 * v); } }, // over-par
+    ripple: { icon: "💧", pts: function (v) { return clampPts(115 - 3 * v); } },  // ~5 moves
+    trace:  { icon: "✏️", pts: function (v) { return clampPts(140 - v); } },      // ≤40s
+    fuse:   { icon: "🔢", pts: function (v) { return clampPts(v / 40); } },       // 4000 score
+    blend:  { icon: "🌈", pts: function (v) { return clampPts(100 - 8 * v); } },  // over-par
+    mix:    { icon: "🎨", pts: function (v) { return clampPts(v / 6); } },        // 600 max
+    sort:   { icon: "🧪", pts: function (v) { return clampPts(100 - 10 * v); } }, // over-par
+    tower:  { icon: "🏙️", pts: function (v) { return clampPts(4 * v); } },        // 25 high
+    defense:{ icon: "🛡️", pts: function (v) { return clampPts(8 * v); } },        // wave 13
+    lantern:{ icon: "🀄", pts: function (v) { return clampPts(148 - 0.8 * v); } },// ≤60s
+    breaker:{ icon: "🧱", pts: function (v) { return clampPts(v / 6); } },        // 600 score
+    aegis:  { icon: "💥", pts: function (v) { return clampPts(v / 8); } },        // 800 score
+    sweep:  { icon: "💣", pts: function (v) { return clampPts(130 - v); } },      // ≤30s
+    nibble: { icon: "🐍", pts: function (v) { return clampPts(4 * v); } },        // 25 dots
+    runway: { icon: "🛫", pts: function (v) { return clampPts(100 - 12 * v); } }, // over-par
+    jigsaw: { icon: "🧩", pts: function (v) { return clampPts(160 - v); } },      // ≤60s
+    dodge:  { icon: "🥎", pts: function (v) { return clampPts(2 * v); } }         // 50s survived
+  };
+
+  // ---- Dates / deterministic set selection ----
+  function mulberry32(a) {
+    return function () {
+      a |= 0; a = a + 0x6D2B79F5 | 0;
+      var t = Math.imul(a ^ a >>> 15, 1 | a);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+  function shuffle(arr, rng) {
+    for (var i = arr.length - 1; i > 0; i--) { var j = Math.floor(rng() * (i + 1)); var t = arr[i]; arr[i] = arr[j]; arr[j] = t; }
+    return arr;
+  }
+  function pad(n) { return String(n).padStart(2, "0"); }
+  function dstr(d) { return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); }
+  function pretty(dateStr) {
+    return new Date(dateStr + "T00:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+  }
+  var TODAY = new Date();
+  var DATE = dstr(TODAY);
+
+  function setForDate(dateStr) {
+    var seedBase = Number(dateStr.replace(/-/g, "")) >>> 0;
+    var rng = mulberry32(seedBase);
+    var ids = shuffle(Object.keys(GAME_INFO), rng);
+    var n = 5 + Math.floor(rng() * 4); // 5..8 games
+    return ids.slice(0, n).map(function (id, i) {
+      return { id: id, seed: ((seedBase * 131 + i * 9973) % 2147483647) >>> 0 };
+    });
+  }
+  var SET = setForDate(DATE);
+
+  var META = {}; LB.gameList().forEach(function (g) { META[g.id] = g; });
+
+  // ---- My results (written by leaderboard.js when a game finishes in daily mode) ----
+  function myResults() {
+    try { return JSON.parse(localStorage.getItem("tranquil_dailyset_" + DATE) || "{}"); } catch (e) { return {}; }
+  }
+  function myTotals() {
+    var r = myResults(), pts = 0, done = 0;
+    SET.forEach(function (s) {
+      if (r[s.id] != null) { done++; pts += GAME_INFO[s.id].pts(r[s.id]); }
+    });
+    return { pts: pts, done: done };
+  }
+
+  // ---- Total board: fetch, dedupe by name (best per player), sorted desc ----
+  function sortDedupe(rows) {
+    var best = {};
+    rows.forEach(function (r) { var n = r.name || "—"; if (best[n] == null || r.score > best[n]) best[n] = r.score; });
+    return Object.keys(best).map(function (n) { return { name: n, score: best[n] }; })
+      .sort(function (a, b) { return b.score - a.score; });
+  }
+  function fetchDaily(dateStr) {
+    if (!isGlobal()) {
+      try { return Promise.resolve(sortDedupe(JSON.parse(localStorage.getItem("tranquil_lb_daily_" + dateStr) || "[]"))); }
+      catch (e) { return Promise.resolve([]); }
+    }
+    var url = CFG.url + "/rest/v1/scores?game=eq.daily&round=eq." + encodeURIComponent(dateStr) +
+      "&select=name,score&order=score.desc&limit=300";
+    return fetch(url, { headers: headers() }).then(function (r) {
+      if (!r.ok) throw new Error("read failed"); return r.json();
+    }).then(sortDedupe);
+  }
+  function submitTotal(name, pts) {
+    if (!isGlobal()) {
+      var key = "tranquil_lb_daily_" + DATE, a = [];
+      try { a = JSON.parse(localStorage.getItem(key) || "[]"); } catch (e) {}
+      a.push({ name: name, score: pts });
+      localStorage.setItem(key, JSON.stringify(a));
+      return Promise.resolve();
+    }
+    return fetch(CFG.url + "/rest/v1/scores", {
+      method: "POST",
+      headers: Object.assign({ Prefer: "return=minimal" }, headers()),
+      body: JSON.stringify([{ game: "daily", name: name, score: pts, round: DATE }])
+    }).then(function (r) { if (!r.ok) throw new Error("write failed"); });
+  }
+
+  // ---- Weekly board: aggregate the week's daily boards (Mon..today), summing
+  // each player's best-per-day. No extra writes needed. ----
+  function weekDates() {
+    var day = (TODAY.getDay() + 6) % 7; // Mon = 0
+    var mon = new Date(TODAY); mon.setDate(TODAY.getDate() - day);
+    var out = [];
+    for (var i = 0; i < 7; i++) {
+      var x = new Date(mon); x.setDate(mon.getDate() + i);
+      var s = dstr(x);
+      if (s <= DATE) out.push(s);
+    }
+    return out;
+  }
+  function fetchWeekly() {
+    return Promise.all(weekDates().map(fetchDaily)).then(function (days) {
+      var agg = {};
+      days.forEach(function (rows) {
+        rows.forEach(function (r) {
+          var a = agg[r.name] || (agg[r.name] = { sum: 0, days: 0 });
+          a.sum += r.score; a.days++;
+        });
+      });
+      return Object.keys(agg).map(function (n) { return { name: n, score: agg[n].sum, days: agg[n].days }; })
+        .sort(function (a, b) { return b.score - a.score; });
+    });
+  }
+
+  // ---- Rendering ----
+  var tab = "today";
+  var listEl = document.getElementById("game-list");
+  var boardEl = document.getElementById("board");
+  var submitEl = document.getElementById("submit-area");
+
+  function renderHeader() {
+    var t = myTotals();
+    document.getElementById("day-sub").textContent =
+      pretty(DATE) + " · " + SET.length + " games · same puzzles for everyone";
+    document.getElementById("pts").textContent = t.pts;
+    document.getElementById("done").textContent = t.done + "/" + SET.length;
+  }
+
+  function renderList() {
+    var r = myResults();
+    var h = "";
+    SET.forEach(function (s) {
+      var info = GAME_INFO[s.id], m = META[s.id];
+      var played = r[s.id] != null;
+      var resultTxt = played ? "Best: " + m.fmt(r[s.id]) : "Not played yet";
+      var pts = played ? info.pts(r[s.id]) : null;
+      h += '<div class="game-row">' +
+        '<div class="g-icon">' + info.icon + '</div>' +
+        '<div class="g-info"><div class="g-name">' + esc(m.name) + '</div>' +
+          '<div class="g-result">' + esc(resultTxt) + '</div></div>' +
+        '<div class="g-pts' + (played ? '' : ' zero') + '">' + (played ? pts + ' pt' + (pts === 1 ? '' : 's') : '—') + '</div>' +
+        '<a class="play-btn' + (played ? ' replay' : '') + '" href="' + esc(s.id + ".html?daily=" + DATE + "&seed=" + s.seed) + '">' +
+          (played ? 'Replay' : 'Play') + '</a>' +
+        '</div>';
+    });
+    listEl.innerHTML = h;
+  }
+
+  function sentKey() { return "tranquil_dailyset_sent_" + DATE; }
+  function renderSubmit() {
+    var t = myTotals();
+    var sent = Number(localStorage.getItem(sentKey()) || -1);
+    if (t.done < SET.length) {
+      submitEl.innerHTML = '<div class="submit-note">Finish all ' + SET.length + ' games to post your daily total.</div>';
+      return;
+    }
+    if (sent >= t.pts) {
+      submitEl.innerHTML = '<div class="submit-note ok">Daily total of ' + sent + ' pts submitted ✓ — improve any game to resubmit.</div>';
+      return;
+    }
+    var last = localStorage.getItem("tranquil_name") || "";
+    submitEl.innerHTML =
+      '<input id="day-name" class="lb-input" maxlength="12" placeholder="Your name" value="' + esc(last) + '" />' +
+      '<button class="submit-btn" id="day-submit">' + (sent >= 0 ? 'Update daily total (' : 'Submit daily total (') + t.pts + ' pts)</button>' +
+      '<div class="submit-note" id="day-note"></div>';
+    document.getElementById("day-submit").addEventListener("click", function () {
+      var name = ((document.getElementById("day-name").value || "").trim().slice(0, 12)) || "Anon";
+      localStorage.setItem("tranquil_name", name);
+      var btn = document.getElementById("day-submit");
+      btn.disabled = true; btn.textContent = "Submitting…";
+      submitTotal(name, t.pts).then(function () {
+        localStorage.setItem(sentKey(), String(t.pts));
+        LB.logPlay("daily", t.pts, DATE);
+        renderSubmit(); renderBoard();
+      }).catch(function () {
+        btn.disabled = false; btn.textContent = "Retry submit (" + t.pts + " pts)";
+        document.getElementById("day-note").textContent = "Couldn't reach the leaderboard — try again.";
+      });
+    });
+  }
+
+  function rowsHtml(rows, me, withDays) {
+    if (!rows.length) return '<div class="lb-empty">No totals yet — be the first!</div>';
+    var h = "";
+    rows.slice(0, 20).forEach(function (r, i) {
+      h += '<div class="lb-row' + (r.name === me ? ' me' : '') + '">' +
+        '<span class="lb-rank">' + (i + 1) + '</span>' +
+        '<span class="lb-name">' + esc(r.name) +
+          (withDays ? '<span class="lb-days">· ' + r.days + ' day' + (r.days === 1 ? '' : 's') + '</span>' : '') + '</span>' +
+        '<span class="lb-score">' + r.score + ' pts</span></div>';
+    });
+    return h;
+  }
+  function renderBoard() {
+    var me = localStorage.getItem("tranquil_name") || "";
+    var scope = isGlobal() ? "🌍 Global" : "On this device";
+    boardEl.innerHTML = '<div class="lb-loading">Loading…</div>';
+    if (tab === "today") {
+      document.getElementById("board-title").textContent = scope + " · " + pretty(DATE);
+      fetchDaily(DATE).then(function (rows) { boardEl.innerHTML = rowsHtml(rows, me, false); })
+        .catch(function () { boardEl.innerHTML = '<div class="lb-empty">Couldn’t load the board.</div>'; });
+    } else {
+      var wd = weekDates();
+      document.getElementById("board-title").textContent = scope + " · week of " + pretty(wd[0]);
+      fetchWeekly().then(function (rows) { boardEl.innerHTML = rowsHtml(rows, me, true); })
+        .catch(function () { boardEl.innerHTML = '<div class="lb-empty">Couldn’t load the board.</div>'; });
+    }
+  }
+
+  function renderAll() { renderHeader(); renderList(); renderSubmit(); renderBoard(); }
+
+  document.getElementById("tab-today").addEventListener("click", function () {
+    tab = "today";
+    this.classList.add("active"); document.getElementById("tab-week").classList.remove("active");
+    renderBoard();
+  });
+  document.getElementById("tab-week").addEventListener("click", function () {
+    tab = "week";
+    this.classList.add("active"); document.getElementById("tab-today").classList.remove("active");
+    renderBoard();
+  });
+  document.getElementById("refresh").addEventListener("click", renderAll);
+  // refresh when returning from a game (including bfcache back-navigation)
+  window.addEventListener("pageshow", renderAll);
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) renderAll(); });
+
+  renderAll();
+})();
+</script>
+</body>
+</html>

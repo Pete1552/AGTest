@@ -41,6 +41,21 @@
   }
   .card-name { font-family: var(--font-display); font-size: 17px; font-weight: 700; }
   .card-desc { color: var(--muted); font-size: 12px; line-height: 1.3; }
+  .daily-banner {
+    grid-column: 1 / -1;
+    display: flex; align-items: center; gap: 12px;
+    background: linear-gradient(120deg, color-mix(in srgb, var(--accent) 16%, var(--panel)), var(--panel) 70%);
+    border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+    border-radius: 16px; padding: 13px 14px;
+    text-decoration: none; color: var(--ink);
+    box-shadow: 0 6px 18px rgba(0,0,0,0.25);
+    transition: transform 120ms ease;
+  }
+  .daily-banner:active { transform: scale(0.98); }
+  .db-icon { font-size: 26px; flex: none; }
+  .db-name { font-family: var(--font-display); font-size: 16px; font-weight: 700; color: var(--accent); }
+  .db-desc { color: var(--muted); font-size: 11.5px; line-height: 1.35; }
+  .db-go { margin-left: auto; color: var(--accent); font-size: 22px; flex: none; }
   .hub-foot { text-align: center; color: var(--muted); font-size: 11px; opacity: 0.7; padding-top: 4px; }
 </style>
 </head>
@@ -59,6 +74,14 @@
   <p class="hub-tagline">Calm games.</p>
 
   <div class="game-grid">
+    <a class="daily-banner" href="daily.html">
+      <div class="db-icon">📅</div>
+      <div>
+        <div class="db-name">Daily Set</div>
+        <div class="db-desc">A fresh set of games every day — same puzzles for everyone. Daily &amp; weekly leaderboards.</div>
+      </div>
+      <div class="db-go">›</div>
+    </a>
     <a class="game-card" href="blocks.html" style="--c:#7aa2f7">
       <div class="card-icon">🟦</div>
       <div class="card-name">Blocks</div>
@@ -167,7 +190,7 @@
   </div>
 </div>
 
-<script src="leaderboard.js?v=11"></script>
+<script src="leaderboard.js?v=12"></script>
 <script>
 (function () {
   "use strict";

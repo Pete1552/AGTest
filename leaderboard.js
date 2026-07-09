@@ -9,7 +9,31 @@
   // bottom of every settings popup so you can tell at a glance whether a
   // device has picked up the latest deploy. Bump alongside the ?v= query on
   // the <script> tags so caches refetch this file. ====
-  var VERSION = "2026-07-08.2";
+  var VERSION = "2026-07-09";
+
+  // ==== Daily Set mode ====
+  // daily.html launches games as game.html?daily=YYYY-MM-DD&seed=N. Because
+  // this script runs before every game's own code, swapping Math.random for a
+  // seeded PRNG here makes every game's board/deal/scramble deterministic —
+  // the same puzzle for every player — with no changes to the games.
+  function mulberry32(a) {
+    return function () {
+      a |= 0; a = a + 0x6D2B79F5 | 0;
+      var t = Math.imul(a ^ a >>> 15, 1 | a);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+  var DAILY = (function () {
+    try {
+      var q = new URLSearchParams(window.location.search);
+      var d = q.get("daily");
+      if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return null;
+      var seed = (Number(q.get("seed")) || 1) >>> 0;
+      Math.random = mulberry32(seed);
+      return { date: d, seed: seed };
+    } catch (e) { return null; }
+  })();
 
   // ==== CONFIG: set these to enable the GLOBAL leaderboard (empty = on-device) ====
   var CFG = {
@@ -42,7 +66,8 @@
     nibble: { name: "Nibble",  dir: "desc", fmt: function (v) { return String(v); } },
     runway: { name: "Runway",  dir: "asc",  fmt: fmtOverPar },
     jigsaw: { name: "Jigsaw",  dir: "asc",  fmt: function (v) { return v + "s"; } },
-    dodge:  { name: "Dodge",   dir: "desc", fmt: function (v) { return v + "s"; } }
+    dodge:  { name: "Dodge",   dir: "desc", fmt: function (v) { return v + "s"; } },
+    daily:  { name: "Daily Set", dir: "desc", fmt: function (v) { return v + " pts"; } }
   };
   var MAX = 10;
 
@@ -174,13 +199,14 @@
   }
   function buttonsHtml(hasAgain) {
     return (hasAgain ? '<button id="lb-again">Play again</button>' : '') +
-      '<button id="lb-home" class="share">Home</button>' +
+      '<button id="lb-home" class="share">' + (DAILY ? "Back to Daily Set" : "Home") + '</button>' +
       '<button id="lb-close" class="ghost-btn">Close</button>';
   }
   function wire(onAgain) {
     var a = document.getElementById("lb-again");
     if (a) a.onclick = function () { hide(); if (onAgain) onAgain(); };
-    document.getElementById("lb-home").onclick = function () { location.href = "index.html"; };
+    // in Daily Set mode "Home" returns to the day's set, not the hub
+    document.getElementById("lb-home").onclick = function () { location.href = DAILY ? "daily.html" : "index.html"; };
     document.getElementById("lb-close").onclick = hide;
   }
 
@@ -195,9 +221,27 @@
     });
   }
 
+  // In Daily Set mode, keep the player's best result per game for the day so
+  // daily.html can total it into points.
+  function recordDailyResult(id, val) {
+    try {
+      var key = "tranquil_dailyset_" + DAILY.date;
+      var rec = JSON.parse(localStorage.getItem(key) || "{}");
+      var prev = rec[id];
+      var better = prev == null || (meta(id).dir === "asc" ? val < prev : val > prev);
+      if (better) { rec[id] = val; localStorage.setItem(key, JSON.stringify(rec)); }
+    } catch (e) {}
+  }
+
   // Public: end-of-game screen with result + name entry (if a high score) + board.
   function finish(opts) {
     var id = opts.game, val = opts.value, round = opts.round, roundLabel = opts.roundLabel;
+    if (DAILY) {
+      // rank daily-set runs against the day's per-game board, not the all-time one
+      round = "d" + DAILY.date;
+      roundLabel = "Daily Set";
+      recordDailyResult(id, val);
+    }
     logPlay(id, val, round);
     show();
     var result = '<h2>' + esc(opts.resultTitle || "Game over") + '</h2>' +
@@ -252,6 +296,7 @@
 
   window.LB = {
     version: VERSION,
+    daily: DAILY,
     open: open,
     finish: finish,
     logPlay: logPlay,
