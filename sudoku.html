@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#11151c" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Tranquil" />
+<link rel="apple-touch-icon" href="icon.png" />
+<link rel="icon" href="icon.png" />
+<link rel="manifest" href="manifest.json" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="shared.css" />
+<title>Sudoku — Tranquil</title>
+<style>
+  .modes-row { text-align: center; }
+  .modes {
+    display: inline-flex; margin: 8px auto 0; background: var(--panel);
+    border-radius: 999px; padding: 4px; gap: 3px;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.3);
+  }
+  .mode-btn {
+    background: transparent; color: var(--muted); border: none; cursor: pointer;
+    padding: 7px 18px; border-radius: 999px; font-size: 13px; font-weight: 700;
+    transition: background 140ms ease, color 140ms ease;
+  }
+  .mode-btn.active { background: var(--accent); color: #06231e; box-shadow: 0 2px 8px rgba(93,214,192,0.3); }
+
+  #board {
+    background: var(--panel); border-radius: 12px; padding: 6px;
+    display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr);
+    gap: 4px; touch-action: manipulation; user-select: none; -webkit-user-select: none;
+  }
+  .box { display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr); gap: 2px; }
+  .cell {
+    background: var(--cell-empty); border-radius: 4px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-display); font-weight: 700;
+    font-size: clamp(14px, 4.8vw, 23px);
+    color: var(--accent); line-height: 1;
+  }
+  .cell.given { color: var(--ink); }
+  .cell.peer { background: var(--grid); }
+  .cell.same { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 50%, transparent); }
+  .cell.sel { background: color-mix(in srgb, var(--accent) 28%, var(--cell-empty)); }
+  .cell.conflict { color: #e0524f; }
+  .cell.given.conflict { color: #e0524f; }
+
+  #numpad { display: grid; grid-template-columns: repeat(10, 1fr); gap: 5px; margin-top: 10px; }
+  .np {
+    background: var(--panel); border: none; border-radius: 10px; padding: 8px 0 5px;
+    color: var(--ink); cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 1px;
+  }
+  .np .n { font-family: var(--font-display); font-weight: 700; font-size: 17px; }
+  .np .c { font-size: 9px; color: var(--muted); min-height: 11px; }
+  .np:active { transform: translateY(1px); }
+  .np.done .n { color: var(--muted); opacity: 0.5; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="topbar">
+    <div class="brand">
+      <a href="index.html" class="icon-btn" aria-label="Back to games">‹</a>
+      <span class="title">Sudoku</span>
+    </div>
+    <div class="bar-actions">
+      <button id="lb-btn" class="icon-btn" aria-label="High scores">🏆</button>
+      <button id="restart" class="icon-btn" aria-label="New puzzle">↻</button>
+      <button id="settings-btn" class="icon-btn" aria-label="Settings">⚙</button>
+    </div>
+  </header>
+
+  <div class="modes-row" id="diff-row"><div class="modes">
+    <button class="mode-btn" data-d="easy">Easy</button>
+    <button class="mode-btn" data-d="medium">Medium</button>
+    <button class="mode-btn" data-d="hard">Hard</button>
+  </div></div>
+
+  <div class="scores">
+    <div class="score-box"><div class="score-label">Time</div><div class="score-val" id="time">0s</div></div>
+    <div class="score-box best"><div class="score-label">Best</div><div class="score-val" id="best">—</div></div>
+  </div>
+
+  <div class="play-area"><div id="board"></div></div>
+  <div id="numpad"></div>
+</div>
+
+<div id="settings-overlay" class="modal-overlay">
+  <div class="modal settings">
+    <h2>Sudoku</h2>
+    <div class="setting-row">
+      <span class="label">Sound</span>
+      <button id="sound-toggle" class="toggle on">On</button>
+    </div>
+    <div class="how">
+      <p class="how-title">How to play</p>
+      <p class="body">Fill the grid so every row, column and 3×3 box contains 1-9 exactly once. Tap a cell, then tap a number — clashes show in red. Every puzzle is generated with exactly one solution. Fastest solve wins, per difficulty.</p>
+    </div>
+    <button id="settings-share" class="share">Share the game</button>
+    <button id="settings-close" class="ghost-btn">Done</button>
+    <div class="version-tag" id="app-version"></div>
+  </div>
+</div>
+
+<script src="leaderboard.js?v=13"></script>
+<script>
+(function () {
+  "use strict";
+
+  var DIFFS = { easy: 40, medium: 32, hard: 26 }; // target given-count
+  var muted = localStorage.getItem("tranquil_muted") === "1";
+  // Daily Set plays are locked to Medium so everyone solves the same puzzle
+  var DIFF = LB.daily ? "medium" : (localStorage.getItem("tranquil_sudoku_diff") || "medium");
+  if (!DIFFS[DIFF]) DIFF = "medium";
+
+  var solution = [];   // 81 digits
+  var puzzle = [];     // 81 digits, 0 = empty (the givens)
+  var grid = [];       // current state
+  var selected = -1, solvedGame = false;
+  var startTime = 0, elapsed = 0, timerId = 0;
+
+  var playArea = document.querySelector(".play-area");
+  var boardEl = document.getElementById("board");
+  var timeEl = document.getElementById("time");
+  var bestEl = document.getElementById("best");
+  var numpadEl = document.getElementById("numpad");
+  var settingsOverlay = document.getElementById("settings-overlay");
+  var soundToggle = document.getElementById("sound-toggle");
+  var cellEls = [];
+
+  // ---- Sound ----
+  var actx = null;
+  function audio() {
+    if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { actx = null; } }
+    if (actx && actx.state === "suspended") actx.resume();
+  }
+  function tone(f, d, t, g) {
+    if (muted || !actx) return;
+    var o = actx.createOscillator(), gn = actx.createGain();
+    o.type = t || "sine"; o.frequency.value = f;
+    gn.gain.setValueAtTime(0.0001, actx.currentTime);
+    gn.gain.exponentialRampToValueAtTime(g || 0.1, actx.currentTime + 0.01);
+    gn.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + d);
+    o.connect(gn); gn.connect(actx.destination); o.start(); o.stop(actx.currentTime + d + 0.02);
+  }
+  function sfxTap() { tone(440, 0.04, "sine", 0.05); }
+  function sfxSet() { tone(520, 0.06, "sine", 0.07); }
+  function sfxErase() { tone(300, 0.05, "sine", 0.05); }
+  function sfxWin() { [523.25, 659.25, 783.99, 1046.5].forEach(function (f, i) { setTimeout(function () { tone(f, 0.35, "sine", 0.12); }, i * 100); }); }
+
+  // ---- Generation (uses Math.random, so Daily Set seeding applies) ----
+  function boxOf(i) { var r = (i / 9) | 0, c = i % 9; return ((r / 3) | 0) * 3 + ((c / 3) | 0); }
+  function shuffled(arr) {
+    var a = arr.slice();
+    for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var t = a[i]; a[i] = a[j]; a[j] = t; }
+    return a;
+  }
+  function generateSolved() {
+    var g = new Array(81).fill(0);
+    var rowM = new Array(9).fill(0), colM = new Array(9).fill(0), boxM = new Array(9).fill(0);
+    function fill(pos) {
+      if (pos === 81) return true;
+      var r = (pos / 9) | 0, c = pos % 9, b = boxOf(pos);
+      var digits = shuffled([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+      for (var k = 0; k < 9; k++) {
+        var d = digits[k], bit = 1 << d;
+        if ((rowM[r] | colM[c] | boxM[b]) & bit) continue;
+        g[pos] = d; rowM[r] |= bit; colM[c] |= bit; boxM[b] |= bit;
+        if (fill(pos + 1)) return true;
+        g[pos] = 0; rowM[r] &= ~bit; colM[c] &= ~bit; boxM[b] &= ~bit;
+      }
+      return false;
+    }
+    fill(0);
+    return g;
+  }
+  // Count solutions up to `cap`, with most-constrained-cell-first search.
+  function countSolutions(gIn, cap) {
+    var g = gIn.slice();
+    var rowM = new Array(9).fill(0), colM = new Array(9).fill(0), boxM = new Array(9).fill(0);
+    for (var i = 0; i < 81; i++) if (g[i]) {
+      var bit = 1 << g[i];
+      rowM[(i / 9) | 0] |= bit; colM[i % 9] |= bit; boxM[boxOf(i)] |= bit;
+    }
+    var count = 0;
+    function rec() {
+      var bestI = -1, bestBits = 0, bestN = 10;
+      for (var i = 0; i < 81; i++) {
+        if (g[i]) continue;
+        var used = rowM[(i / 9) | 0] | colM[i % 9] | boxM[boxOf(i)];
+        var n = 0, bits = 0;
+        for (var d = 1; d <= 9; d++) if (!(used & (1 << d))) { n++; bits |= 1 << d; }
+        if (n === 0) return;
+        if (n < bestN) { bestN = n; bestI = i; bestBits = bits; if (n === 1) break; }
+      }
+      if (bestI === -1) { count++; return; }
+      var r = (bestI / 9) | 0, c = bestI % 9, b = boxOf(bestI);
+      for (var d2 = 1; d2 <= 9 && count < cap; d2++) {
+        var bit2 = 1 << d2;
+        if (!(bestBits & bit2)) continue;
+        g[bestI] = d2; rowM[r] |= bit2; colM[c] |= bit2; boxM[b] |= bit2;
+        rec();
+        g[bestI] = 0; rowM[r] &= ~bit2; colM[c] &= ~bit2; boxM[b] &= ~bit2;
+      }
+    }
+    rec();
+    return count;
+  }
+  // Remove digits one at a time, keeping the solution unique. Time-budgeted:
+  // if the target given-count can't be reached in ~1.2s, ship what we have.
+  function makePuzzle(targetGivens) {
+    solution = generateSolved();
+    var p = solution.slice();
+    var order = shuffled(Array.from({ length: 81 }, function (_, i) { return i; }));
+    var givens = 81, deadline = Date.now() + 1200;
+    for (var k = 0; k < order.length; k++) {
+      if (givens <= targetGivens || Date.now() > deadline) break;
+      var i = order[k], saved = p[i];
+      p[i] = 0;
+      if (countSolutions(p, 2) !== 1) p[i] = saved;
+      else givens--;
+    }
+    return p;
+  }
+
+  // ---- Board DOM (3x3 boxes of 3x3 cells for the classic heavy borders) ----
+  function buildBoard() {
+    boardEl.innerHTML = "";
+    cellEls = new Array(81);
+    for (var b = 0; b < 9; b++) {
+      var box = document.createElement("div");
+      box.className = "box";
+      var br = (b / 3) | 0, bc = b % 3;
+      for (var k = 0; k < 9; k++) {
+        var r = br * 3 + ((k / 3) | 0), c = bc * 3 + (k % 3);
+        var idx = r * 9 + c;
+        var d = document.createElement("div");
+        d.className = "cell";
+        (function (i) {
+          d.addEventListener("pointerdown", function (e) { e.preventDefault(); audio(); selectCell(i); });
+        })(idx);
+        box.appendChild(d);
+        cellEls[idx] = d;
+      }
+      boardEl.appendChild(box);
+    }
+  }
+
+  function conflicts() {
+    var bad = new Array(81).fill(false);
+    for (var i = 0; i < 81; i++) {
+      if (!grid[i]) continue;
+      var r = (i / 9) | 0, c = i % 9, b = boxOf(i);
+      for (var j = i + 1; j < 81; j++) {
+        if (grid[j] !== grid[i]) continue;
+        if (((j / 9) | 0) === r || (j % 9) === c || boxOf(j) === b) { bad[i] = true; bad[j] = true; }
+      }
+    }
+    return bad;
+  }
+
+  function render() {
+    var bad = conflicts();
+    var selVal = selected >= 0 ? grid[selected] : 0;
+    var selR = selected >= 0 ? (selected / 9) | 0 : -1;
+    var selC = selected >= 0 ? selected % 9 : -1;
+    var selB = selected >= 0 ? boxOf(selected) : -1;
+    for (var i = 0; i < 81; i++) {
+      var el = cellEls[i];
+      el.textContent = grid[i] ? String(grid[i]) : "";
+      var r = (i / 9) | 0, c = i % 9;
+      el.className = "cell" +
+        (puzzle[i] ? " given" : "") +
+        (i === selected ? " sel" :
+          (selected >= 0 && (r === selR || c === selC || boxOf(i) === selB) ? " peer" : "")) +
+        (selVal && grid[i] === selVal && i !== selected ? " same" : "") +
+        (bad[i] ? " conflict" : "");
+    }
+    renderNumpad();
+  }
+
+  function renderNumpad() {
+    var counts = new Array(10).fill(0);
+    for (var i = 0; i < 81; i++) if (grid[i]) counts[grid[i]]++;
+    var kids = numpadEl.children;
+    for (var d = 1; d <= 9; d++) {
+      var left = 9 - counts[d];
+      kids[d - 1].classList.toggle("done", left <= 0);
+      kids[d - 1].querySelector(".c").textContent = left > 0 ? left : "✓";
+    }
+  }
+  function buildNumpad() {
+    numpadEl.innerHTML = "";
+    for (var d = 1; d <= 9; d++) {
+      var b = document.createElement("button");
+      b.className = "np";
+      b.innerHTML = '<span class="n">' + d + '</span><span class="c"></span>';
+      (function (dd) { b.addEventListener("click", function () { audio(); enterDigit(dd); }); })(d);
+      numpadEl.appendChild(b);
+    }
+    var e = document.createElement("button");
+    e.className = "np";
+    e.innerHTML = '<span class="n">✕</span><span class="c"></span>';
+    e.setAttribute("aria-label", "Erase");
+    e.addEventListener("click", function () { audio(); enterDigit(0); });
+    numpadEl.appendChild(e);
+  }
+
+  function selectCell(i) {
+    selected = (selected === i) ? -1 : i;
+    sfxTap();
+    render();
+  }
+  function enterDigit(d) {
+    if (solvedGame || selected < 0 || puzzle[selected]) return;
+    if (d === 0) { if (grid[selected]) { grid[selected] = 0; sfxErase(); } }
+    else { grid[selected] = d; sfxSet(); }
+    render();
+    checkWin();
+  }
+
+  function checkWin() {
+    for (var i = 0; i < 81; i++) if (grid[i] !== solution[i]) return;
+    solvedGame = true;
+    stopTimer();
+    sfxWin();
+    var key = "tranquil_sudoku_best_" + DIFF;
+    var prev = Number(localStorage.getItem(key) || 0) || 0;
+    var newBest = prev === 0 || elapsed < prev;
+    if (newBest) localStorage.setItem(key, String(elapsed));
+    updateBestLabel();
+    setTimeout(function () {
+      LB.finish({
+        game: "sudoku", value: elapsed, resultTitle: "Solved!",
+        subtitle: diffName(DIFF) + (newBest ? " · New personal best!" : ""),
+        round: DIFF, roundLabel: diffName(DIFF),
+        onPlayAgain: newGame
+      });
+    }, 450);
+  }
+
+  // ---- Timer ----
+  function startTimer() {
+    startTime = Date.now(); elapsed = 0;
+    stopTimer();
+    timerId = setInterval(function () {
+      elapsed = Math.floor((Date.now() - startTime) / 1000);
+      timeEl.textContent = elapsed + "s";
+    }, 250);
+  }
+  function stopTimer() { clearInterval(timerId); }
+
+  function diffName(d) { return d.charAt(0).toUpperCase() + d.slice(1); }
+  function updateBestLabel() {
+    var v = Number(localStorage.getItem("tranquil_sudoku_best_" + DIFF) || 0) || 0;
+    bestEl.textContent = v ? v + "s" : "—";
+  }
+  function updateDiffPills() {
+    var btns = document.querySelectorAll("#diff-row .mode-btn");
+    for (var i = 0; i < btns.length; i++) btns[i].classList.toggle("active", btns[i].dataset.d === DIFF);
+  }
+
+  function newGame() {
+    solvedGame = false; selected = -1;
+    puzzle = makePuzzle(DIFFS[DIFF]);
+    grid = puzzle.slice();
+    timeEl.textContent = "0s";
+    updateBestLabel();
+    render();
+    startTimer();
+  }
+
+  // ---- Input: keyboard ----
+  window.addEventListener("keydown", function (e) {
+    if (e.key >= "1" && e.key <= "9") { enterDigit(Number(e.key)); e.preventDefault(); return; }
+    if (e.key === "Backspace" || e.key === "Delete" || e.key === "0") { enterDigit(0); e.preventDefault(); return; }
+    var mv = { ArrowUp: -9, ArrowDown: 9, ArrowLeft: -1, ArrowRight: 1 }[e.key];
+    if (mv != null) {
+      var n = selected < 0 ? 40 : selected + mv;
+      if (n >= 0 && n < 81) { selected = n; render(); }
+      e.preventDefault();
+    }
+  });
+
+  // ---- iOS touch/gesture hardening ----
+  document.addEventListener("gesturestart", function (e) { e.preventDefault(); });
+  var lastTouchEnd = 0;
+  document.addEventListener("touchend", function (e) { var n = Date.now(); if (n - lastTouchEnd <= 320) e.preventDefault(); lastTouchEnd = n; }, { passive: false });
+
+  // ---- Board auto-sizing (largest square that fits) ----
+  function sizeBoard() {
+    var r = playArea.getBoundingClientRect();
+    var s = Math.max(0, Math.floor(Math.min(r.width, r.height)));
+    boardEl.style.width = s + "px";
+    boardEl.style.height = s + "px";
+  }
+  window.addEventListener("resize", sizeBoard);
+  window.addEventListener("orientationchange", function () { setTimeout(sizeBoard, 150); });
+
+  // ---- Difficulty pills (hidden in Daily Set mode — the day fixes the puzzle) ----
+  if (LB.daily) document.getElementById("diff-row").style.display = "none";
+  else {
+    var pills = document.querySelectorAll("#diff-row .mode-btn");
+    for (var pi = 0; pi < pills.length; pi++) {
+      pills[pi].addEventListener("click", function () {
+        if (this.dataset.d === DIFF) return;
+        DIFF = this.dataset.d;
+        localStorage.setItem("tranquil_sudoku_diff", DIFF);
+        updateDiffPills();
+        newGame();
+      });
+    }
+  }
+
+  // ---- Settings / sound ----
+  function updateSoundToggle() { soundToggle.textContent = muted ? "Off" : "On"; soundToggle.classList.toggle("on", !muted); }
+  async function shareGame() {
+    var text = "Sudoku — calm, single-solution puzzles with no ads. Play it:";
+    var url = "https://pete1552.github.io/AGTest/";
+    try { if (navigator.share) { await navigator.share({ title: "Sudoku — Tranquil", text: text, url: url }); return; } } catch (e) { return; }
+    try {
+      await navigator.clipboard.writeText(text + " " + url);
+      var b = document.getElementById("settings-share"), old = b.textContent; b.textContent = "Link copied!";
+      setTimeout(function () { b.textContent = old; }, 1500);
+    } catch (e) {}
+  }
+  soundToggle.addEventListener("click", function () {
+    muted = !muted; localStorage.setItem("tranquil_muted", muted ? "1" : "0"); updateSoundToggle();
+    if (!muted) { audio(); tone(520, 0.06, "sine", 0.07); }
+  });
+  document.getElementById("settings-btn").addEventListener("click", function () { updateSoundToggle(); settingsOverlay.classList.add("show"); });
+  document.getElementById("settings-close").addEventListener("click", function () { settingsOverlay.classList.remove("show"); });
+  settingsOverlay.addEventListener("click", function (e) { if (e.target === settingsOverlay) settingsOverlay.classList.remove("show"); });
+  document.getElementById("settings-share").addEventListener("click", shareGame);
+  document.getElementById("lb-btn").addEventListener("click", function () { LB.open("sudoku", DIFF, diffName(DIFF)); });
+  document.getElementById("restart").addEventListener("click", newGame);
+
+  // ---- Boot ----
+  buildBoard();
+  buildNumpad();
+  updateSoundToggle();
+  updateDiffPills();
+  newGame();
+  sizeBoard();
+  requestAnimationFrame(sizeBoard);
+  setTimeout(sizeBoard, 300);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(sizeBoard);
+})();
+</script>
+</body>
+</html>

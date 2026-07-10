@@ -104,7 +104,7 @@
   <div class="foot-note">Every game scores up to 100 points · the set and puzzles are the same for everyone · new set at midnight</div>
 </div>
 
-<script src="leaderboard.js?v=12"></script>
+<script src="leaderboard.js?v=13"></script>
 <script>
 (function () {
   "use strict";
@@ -137,7 +137,8 @@
     nibble: { icon: "🐍", pts: function (v) { return clampPts(4 * v); } },        // 25 dots
     runway: { icon: "🛫", pts: function (v) { return clampPts(100 - 12 * v); } }, // over-par
     jigsaw: { icon: "🧩", pts: function (v) { return clampPts(160 - v); } },      // ≤60s
-    dodge:  { icon: "🥎", pts: function (v) { return clampPts(2 * v); } }         // 50s survived
+    dodge:  { icon: "🥎", pts: function (v) { return clampPts(2 * v); } },        // 50s survived
+    sudoku: { icon: "9️⃣", pts: function (v) { return clampPts(130 - v / 6); } }   // ≤3min = 100, 13min = 0
   };
 
   // ---- Dates / deterministic set selection ----

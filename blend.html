@@ -17,6 +17,19 @@
 <link rel="stylesheet" href="shared.css" />
 <title>Blend — Tranquil</title>
 <style>
+  .modes-row { text-align: center; }
+  .modes {
+    display: inline-flex; margin: 8px auto 0; background: var(--panel);
+    border-radius: 999px; padding: 4px; gap: 3px;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.3);
+  }
+  .mode-btn {
+    background: transparent; color: var(--muted); border: none; cursor: pointer;
+    padding: 7px 13px; border-radius: 999px; font-size: 12.5px; font-weight: 700;
+    transition: background 140ms ease, color 140ms ease;
+  }
+  .mode-btn.active { background: var(--accent); color: #06231e; box-shadow: 0 2px 8px rgba(93,214,192,0.3); }
+
   #board {
     position: relative;
     background: var(--panel);
@@ -66,13 +79,20 @@
     </div>
   </header>
 
+  <div class="modes-row" id="diff-row"><div class="modes">
+    <button class="mode-btn" data-d="easy">Easy</button>
+    <button class="mode-btn" data-d="medium">Medium</button>
+    <button class="mode-btn" data-d="hard">Hard</button>
+    <button class="mode-btn" data-d="expert">Expert</button>
+  </div></div>
+
   <div class="scores">
     <div class="score-box"><div class="score-label">Swaps</div><div class="score-val" id="swaps">0</div></div>
     <div class="score-box best"><div class="score-label">Best</div><div class="score-val" id="best">—</div></div>
   </div>
 
   <div class="play-area"><div id="board"></div></div>
-  <div style="text-align:center;color:var(--muted);font-size:12px;margin-top:8px">Swap tiles to restore the gradient · corners are locked</div>
+  <div id="hint" style="text-align:center;color:var(--muted);font-size:12px;margin-top:8px"></div>
 </div>
 
 <div id="settings-overlay" class="modal-overlay">
@@ -84,7 +104,7 @@
     </div>
     <div class="how">
       <p class="how-title">How to play</p>
-      <p class="body">The four corners are locked colour anchors. Tap any movable tile to pick it up, then tap another to swap their colours. Rebuild the smooth colour gradient so every tile flows into the next. Solve it in as few swaps as you can.</p>
+      <p class="body">Ringed tiles are locked colour anchors. Tap any movable tile to pick it up, then tap another to swap their colours. Rebuild the smooth colour gradient so every tile flows into the next — in as few swaps as you can. Harder levels use bigger boards, closer hues, and on Expert the anchors are scattered through the grid like crossword clues instead of sitting in the corners.</p>
     </div>
     <button id="settings-share" class="share">Share the game</button>
     <button id="settings-close" class="ghost-btn">Done</button>
@@ -92,24 +112,36 @@
   </div>
 </div>
 
-<script src="leaderboard.js?v=12"></script>
+<script src="leaderboard.js?v=13"></script>
 <script>
 (function () {
   "use strict";
 
-  var GRID = 5;
-  var N = GRID * GRID;
+  // ---- Difficulty presets: board shape (rarely square), how close the hues
+  // sit (smaller spread = subtler gradient), and where the locked anchor
+  // tiles live (border anchors vs crossword-style scattered clues). ----
+  var DIFFS = {
+    easy:   { cols: 4, rows: 5, spread: 85, sat: 0.65, light: [0.55, 0.68, 0.50, 0.62], anchors: "edges",
+              label: "Easy",   hint: "Corners and edge-middles are locked · rebuild the gradient" },
+    medium: { cols: 5, rows: 6, spread: 75, sat: 0.65, light: [0.55, 0.68, 0.52, 0.60], anchors: "corners",
+              label: "Medium", hint: "The four corners are locked · rebuild the gradient" },
+    hard:   { cols: 6, rows: 7, spread: 38, sat: 0.55, light: [0.40, 0.68, 0.50, 0.66], anchors: "corners",
+              label: "Hard",   hint: "Corners locked · the hues run close together — look carefully" },
+    expert: { cols: 6, rows: 8, spread: 30, sat: 0.50, light: [0.38, 0.66, 0.50, 0.68], anchors: "scatter",
+              label: "Expert", hint: "Ringed tiles are scattered fixed clues, crossword-style" }
+  };
   var muted = localStorage.getItem("tranquil_muted") === "1";
+  // Daily Set plays are locked to Medium so everyone gets the same puzzle
+  var DIFF = LB.daily ? "medium" : (localStorage.getItem("tranquil_blend_diff") || "medium");
+  if (!DIFFS[DIFF]) DIFF = "medium";
 
+  var COLS = 5, ROWS = 6, N = 30; // set from DIFFS in newGame
   var target = [];       // target rgb string per index
   var cur = [];          // current rgb string per index
-  var locked = [];       // boolean per index (corners)
+  var locked = [];       // boolean per index
   var swaps = 0;
   var par = 0;           // minimum swaps for THIS shuffle (n - cycle count)
-  var best = (function () {
-    var v = localStorage.getItem("tranquil_blend_best_v2");
-    return v === null ? null : Number(v);
-  })();
+  var best = null;
   var selected = -1;
   var won = false;
 
@@ -117,6 +149,7 @@
   var board = document.getElementById("board");
   var swapsEl = document.getElementById("swaps");
   var bestEl = document.getElementById("best");
+  var hintEl = document.getElementById("hint");
   var settingsOverlay = document.getElementById("settings-overlay");
   var soundToggle = document.getElementById("sound-toggle");
   var tileEls = [];
@@ -169,30 +202,63 @@
     return { r: lerp(a.r, b.r, t), g: lerp(a.g, b.g, t), b: lerp(a.b, b.b, t) };
   }
 
-  // ---- Build a smooth bilinear gradient target ----
+  // ---- Build a smooth bilinear gradient target for the current difficulty ----
   function buildTarget() {
+    var cfg = DIFFS[DIFF];
     var H = Math.random() * 360;
-    // 4 corner colours: TL, TR, BL, BR
-    var c00 = hslToRgb(H,        0.65, 0.55); // top-left
-    var c01 = hslToRgb(H + 80,   0.65, 0.68); // top-right
-    var c10 = hslToRgb(H + 160,  0.65, 0.52); // bottom-left
-    var c11 = hslToRgb(H + 240,  0.65, 0.60); // bottom-right
+    // 4 corner colours: TL, TR, BL, BR — hue gaps and lightness from the preset
+    // (narrow spreads lean on lightness so the gradient stays readable)
+    var c00 = hslToRgb(H,                  cfg.sat, cfg.light[0]);
+    var c01 = hslToRgb(H + cfg.spread,     cfg.sat, cfg.light[1]);
+    var c10 = hslToRgb(H + cfg.spread * 2, cfg.sat, cfg.light[2]);
+    var c11 = hslToRgb(H + cfg.spread * 3, cfg.sat, cfg.light[3]);
     target = new Array(N);
-    for (var r = 0; r < GRID; r++) {
-      for (var c = 0; c < GRID; c++) {
-        var fx = c / (GRID - 1);
-        var fy = r / (GRID - 1);
+    for (var r = 0; r < ROWS; r++) {
+      for (var c = 0; c < COLS; c++) {
+        var fx = c / (COLS - 1);
+        var fy = r / (ROWS - 1);
         var topEdge = lerpRgb(c00, c01, fx);
         var botEdge = lerpRgb(c10, c11, fx);
         var col = lerpRgb(topEdge, botEdge, fy);
-        target[r * GRID + c] = rgbStr({ r: Math.round(col.r), g: Math.round(col.g), b: Math.round(col.b) });
+        target[r * COLS + c] = rgbStr({ r: Math.round(col.r), g: Math.round(col.g), b: Math.round(col.b) });
       }
     }
   }
 
-  function isCorner(i) {
-    var r = Math.floor(i / GRID), c = i % GRID;
-    return (r === 0 || r === GRID - 1) && (c === 0 || c === GRID - 1);
+  // ---- Anchor layout per difficulty ----
+  function buildLocked() {
+    var cfg = DIFFS[DIFF];
+    locked = new Array(N).fill(false);
+    function at(r, c) { locked[r * COLS + c] = true; }
+    if (cfg.anchors === "corners" || cfg.anchors === "edges") {
+      at(0, 0); at(0, COLS - 1); at(ROWS - 1, 0); at(ROWS - 1, COLS - 1);
+      if (cfg.anchors === "edges") {
+        at(0, (COLS - 1) >> 1); at(ROWS - 1, (COLS - 1) >> 1);
+        at((ROWS - 1) >> 1, 0); at((ROWS - 1) >> 1, COLS - 1);
+      }
+      return;
+    }
+    // "scatter": fixed clues sprinkled through the grid, none adjacent —
+    // crossword/sudoku-style givens instead of border anchors.
+    // (Math.random is date-seeded in Daily Set mode, so it's the same layout
+    // for everyone that day.)
+    var want = Math.max(5, Math.round(N * 0.16));
+    var order = [];
+    for (var i = 0; i < N; i++) order.push(i);
+    for (var k = order.length - 1; k > 0; k--) {
+      var j = Math.floor(Math.random() * (k + 1));
+      var t = order[k]; order[k] = order[j]; order[j] = t;
+    }
+    var placed = 0;
+    for (var m = 0; m < order.length && placed < want; m++) {
+      var idx = order[m], r = (idx / COLS) | 0, c = idx % COLS;
+      var clash =
+        (c > 0 && locked[idx - 1]) || (c < COLS - 1 && locked[idx + 1]) ||
+        (r > 0 && locked[idx - COLS]) || (r < ROWS - 1 && locked[idx + COLS]);
+      if (!clash) { locked[idx] = true; placed++; }
+    }
+    // safety: never fewer anchors than the four corners would give
+    if (placed < 4) { at(0, 0); at(0, COLS - 1); at(ROWS - 1, 0); at(ROWS - 1, COLS - 1); }
   }
 
   function solved() {
@@ -213,7 +279,7 @@
     return cycles;
   }
 
-  // ---- Shuffle non-corner colours among their own positions ----
+  // ---- Shuffle non-anchor colours among their own positions ----
   function shuffle() {
     var movable = [];
     for (var i = 0; i < N; i++) if (!locked[i]) movable.push(i);
@@ -232,8 +298,8 @@
   }
 
   function buildBoard() {
-    board.style.gridTemplateColumns = "repeat(" + GRID + ", 1fr)";
-    board.style.gridTemplateRows = "repeat(" + GRID + ", 1fr)";
+    board.style.gridTemplateColumns = "repeat(" + COLS + ", 1fr)";
+    board.style.gridTemplateRows = "repeat(" + ROWS + ", 1fr)";
     board.innerHTML = "";
     tileEls = [];
     for (var i = 0; i < N; i++) {
@@ -245,6 +311,12 @@
         tileEls[idx] = d;
       })(i);
     }
+  }
+
+  function bestKey() { return "tranquil_blend_best_v3_" + DIFF; }
+  function loadBest() {
+    var v = localStorage.getItem(bestKey());
+    best = v === null ? null : Number(v);
   }
 
   function render() {
@@ -283,47 +355,74 @@
   function doWin() {
     won = true;
     var overPar = Math.max(0, swaps - par);
-    if (best === null || overPar < best) { best = overPar; localStorage.setItem("tranquil_blend_best_v2", String(best)); }
+    if (best === null || overPar < best) { best = overPar; localStorage.setItem(bestKey(), String(best)); }
     bestEl.textContent = best === 0 ? "Perfect" : "+" + best;
     for (var i = 0; i < N; i++) {
       (function (el, delay) {
         setTimeout(function () { el.classList.add("win"); }, delay);
-      })(tileEls[i], (Math.floor(i / GRID) + (i % GRID)) * 45);
+      })(tileEls[i], (Math.floor(i / COLS) + (i % COLS)) * 45);
     }
     sfxWin();
+    var cfg = DIFFS[DIFF];
     setTimeout(function () {
       LB.finish({
         game: "blend",
         value: overPar,
         resultTitle: "Blended!",
-        subtitle: overPar === 0 ? "Perfect solve — matched the minimum!" : swaps + " swaps (" + par + " was the minimum)",
+        subtitle: (overPar === 0 ? "Perfect solve — matched the minimum!" : swaps + " swaps (" + par + " was the minimum)") + " · " + cfg.label,
+        round: DIFF, roundLabel: cfg.label,
         onPlayAgain: newGame
       });
     }, 800);
   }
 
   function newGame() {
+    var cfg = DIFFS[DIFF];
+    COLS = cfg.cols; ROWS = cfg.rows; N = COLS * ROWS;
     swaps = 0;
     selected = -1;
     won = false;
-    locked = new Array(N);
     cur = new Array(N);
-    for (var i = 0; i < N; i++) locked[i] = isCorner(i);
+    buildLocked();
     buildTarget();
-    // corners take their exact target colour
+    // anchors take their exact target colour
     for (var j = 0; j < N; j++) cur[j] = target[j];
     shuffle();
+    loadBest();
+    buildBoard();
+    hintEl.textContent = cfg.hint;
     render();
+    sizeBoard();
   }
 
-  // ---- Sizing ----
+  // ---- Sizing (fit the rectangle, preserving the board's aspect) ----
   function sizeBoard() {
     var r = playArea.getBoundingClientRect();
-    var s = Math.max(0, Math.floor(Math.min(r.width, r.height)));
-    board.style.width = s + "px"; board.style.height = s + "px";
+    var scale = Math.min(r.width / COLS, r.height / ROWS);
+    board.style.width = Math.max(0, Math.floor(scale * COLS)) + "px";
+    board.style.height = Math.max(0, Math.floor(scale * ROWS)) + "px";
   }
   window.addEventListener("resize", sizeBoard);
   window.addEventListener("orientationchange", function () { setTimeout(sizeBoard, 150); });
+
+  // ---- Difficulty pills (hidden in Daily Set mode — the day fixes the puzzle) ----
+  function updateDiffPills() {
+    var btns = document.querySelectorAll("#diff-row .mode-btn");
+    for (var i = 0; i < btns.length; i++) btns[i].classList.toggle("active", btns[i].dataset.d === DIFF);
+  }
+  if (LB.daily) document.getElementById("diff-row").style.display = "none";
+  else {
+    var pills = document.querySelectorAll("#diff-row .mode-btn");
+    for (var pi = 0; pi < pills.length; pi++) {
+      pills[pi].addEventListener("click", function () {
+        if (this.dataset.d === DIFF) return;
+        DIFF = this.dataset.d;
+        localStorage.setItem("tranquil_blend_diff", DIFF);
+        updateDiffPills();
+        newGame();
+      });
+    }
+  }
 
   // ---- Settings / sound ----
   function updateSoundToggle() { soundToggle.textContent = muted ? "Off" : "On"; soundToggle.classList.toggle("on", !muted); }
@@ -345,17 +444,16 @@
   document.getElementById("settings-close").addEventListener("click", function () { settingsOverlay.classList.remove("show"); });
   settingsOverlay.addEventListener("click", function (e) { if (e.target === settingsOverlay) settingsOverlay.classList.remove("show"); });
   document.getElementById("settings-share").addEventListener("click", shareGame);
-  document.getElementById("lb-btn").addEventListener("click", function () { LB.open("blend"); });
+  document.getElementById("lb-btn").addEventListener("click", function () { LB.open("blend", DIFF, DIFFS[DIFF].label); });
   document.getElementById("restart").addEventListener("click", newGame);
 
   // first pointerdown unlocks audio
   window.addEventListener("pointerdown", function () { audio(); }, { once: false });
 
   // ---- Boot ----
-  buildBoard();
   updateSoundToggle();
+  updateDiffPills();
   newGame();
-  sizeBoard();
   requestAnimationFrame(sizeBoard);
   setTimeout(sizeBoard, 300);
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(sizeBoard);
