@@ -104,7 +104,7 @@
   <div class="foot-note">Every game scores up to 100 points · the set and puzzles are the same for everyone · new set at midnight</div>
 </div>
 
-<script src="leaderboard.js?v=13"></script>
+<script src="leaderboard.js?v=14"></script>
 <script>
 (function () {
   "use strict";
@@ -295,11 +295,11 @@
     }
     var last = localStorage.getItem("tranquil_name") || "";
     submitEl.innerHTML =
-      '<input id="day-name" class="lb-input" maxlength="12" placeholder="Your name" value="' + esc(last) + '" />' +
+      '<input id="day-name" class="lb-input" maxlength="16" placeholder="Your name" value="' + esc(last) + '" />' +
       '<button class="submit-btn" id="day-submit">' + (sent >= 0 ? 'Update daily total (' : 'Submit daily total (') + t.pts + ' pts)</button>' +
       '<div class="submit-note" id="day-note"></div>';
     document.getElementById("day-submit").addEventListener("click", function () {
-      var name = ((document.getElementById("day-name").value || "").trim().slice(0, 12)) || "Anon";
+      var name = ((document.getElementById("day-name").value || "").trim().slice(0, 16)) || "Anon";
       localStorage.setItem("tranquil_name", name);
       var btn = document.getElementById("day-submit");
       btn.disabled = true; btn.textContent = "Submitting…";

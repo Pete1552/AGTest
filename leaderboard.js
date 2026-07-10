@@ -9,7 +9,7 @@
   // bottom of every settings popup so you can tell at a glance whether a
   // device has picked up the latest deploy. Bump alongside the ?v= query on
   // the <script> tags so caches refetch this file. ====
-  var VERSION = "2026-07-09.2";
+  var VERSION = "2026-07-09.3";
 
   // ==== Daily Set mode ====
   // daily.html launches games as game.html?daily=YYYY-MM-DD&seed=N. Because
@@ -255,13 +255,13 @@
         var last = localStorage.getItem("tranquil_name") || "";
         box.innerHTML = result +
           '<div class="lb-new">🏆 New high score!</div>' +
-          '<input id="lb-name" class="lb-input" maxlength="12" placeholder="Your name" value="' + esc(last) + '" />' +
+          '<input id="lb-name" class="lb-input" maxlength="16" placeholder="Your name" value="' + esc(last) + '" />' +
           '<button id="lb-save">Save score</button>' +
           '<button id="lb-skip" class="ghost-btn">Skip</button>';
         var inp = document.getElementById("lb-name");
         try { inp.focus(); } catch (e) {}
         function save() {
-          var name = ((inp.value || "").trim().slice(0, 12)) || "Anon";
+          var name = ((inp.value || "").trim().slice(0, 16)) || "Anon";
           localStorage.setItem("tranquil_name", name);
           box.innerHTML = result + '<div class="lb-loading">Saving…</div>';
           submit(id, name, val, round).then(function (rows2) {
