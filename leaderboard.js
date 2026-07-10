@@ -9,7 +9,7 @@
   // bottom of every settings popup so you can tell at a glance whether a
   // device has picked up the latest deploy. Bump alongside the ?v= query on
   // the <script> tags so caches refetch this file. ====
-  var VERSION = "2026-07-09.4";
+  var VERSION = "2026-07-09.5";
 
   // ==== Daily Set mode ====
   // daily.html launches games as game.html?daily=YYYY-MM-DD&seed=N. Because
@@ -69,6 +69,7 @@
     dodge:  { name: "Dodge",   dir: "desc", fmt: function (v) { return v + "s"; } },
     sudoku: { name: "Sudoku",  dir: "asc",  fmt: function (v) { return v + "s"; } },
     silt:   { name: "Silt",    dir: "desc", fmt: function (v) { return String(v); } },
+    glean:  { name: "Glean",   dir: "desc", fmt: function (v) { return v + "%"; } },
     daily:  { name: "Daily Set", dir: "desc", fmt: function (v) { return v + " pts"; } }
   };
   var MAX = 10;
