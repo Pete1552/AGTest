@@ -9,7 +9,7 @@
   // bottom of every settings popup so you can tell at a glance whether a
   // device has picked up the latest deploy. Bump alongside the ?v= query on
   // the <script> tags so caches refetch this file. ====
-  var VERSION = "2026-07-09.5";
+  var VERSION = "2026-07-09.6";
 
   // ==== Daily Set mode ====
   // daily.html launches games as game.html?daily=YYYY-MM-DD&seed=N. Because
@@ -208,10 +208,48 @@
   function wire(onAgain) {
     var a = document.getElementById("lb-again");
     if (a) a.onclick = function () { hide(); if (onAgain) onAgain(); };
-    // in Daily Set mode "Home" returns to the day's set, not the hub
-    document.getElementById("lb-home").onclick = function () { location.href = DAILY ? "daily.html" : "index.html"; };
+    // in Daily Set mode "Home" returns to the day's set, not the hub.
+    // Leaving mid-run (e.g. peeking at the board mid-game) asks first.
+    document.getElementById("lb-home").onclick = function () {
+      var dest = DAILY ? "daily.html" : "index.html";
+      if (interacted) confirmLeave(dest); else location.href = dest;
+    };
     document.getElementById("lb-close").onclick = hide;
   }
+
+  // ---- Leave-confirmation: a mis-tap on the back button shouldn't torch a
+  // run in progress. Central and zero-per-game: any gameplay interaction
+  // (a pointer/key event outside the topbar and modals) marks the run as
+  // "in progress"; finishing a game clears it, so leaving a fresh board or
+  // a finished game never nags. Games are recognised by their #restart
+  // button — hub/daily/admin pages don't have one and are left alone. ----
+  var interacted = false;
+  function isGamePage() { return !!document.getElementById("restart"); }
+  function outsideChrome(t) {
+    return !(t && t.closest && t.closest(".topbar, .modal-overlay"));
+  }
+  document.addEventListener("pointerdown", function (e) { if (outsideChrome(e.target)) interacted = true; }, true);
+  document.addEventListener("keydown", function (e) { if (outsideChrome(e.target)) interacted = true; }, true);
+
+  function confirmLeave(dest) {
+    show();
+    box.innerHTML = '<h2>Leave the game?</h2><p>Your current run won’t be saved.</p>' +
+      '<button id="lb-stay">Keep playing</button>' +
+      '<button id="lb-leave" class="ghost-btn">Leave</button>';
+    document.getElementById("lb-stay").onclick = hide;
+    document.getElementById("lb-leave").onclick = function () { location.href = dest; };
+  }
+  (function wireBackLink() {
+    if (!isGamePage()) return;
+    var back = document.querySelector('.topbar .brand a[href="index.html"]');
+    if (!back) return;
+    if (DAILY) back.setAttribute("href", "daily.html"); // daily runs return to the set
+    back.addEventListener("click", function (e) {
+      if (!interacted) return; // nothing in progress — leave straight away
+      e.preventDefault();
+      confirmLeave(back.getAttribute("href"));
+    });
+  })();
 
   // Public: open the leaderboard for a game (from a 🏆 button). round/roundLabel optional.
   function open(id, round, roundLabel) {
@@ -238,6 +276,7 @@
 
   // Public: end-of-game screen with result + name entry (if a high score) + board.
   function finish(opts) {
+    interacted = false; // run is over — leaving no longer needs a confirmation
     var id = opts.game, val = opts.value, round = opts.round, roundLabel = opts.roundLabel;
     if (DAILY) {
       // rank daily-set runs against the day's per-game board, not the all-time one
