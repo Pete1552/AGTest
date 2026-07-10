@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#11151c" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Tranquil" />
+<link rel="apple-touch-icon" href="icon.png" />
+<link rel="icon" href="icon.png" />
+<link rel="manifest" href="manifest.json" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="shared.css" />
+<title>Silt — Tranquil</title>
+<style>
+  .play-area { touch-action: none; margin: 6px 0; }
+  #stage {
+    display: block; width: 100%; height: 100%; border-radius: 16px;
+    background: linear-gradient(180deg, #161d28 0%, #10151d 100%);
+    touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+  }
+  .tap-hint { text-align: center; color: var(--muted); font-size: 12px; min-height: 16px; margin-top: 6px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="topbar">
+    <div class="brand">
+      <a href="index.html" class="icon-btn" aria-label="Back to games">‹</a>
+      <span class="title">Silt</span>
+    </div>
+    <div class="bar-actions">
+      <button id="lb-btn" class="icon-btn" aria-label="High scores">🏆</button>
+      <button id="restart" class="icon-btn" aria-label="New game">↻</button>
+      <button id="settings-btn" class="icon-btn" aria-label="Settings">⚙</button>
+    </div>
+  </header>
+
+  <div class="scores">
+    <div class="score-box"><div class="score-label">Score</div><div class="score-val" id="score">0</div></div>
+    <div class="score-box best"><div class="score-label">Best</div><div class="score-val" id="best">0</div></div>
+  </div>
+
+  <div class="play-area"><canvas id="stage"></canvas></div>
+  <div class="tap-hint" id="hint">Drag to steer · tap to turn · pull down to pour</div>
+</div>
+
+<div id="settings-overlay" class="modal-overlay">
+  <div class="modal settings">
+    <h2>Silt</h2>
+    <div class="setting-row">
+      <span class="label">Sound</span>
+      <button id="sound-toggle" class="toggle on">On</button>
+    </div>
+    <div class="how">
+      <p class="how-title">How to play</p>
+      <p class="body">Falling shapes crumble into flowing sand where they land. Drag to steer a shape, tap to turn it, and pull down to pour it fast. When sand of one colour connects the left wall to the right wall, the whole vein drains away and scores. Let the dunes reach the top and it's over.</p>
+    </div>
+    <button id="settings-share" class="share">Share the game</button>
+    <button id="settings-close" class="ghost-btn">Done</button>
+    <div class="version-tag" id="app-version"></div>
+  </div>
+</div>
+
+<script src="leaderboard.js?v=15"></script>
+<script>
+(function () {
+  "use strict";
+
+  // ---- Sand field: a fine grain grid; pieces are chunky shapes that stamp
+  // into loose grains on landing, then the cellular sand sim takes over. ----
+  var GC = 100, GR = 150;          // grain columns / rows
+  var B = 10;                      // grains per shape-block edge
+  var TOP_ZONE = B * 2;            // settled sand above this line ends the game
+  var SIM_HZ = 120;                // sand steps per second
+  var FALL0 = 26, FALL_RAMP = 1.5, FALL_MAX = 58; // piece fall speed, grains/s
+  var FAST_MULT = 9;
+  var muted = localStorage.getItem("tranquil_muted") === "1";
+
+  // grain colours (index 1..4): calm palette with per-grain brightness jitter
+  var PAL = [null,
+    { r: 93,  g: 214, b: 192 },   // teal
+    { r: 143, g: 180, b: 240 },   // blue
+    { r: 224, g: 108, b: 159 },   // pink
+    { r: 242, g: 179, b: 94  }];  // amber
+  var PAL_HEX = [null, "#5dd6c0", "#8fb4f0", "#e06c9f", "#f2b35e"];
+
+  // Mixed shape set (triominoes/tetrominoes/one pentomino), in block units.
+  var SHAPES = [
+    [[0,0],[1,0],[0,1],[1,1]],           // square
+    [[0,0],[1,0],[2,0]],                 // bar 3
+    [[0,0],[1,0],[2,0],[3,0]],           // bar 4
+    [[0,0],[1,0],[2,0],[1,1]],           // tee
+    [[0,0],[0,1],[1,1]],                 // corner
+    [[0,0],[1,0],[1,1],[2,1]],           // step
+    [[1,0],[2,0],[0,1],[1,1]],           // step (mirrored)
+    [[0,0],[0,1],[0,2],[1,2]],           // ell
+    [[1,0],[0,1],[1,1],[2,1],[1,2]]      // plus
+  ];
+
+  var grid = new Uint8Array(GC * GR);
+  var jitter = new Uint8Array(GC * GR);  // static per-grain brightness texture
+  var piece = null;                      // {shape, color, x, y} (x,y in grains)
+  var nextShape = null, nextColor = 1;
+  var score = 0, bridges = 0, over = false, running = false;
+  var colorsInPlay = 3;                  // 4th colour joins after a few bridges
+  var simAcc = 0, fallAcc = 0, fastDrop = false, frame = 0;
+  var flashCells = [], flashTimer = 0;   // just-cleared vein, drawn as a fade
+  var settleWatch = 0;                   // frames left of post-landing bridge checks
+  var best = Number(localStorage.getItem("tranquil_silt_best") || 0) || 0;
+
+  var playArea = document.querySelector(".play-area");
+  var canvas = document.getElementById("stage");
+  var ctx = canvas.getContext("2d");
+  var scoreEl = document.getElementById("score");
+  var bestEl = document.getElementById("best");
+  var settingsOverlay = document.getElementById("settings-overlay");
+  var soundToggle = document.getElementById("sound-toggle");
+  var W = 300, H = 460, dpr = window.devicePixelRatio || 1;
+  var scale = 3, ox = 0, oy = 0;
+
+  // offscreen buffer at grain resolution, scaled up crisply
+  var off = document.createElement("canvas");
+  off.width = GC; off.height = GR;
+  var offCtx = off.getContext("2d");
+  var img = offCtx.createImageData(GC, GR);
+
+  // ---- Sound ----
+  var actx = null;
+  function audio() {
+    if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { actx = null; } }
+    if (actx && actx.state === "suspended") actx.resume();
+  }
+  function tone(f, d, t, g) {
+    if (muted || !actx) return;
+    var o = actx.createOscillator(), gn = actx.createGain();
+    o.type = t || "sine"; o.frequency.value = f;
+    gn.gain.setValueAtTime(0.0001, actx.currentTime);
+    gn.gain.exponentialRampToValueAtTime(g || 0.1, actx.currentTime + 0.01);
+    gn.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + d);
+    o.connect(gn); gn.connect(actx.destination); o.start(); o.stop(actx.currentTime + d + 0.02);
+  }
+  function sfxLand() { tone(220, 0.07, "triangle", 0.06); }
+  function sfxTurn() { tone(400, 0.04, "sine", 0.04); }
+  function sfxClear() { [523.25, 659.25, 783.99].forEach(function (f, i) { setTimeout(function () { tone(f, 0.22, "sine", 0.1); }, i * 70); }); }
+  function sfxOver() { [330, 247, 175].forEach(function (f, i) { setTimeout(function () { tone(f, 0.3, "sine", 0.09); }, i * 130); }); }
+
+  // ---- Piece helpers ----
+  function shapeSize(shape) {
+    var mx = 0, my = 0;
+    for (var i = 0; i < shape.length; i++) { if (shape[i][0] > mx) mx = shape[i][0]; if (shape[i][1] > my) my = shape[i][1]; }
+    return { w: mx + 1, h: my + 1 };
+  }
+  function rotated(shape) {
+    var my = 0;
+    for (var i = 0; i < shape.length; i++) if (shape[i][1] > my) my = shape[i][1];
+    return shape.map(function (b) { return [my - b[1], b[0]]; });
+  }
+  // collision test for the piece at grain position (px, py)
+  function fits(shape, px, py) {
+    for (var i = 0; i < shape.length; i++) {
+      var bx = px + shape[i][0] * B, by = py + shape[i][1] * B;
+      if (bx < 0 || bx + B > GC || by + B > GR) return false;
+      for (var y = Math.max(0, by); y < by + B; y++) {
+        var row = y * GC;
+        for (var x = bx; x < bx + B; x++) if (grid[row + x]) return false;
+      }
+    }
+    return true;
+  }
+  function spawnPiece() {
+    if (nextShape === null) pickNext();
+    var shape = nextShape, color = nextColor;
+    pickNext();
+    var sz = shapeSize(shape);
+    var px = Math.round((GC - sz.w * B) / 2 / B) * B;
+    var py = -sz.h * B;
+    piece = { shape: shape, color: color, x: px, y: py };
+    fallAcc = 0; fastDrop = false;
+  }
+  function pickNext() {
+    nextShape = SHAPES[Math.floor(Math.random() * SHAPES.length)];
+    nextColor = 1 + Math.floor(Math.random() * colorsInPlay);
+  }
+
+  function stampPiece() {
+    var danger = false;
+    for (var i = 0; i < piece.shape.length; i++) {
+      var bx = piece.x + piece.shape[i][0] * B, by = piece.y + piece.shape[i][1] * B;
+      for (var y = by; y < by + B; y++) {
+        if (y < 0) { danger = true; continue; }
+        if (y < TOP_ZONE) danger = true;
+        var row = y * GC;
+        for (var x = bx; x < bx + B; x++) grid[row + x] = piece.color;
+      }
+    }
+    piece = null;
+    sfxLand();
+    settleWatch = 140; // keep checking for bridges while this sand settles
+    if (danger) { gameOver(); return; }
+    setTimeout(function () { if (running && !over && !piece) spawnPiece(); }, 120);
+  }
+
+  // ---- Sand simulation: one bottom-up pass; grains fall, then slide
+  // diagonally, alternating bias so mounds stay symmetric. ----
+  function simStep() {
+    frame++;
+    for (var y = GR - 2; y >= 0; y--) {
+      var row = y * GC, below = row + GC;
+      var leftFirst = ((y + frame) & 1) === 0;
+      for (var k = 0; k < GC; k++) {
+        var x = leftFirst ? k : GC - 1 - k;
+        var i = row + x, v = grid[i];
+        if (!v) continue;
+        if (!grid[below + x]) { grid[below + x] = v; grid[i] = 0; continue; }
+        var d = leftFirst ? 1 : -1;
+        var x1 = x + d, x2 = x - d;
+        if (x1 >= 0 && x1 < GC && !grid[below + x1] && !grid[row + x1]) { grid[below + x1] = v; grid[i] = 0; }
+        else if (x2 >= 0 && x2 < GC && !grid[below + x2] && !grid[row + x2]) { grid[below + x2] = v; grid[i] = 0; }
+      }
+    }
+  }
+
+  // ---- Bridge detection: flood each colour from the left wall; any component
+  // that touches the right wall drains away and scores. ----
+  var visited = new Uint8Array(GC * GR);
+  var stack = new Int32Array(GC * GR);
+  function checkBridges() {
+    var clearedAny = false;
+    for (var c = 1; c <= 4; c++) {
+      visited.fill(0);
+      var top = 0, touchedRight = false, compStart = 0;
+      var component = [];
+      for (var y = 0; y < GR; y++) {
+        var i = y * GC;
+        if (grid[i] === c && !visited[i]) { visited[i] = 1; stack[top++] = i; }
+      }
+      // BFS the whole left-connected region of this colour at once
+      component.length = 0; touchedRight = false;
+      while (top > 0) {
+        var idx = stack[--top];
+        component.push(idx);
+        var x = idx % GC, yy = (idx / GC) | 0;
+        if (x === GC - 1) touchedRight = true;
+        if (x > 0 && grid[idx - 1] === c && !visited[idx - 1]) { visited[idx - 1] = 1; stack[top++] = idx - 1; }
+        if (x < GC - 1 && grid[idx + 1] === c && !visited[idx + 1]) { visited[idx + 1] = 1; stack[top++] = idx + 1; }
+        if (yy > 0 && grid[idx - GC] === c && !visited[idx - GC]) { visited[idx - GC] = 1; stack[top++] = idx - GC; }
+        if (yy < GR - 1 && grid[idx + GC] === c && !visited[idx + GC]) { visited[idx + GC] = 1; stack[top++] = idx + GC; }
+      }
+      if (touchedRight && component.length) {
+        for (var m = 0; m < component.length; m++) grid[component[m]] = 0;
+        flashCells = flashCells.concat(component);
+        flashTimer = 16;
+        score += component.length;
+        bridges++;
+        clearedAny = true;
+      }
+    }
+    if (clearedAny) {
+      scoreEl.textContent = String(score);
+      if (score > best) { best = score; localStorage.setItem("tranquil_silt_best", String(best)); bestEl.textContent = String(best); }
+      if (bridges >= 5) colorsInPlay = 4;
+      sfxClear();
+      settleWatch = Math.max(settleWatch, 140); // draining may reveal more veins
+    }
+  }
+
+  function fallSpeed() { return Math.min(FALL_MAX, FALL0 + bridges * FALL_RAMP); }
+
+  // ---- Update ----
+  var lastT = 0, rafId = 0;
+  function loop(ts) {
+    var dt = lastT ? Math.min(0.05, (ts - lastT) / 1000) : 0.016;
+    lastT = ts;
+    if (running && !over) update(dt);
+    render();
+    rafId = requestAnimationFrame(loop);
+  }
+  function update(dt) {
+    simAcc += dt * SIM_HZ;
+    var steps = Math.min(6, Math.floor(simAcc));
+    simAcc -= steps;
+    for (var s = 0; s < steps; s++) simStep();
+
+    if (piece) {
+      fallAcc += dt * fallSpeed() * (fastDrop ? FAST_MULT : 1);
+      var down = Math.floor(fallAcc);
+      fallAcc -= down;
+      while (down-- > 0 && piece) {
+        if (fits(piece.shape, piece.x, piece.y + 1)) piece.y++;
+        else { stampPiece(); break; }
+      }
+    }
+
+    if (settleWatch > 0) {
+      settleWatch--;
+      if (settleWatch % 12 === 0) checkBridges();
+    }
+    if (flashTimer > 0 && --flashTimer === 0) flashCells = [];
+  }
+
+  function gameOver() {
+    over = true; running = false;
+    sfxOver();
+    setTimeout(function () {
+      LB.finish({ game: "silt", value: score, resultTitle: "Buried!",
+        subtitle: bridges + " vein" + (bridges === 1 ? "" : "s") + " drained", onPlayAgain: newGame });
+    }, 600);
+  }
+
+  // ---- Render (grains into an ImageData at grain resolution, scaled up) ----
+  function render() {
+    var d = img.data;
+    // field background
+    for (var i = 0; i < GC * GR; i++) {
+      var v = grid[i], o4 = i * 4;
+      if (v) {
+        var p = PAL[v], j = jitter[i];
+        d[o4] = p.r - j; d[o4 + 1] = p.g - j; d[o4 + 2] = p.b - j; d[o4 + 3] = 255;
+      } else {
+        d[o4] = 16; d[o4 + 1] = 21; d[o4 + 2] = 29; d[o4 + 3] = 255;
+      }
+    }
+    // falling piece grains
+    if (piece) {
+      var pc = PAL[piece.color];
+      for (var b = 0; b < piece.shape.length; b++) {
+        var bx = piece.x + piece.shape[b][0] * B, by = piece.y + piece.shape[b][1] * B;
+        for (var y = Math.max(0, by); y < by + B && y < GR; y++) {
+          for (var x = bx; x < bx + B; x++) {
+            var ii = (y * GC + x) * 4, jj = jitter[y * GC + x];
+            d[ii] = pc.r - jj; d[ii + 1] = pc.g - jj; d[ii + 2] = pc.b - jj; d[ii + 3] = 255;
+          }
+        }
+      }
+    }
+    // draining vein flash
+    if (flashTimer > 0) {
+      var fa = flashTimer / 16;
+      for (var f = 0; f < flashCells.length; f++) {
+        var fi = flashCells[f] * 4;
+        d[fi] = 200 + 55 * fa; d[fi + 1] = 235; d[fi + 2] = 225; d[fi + 3] = 255 * fa;
+      }
+    }
+    offCtx.putImageData(img, 0, 0);
+
+    ctx.clearRect(0, 0, W, H);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(off, ox, oy, GC * scale, GR * scale);
+    // field frame + danger line
+    ctx.strokeStyle = "rgba(255,255,255,0.07)"; ctx.lineWidth = 1;
+    ctx.strokeRect(ox - 0.5, oy - 0.5, GC * scale + 1, GR * scale + 1);
+    ctx.strokeStyle = "rgba(224,82,79,0.25)";
+    ctx.setLineDash([4, 5]);
+    ctx.beginPath();
+    ctx.moveTo(ox, oy + TOP_ZONE * scale);
+    ctx.lineTo(ox + GC * scale, oy + TOP_ZONE * scale);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // next-piece preview, top-right beside the field
+    if (nextShape) {
+      var cell = Math.max(3, Math.round(scale * B * 0.28));
+      var sz = shapeSize(nextShape);
+      var pxr = ox + GC * scale - sz.w * cell - 6, pyr = oy + 6;
+      ctx.globalAlpha = 0.85;
+      ctx.fillStyle = "rgba(13,16,22,0.55)";
+      ctx.fillRect(pxr - 4, pyr - 4, sz.w * cell + 8, sz.h * cell + 8);
+      ctx.fillStyle = PAL_HEX[nextColor];
+      for (var nb = 0; nb < nextShape.length; nb++) {
+        ctx.fillRect(pxr + nextShape[nb][0] * cell, pyr + nextShape[nb][1] * cell, cell - 1, cell - 1);
+      }
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  // ---- Input: drag steers, tap turns, pulling down pours ----
+  var ptr = null; // {id, x, y, moved, fastOn, t}
+  function tryShift(cols) {
+    if (!piece) return;
+    var step = cols > 0 ? 1 : -1;
+    while (cols !== 0 && fits(piece.shape, piece.x + step, piece.y)) { piece.x += step; cols -= step; }
+  }
+  function rotate() {
+    if (!piece) return;
+    var r = rotated(piece.shape);
+    var kicks = [0, -B, B, -2 * B, 2 * B];
+    for (var k = 0; k < kicks.length; k++) {
+      if (fits(r, piece.x + kicks[k], piece.y)) { piece.shape = r; piece.x += kicks[k]; sfxTurn(); return; }
+    }
+  }
+  canvas.addEventListener("pointerdown", function (e) {
+    e.preventDefault();
+    if (over) return;
+    audio();
+    ptr = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: 0, t: performance.now() };
+    try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+  });
+  canvas.addEventListener("pointermove", function (e) {
+    if (!ptr || e.pointerId !== ptr.id || over) return;
+    e.preventDefault();
+    var r = canvas.getBoundingClientRect();
+    var pxPerGrain = (r.width / W) * scale;
+    var dx = e.clientX - ptr.x, dy = e.clientY - ptr.y;
+    ptr.moved += Math.abs(dx) + Math.abs(dy);
+    var cols = Math.trunc(dx / pxPerGrain);
+    if (cols !== 0) { tryShift(cols); ptr.x += cols * pxPerGrain; }
+    fastDrop = dy > 30; // pull down and hold to pour
+  });
+  function endPtr(e) {
+    if (!ptr || e.pointerId !== ptr.id) return;
+    var quick = performance.now() - ptr.t < 250 && ptr.moved < 10;
+    ptr = null; fastDrop = false;
+    if (quick && !over) rotate();
+  }
+  canvas.addEventListener("pointerup", endPtr);
+  canvas.addEventListener("pointercancel", endPtr);
+  window.addEventListener("keydown", function (e) {
+    if (over) return;
+    if (e.key === "ArrowLeft") { tryShift(-B); e.preventDefault(); }
+    else if (e.key === "ArrowRight") { tryShift(B); e.preventDefault(); }
+    else if (e.key === "ArrowUp") { rotate(); e.preventDefault(); }
+    else if (e.key === "ArrowDown") { fastDrop = true; e.preventDefault(); }
+    else if (e.key === " ") { // pour instantly
+      if (piece) { while (fits(piece.shape, piece.x, piece.y + 1)) piece.y++; stampPiece(); }
+      e.preventDefault();
+    }
+  });
+  window.addEventListener("keyup", function (e) { if (e.key === "ArrowDown") fastDrop = false; });
+  canvas.addEventListener("touchstart", function (e) { e.preventDefault(); }, { passive: false });
+  canvas.addEventListener("touchmove", function (e) { e.preventDefault(); }, { passive: false });
+  document.addEventListener("gesturestart", function (e) { e.preventDefault(); });
+  var lastTouchEnd = 0;
+  document.addEventListener("touchend", function (e) { var n = Date.now(); if (n - lastTouchEnd <= 320) e.preventDefault(); lastTouchEnd = n; }, { passive: false });
+
+  // ---- Sizing ----
+  function sizeStage() {
+    var r = playArea.getBoundingClientRect();
+    W = Math.max(40, Math.floor(r.width)); H = Math.max(40, Math.floor(r.height));
+    dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    scale = Math.min(W / GC, H / GR);
+    ox = (W - GC * scale) / 2; oy = (H - GR * scale) / 2;
+    render();
+  }
+  window.addEventListener("resize", sizeStage);
+  window.addEventListener("orientationchange", function () { setTimeout(sizeStage, 150); });
+
+  // ---- Settings / sound ----
+  function updateSoundToggle() { soundToggle.textContent = muted ? "Off" : "On"; soundToggle.classList.toggle("on", !muted); }
+  async function shareGame() {
+    var text = "Silt — a calm falling-sand puzzle with no ads. Play it:";
+    var url = "https://pete1552.github.io/AGTest/";
+    try { if (navigator.share) { await navigator.share({ title: "Silt — Tranquil", text: text, url: url }); return; } } catch (e) { return; }
+    try {
+      await navigator.clipboard.writeText(text + " " + url);
+      var b = document.getElementById("settings-share"), old = b.textContent; b.textContent = "Link copied!";
+      setTimeout(function () { b.textContent = old; }, 1500);
+    } catch (e) {}
+  }
+  soundToggle.addEventListener("click", function () {
+    muted = !muted; localStorage.setItem("tranquil_muted", muted ? "1" : "0"); updateSoundToggle();
+    if (!muted) { audio(); tone(400, 0.05, "sine", 0.06); }
+  });
+  document.getElementById("settings-btn").addEventListener("click", function () { updateSoundToggle(); settingsOverlay.classList.add("show"); });
+  document.getElementById("settings-close").addEventListener("click", function () { settingsOverlay.classList.remove("show"); });
+  settingsOverlay.addEventListener("click", function (e) { if (e.target === settingsOverlay) settingsOverlay.classList.remove("show"); });
+  document.getElementById("settings-share").addEventListener("click", shareGame);
+  document.getElementById("lb-btn").addEventListener("click", function () { LB.open("silt"); });
+  document.getElementById("restart").addEventListener("click", newGame);
+
+  // ---- Lifecycle ----
+  function newGame() {
+    grid.fill(0);
+    for (var i = 0; i < jitter.length; i++) jitter[i] = (Math.random() * 26) | 0;
+    score = 0; bridges = 0; over = false; running = true;
+    colorsInPlay = 3; simAcc = 0; fallAcc = 0; fastDrop = false;
+    flashCells = []; flashTimer = 0; settleWatch = 0;
+    nextShape = null; piece = null;
+    scoreEl.textContent = "0"; bestEl.textContent = String(best);
+    spawnPiece();
+  }
+
+  updateSoundToggle();
+  sizeStage();
+  newGame();
+  rafId = requestAnimationFrame(loop);
+  setTimeout(sizeStage, 300);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(sizeStage);
+})();
+</script>
+</body>
+</html>
