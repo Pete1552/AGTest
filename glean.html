@@ -17,9 +17,10 @@
 <link rel="stylesheet" href="shared.css" />
 <title>Glean — Tranquil</title>
 <style>
-  #letters { display: flex; justify-content: center; gap: 7px; margin: 10px 0 4px; flex-wrap: wrap; }
+  /* single row always: tile size is computed in JS from the available width */
+  #letters { display: flex; justify-content: center; gap: 7px; margin: 10px 0 4px; flex-wrap: nowrap; }
   .lt {
-    width: 44px; height: 50px; border-radius: 12px; border: none; cursor: pointer;
+    width: 44px; height: 50px; border-radius: 12px; border: none; cursor: pointer; flex: none;
     background: var(--panel); color: var(--ink);
     font-family: var(--font-display); font-weight: 700; font-size: 22px; text-transform: uppercase;
     box-shadow: inset 0 2px 0 rgba(255,255,255,0.09), inset 0 -3px 0 rgba(0,0,0,0.28), 0 3px 8px rgba(0,0,0,0.3);
@@ -117,7 +118,7 @@
   </div>
 </div>
 
-<script src="leaderboard.js?v=17"></script>
+<script src="leaderboard.js?v=18"></script>
 <script>
 (function () {
   "use strict";
@@ -129,7 +130,8 @@
 
   var muted = localStorage.getItem("tranquil_muted") === "1";
   var DICT = DICT_RAW.split(" ");
-  var SOURCES = SOURCES_RAW.split(" ");
+  // cap starter words at 7 letters — 8 tiles crowd off the row on phones
+  var SOURCES = SOURCES_RAW.split(" ").filter(function (w) { return w.length <= 7; });
   var MIN_WORDS = 12, MAX_WORDS = 60;
 
   var source = "";        // the big word
@@ -231,8 +233,23 @@
       b.addEventListener("pointerdown", function (e) { e.preventDefault(); audio(); tapTile(i); });
       lettersEl.appendChild(b);
     });
+    sizeTiles();
     entryEl.textContent = entry.map(function (i) { return tiles[i].ch; }).join("");
   }
+  // belt-and-braces: shrink tiles so the row always fits, even on 320px phones
+  function sizeTiles() {
+    var n = tiles.length;
+    if (!n) return;
+    var gap = 7, avail = lettersEl.clientWidth || (document.documentElement.clientWidth - 20);
+    var w = Math.max(30, Math.min(46, Math.floor((avail - gap * (n - 1)) / n)));
+    var kids = lettersEl.children;
+    for (var i = 0; i < kids.length; i++) {
+      kids[i].style.width = w + "px";
+      kids[i].style.height = Math.round(w * 1.14) + "px";
+      kids[i].style.fontSize = Math.round(w * 0.5) + "px";
+    }
+  }
+  window.addEventListener("resize", sizeTiles);
   function tapTile(i) {
     if (finished || tiles[i].used) return;
     tiles[i].used = true;
