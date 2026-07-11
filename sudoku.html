@@ -50,7 +50,19 @@
   .cell.conflict { color: #e0524f; }
   .cell.given.conflict { color: #e0524f; }
 
-  #numpad { display: grid; grid-template-columns: repeat(10, 1fr); gap: 5px; margin-top: 10px; }
+  /* pencil notes: a mini 3x3 of candidates inside an empty cell */
+  .cell .notes {
+    display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr);
+    width: 100%; height: 100%; padding: 1px;
+  }
+  .cell .notes span {
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-text); font-weight: 700;
+    font-size: clamp(6px, 2.1vw, 10px); line-height: 1; color: var(--muted);
+  }
+  .cell .notes span.hot { color: var(--accent); }
+
+  #numpad { display: grid; grid-template-columns: repeat(11, 1fr); gap: 4px; margin-top: 10px; }
   .np {
     background: var(--panel); border: none; border-radius: 10px; padding: 8px 0 5px;
     color: var(--ink); cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 1px;
@@ -59,6 +71,8 @@
   .np .c { font-size: 9px; color: var(--muted); min-height: 11px; }
   .np:active { transform: translateY(1px); }
   .np.done .n { color: var(--muted); opacity: 0.5; }
+  .np.mode.on { background: var(--accent); }
+  .np.mode.on .n, .np.mode.on .c { color: #06231e; }
 </style>
 </head>
 <body>
@@ -99,7 +113,7 @@
     </div>
     <div class="how">
       <p class="how-title">How to play</p>
-      <p class="body">Fill the grid so every row, column and 3×3 box contains 1-9 exactly once. Tap a cell, then tap a number — clashes show in red. Every puzzle is generated with exactly one solution. Fastest solve wins, per difficulty.</p>
+      <p class="body">Fill the grid so every row, column and 3×3 box contains 1-9 exactly once. Tap a cell, then tap a number — clashes show in red. Long-press a number (or turn on ✎ notes) to pencil small candidate marks into a cell; placing a real number tidies that note out of its row, column and box. On a keyboard use Shift+number for notes and N to toggle notes mode. Every puzzle is generated with exactly one solution. Fastest solve wins, per difficulty.</p>
     </div>
     <button id="settings-share" class="share">Share the game</button>
     <button id="settings-close" class="ghost-btn">Done</button>
@@ -107,7 +121,7 @@
   </div>
 </div>
 
-<script src="leaderboard.js?v=18"></script>
+<script src="leaderboard.js?v=19"></script>
 <script>
 (function () {
   "use strict";
@@ -121,6 +135,8 @@
   var solution = [];   // 81 digits
   var puzzle = [];     // 81 digits, 0 = empty (the givens)
   var grid = [];       // current state
+  var notes = [];      // 81 bitmasks: bit d set = digit d pencilled in
+  var noteMode = false;
   var selected = -1, solvedGame = false;
   var startTime = 0, elapsed = 0, timerId = 0;
 
@@ -272,7 +288,15 @@
     var selB = selected >= 0 ? boxOf(selected) : -1;
     for (var i = 0; i < 81; i++) {
       var el = cellEls[i];
-      el.textContent = grid[i] ? String(grid[i]) : "";
+      if (grid[i]) el.textContent = String(grid[i]);
+      else if (notes[i]) {
+        var nh = '<div class="notes">';
+        for (var nd = 1; nd <= 9; nd++) {
+          var on = (notes[i] >> nd) & 1;
+          nh += '<span' + (on && nd === selVal ? ' class="hot"' : '') + '>' + (on ? nd : '') + '</span>';
+        }
+        el.innerHTML = nh + '</div>';
+      } else el.textContent = "";
       var r = (i / 9) | 0, c = i % 9;
       el.className = "cell" +
         (puzzle[i] ? " given" : "") +
@@ -300,7 +324,23 @@
       var b = document.createElement("button");
       b.className = "np";
       b.innerHTML = '<span class="n">' + d + '</span><span class="c"></span>';
-      (function (dd) { b.addEventListener("click", function () { audio(); enterDigit(dd); }); })(d);
+      // tap enters the digit; a long press pencils it in as a note instead
+      (function (dd, btn) {
+        var pressTimer = 0, longFired = false;
+        btn.addEventListener("pointerdown", function () {
+          longFired = false;
+          clearTimeout(pressTimer);
+          pressTimer = setTimeout(function () { longFired = true; audio(); toggleNote(dd); }, 400);
+        });
+        function cancel() { clearTimeout(pressTimer); }
+        btn.addEventListener("pointerleave", cancel);
+        btn.addEventListener("pointercancel", cancel);
+        btn.addEventListener("pointerup", cancel);
+        btn.addEventListener("click", function () {
+          if (longFired) { longFired = false; return; } // the long press already handled it
+          audio(); enterDigit(dd);
+        });
+      })(d, b);
       numpadEl.appendChild(b);
     }
     var e = document.createElement("button");
@@ -309,6 +349,19 @@
     e.setAttribute("aria-label", "Erase");
     e.addEventListener("click", function () { audio(); enterDigit(0); });
     numpadEl.appendChild(e);
+    var m = document.createElement("button");
+    m.className = "np mode";
+    m.id = "note-btn";
+    m.innerHTML = '<span class="n">✎</span><span class="c">notes</span>';
+    m.setAttribute("aria-label", "Notes mode");
+    m.addEventListener("click", function () {
+      audio();
+      noteMode = !noteMode;
+      m.classList.toggle("on", noteMode);
+      sfxTap();
+    });
+    numpadEl.appendChild(m);
+    numpadEl.addEventListener("contextmenu", function (ev) { ev.preventDefault(); });
   }
 
   function selectCell(i) {
@@ -318,10 +371,32 @@
   }
   function enterDigit(d) {
     if (solvedGame || selected < 0 || puzzle[selected]) return;
-    if (d === 0) { if (grid[selected]) { grid[selected] = 0; sfxErase(); } }
-    else { grid[selected] = d; sfxSet(); }
+    if (d > 0 && noteMode && !grid[selected]) { toggleNote(d); return; }
+    if (d === 0) {
+      if (grid[selected]) { grid[selected] = 0; sfxErase(); }
+      else if (notes[selected]) { notes[selected] = 0; sfxErase(); }
+    } else {
+      grid[selected] = d;
+      notes[selected] = 0;
+      clearPeerNotes(selected, d);
+      sfxSet();
+    }
     render();
     checkWin();
+  }
+  function toggleNote(d) {
+    if (solvedGame || selected < 0 || puzzle[selected] || grid[selected] || d < 1) return;
+    notes[selected] ^= (1 << d);
+    sfxTap();
+    render();
+  }
+  // placing a real digit rules it out for the row/column/box — tidy the pencil marks
+  function clearPeerNotes(i, d) {
+    var mask = ~(1 << d);
+    var r = (i / 9) | 0, c = i % 9, b = boxOf(i);
+    for (var j = 0; j < 81; j++) {
+      if (((j / 9) | 0) === r || j % 9 === c || boxOf(j) === b) notes[j] &= mask;
+    }
   }
 
   function checkWin() {
@@ -369,6 +444,7 @@
     solvedGame = false; selected = -1;
     puzzle = makePuzzle(DIFFS[DIFF]);
     grid = puzzle.slice();
+    notes = new Array(81).fill(0);
     timeEl.textContent = "0s";
     updateBestLabel();
     render();
@@ -377,6 +453,13 @@
 
   // ---- Input: keyboard ----
   window.addEventListener("keydown", function (e) {
+    // Shift+digit pencils a note; N toggles notes mode
+    if (e.shiftKey && e.code && /^(Digit|Numpad)[1-9]$/.test(e.code)) {
+      toggleNote(Number(e.code.slice(-1))); e.preventDefault(); return;
+    }
+    if (e.key === "n" || e.key === "N") {
+      document.getElementById("note-btn").click(); e.preventDefault(); return;
+    }
     if (e.key >= "1" && e.key <= "9") { enterDigit(Number(e.key)); e.preventDefault(); return; }
     if (e.key === "Backspace" || e.key === "Delete" || e.key === "0") { enterDigit(0); e.preventDefault(); return; }
     var mv = { ArrowUp: -9, ArrowDown: 9, ArrowLeft: -1, ArrowRight: 1 }[e.key];
