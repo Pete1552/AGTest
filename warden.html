@@ -59,7 +59,7 @@
     </div>
     <div class="how">
       <p class="how-title">How to play</p>
-      <p class="body">You are the keep's mounted warden. Hold and drag anywhere — your horse rides toward your finger, and your archer looses arrows at the nearest raider all by herself. Raiders march in slow bands toward the gate; any that reach it steal a heart and slip away. Ride out to meet them, circle behind stragglers, and keep the keep. From the fifth band on, your archer nocks extra arrows. Survive as many bands as you can.</p>
+      <p class="body">You are the keep's mounted warden. Hold and drag anywhere — your horse rides toward your finger, and your archer looses arrows at the nearest raider all by herself. Raiders march in slow bands toward the gate — and break into a charge on the final stretch, so waiting at the walls is a losing game. Ride out to meet each group in the field; any raider who reaches the gate steals a heart and slips away. From the fifth band on, your archer nocks extra arrows. Survive as many bands as you can.</p>
     </div>
     <button id="settings-share" class="share">Share the game</button>
     <button id="settings-close" class="ghost-btn">Done</button>
@@ -67,7 +67,7 @@
   </div>
 </div>
 
-<script src="leaderboard.js?v=24"></script>
+<script src="leaderboard.js?v=25"></script>
 <script>
 (function () {
   "use strict";
@@ -77,7 +77,7 @@
   // ---- Tunables ----
   var HORSE_SPEED = 175;      // px/s
   var FIRE_CD = 0.55;         // s between volleys
-  var RANGE = 265;            // arrow reach
+  var RANGE = 175;            // arrow reach — short enough that position matters
   var ARROW_SPEED = 430;
   var KEEP_R = 44;            // raiders raid inside this radius
   var HEARTS_MAX = 5;
@@ -92,7 +92,7 @@
   var puffs = [];    // little impact poofs {x,y,t}
   var hearts = HEARTS_MAX;
   var wave = 1, kills = 0;
-  var spawnLeft = 0, spawnT = 0, breatherT = 0;
+  var breatherT = 0;
   var over = false, running = false, announced = "", announceT = 0;
   var elapsed = 0;
   var best = Number(localStorage.getItem("tranquil_warden_best") || 0) || 0;
@@ -141,22 +141,40 @@
   // ---- Waves ----
   function bandSize(w) { return 4 + 2 * w; }
   function raiderSpeed(w) { return 24 + Math.min(30, w * 1.6); }
-  function volleySize(w) { return Math.min(3, 1 + Math.floor(w / 5)); }
+  function volleySize(w) { return Math.min(3, 1 + Math.floor(w / 6)); }
+
+  // Raiders arrive in clustered groups from rotating sides, so parking by the
+  // gate can't keep up with simultaneous approaches — riding out to meet each
+  // group early is the winning play.
+  var spawnQueue = [];  // {t, x, y} in wave-time
+  var waveT = 0, lastSide = -1;
   function startWave() {
-    spawnLeft = bandSize(wave);
-    spawnT = 0.5;
+    spawnQueue = [];
+    waveT = 0;
+    var remaining = bandSize(wave);
+    var t = 1.2;
+    while (remaining > 0) {
+      var g = Math.min(remaining, 3 + Math.floor(Math.random() * 3)); // groups of 3-5
+      remaining -= g;
+      var side = (lastSide + 1 + Math.floor(Math.random() * 3)) % 4; // never the same side twice
+      lastSide = side;
+      var base = 0.15 + Math.random() * 0.7;
+      for (var i = 0; i < g; i++) {
+        var off = (Math.random() - 0.5) * 90, x, y;
+        if (side === 0) { x = base * W + off; y = -16 - Math.random() * 18; }
+        else if (side === 1) { x = base * W + off; y = H + 16 + Math.random() * 18; }
+        else if (side === 2) { x = -16 - Math.random() * 18; y = base * H + off; }
+        else { x = W + 16 + Math.random() * 18; y = base * H + off; }
+        spawnQueue.push({ t: t + Math.random() * 0.6, x: x, y: y });
+      }
+      t += 1.6 + Math.random();
+    }
     announced = "Band " + wave + " approaches";
     announceT = 2.4;
     sfxWave();
   }
-  function spawnRaider() {
-    // arrive from a random point just outside the field's edges
-    var side = Math.floor(Math.random() * 4), x, y;
-    if (side === 0) { x = Math.random() * W; y = -16; }
-    else if (side === 1) { x = Math.random() * W; y = H + 16; }
-    else if (side === 2) { x = -16; y = Math.random() * H; }
-    else { x = W + 16; y = Math.random() * H; }
-    var armored = wave >= 4 && Math.random() < 0.22;
+  function spawnRaider(x, y) {
+    var armored = wave >= 3 && Math.random() < Math.min(0.4, 0.07 * (wave - 2));
     raiders.push({
       x: x, y: y, hp: armored ? 2 : 1, armored: armored,
       speed: raiderSpeed(wave) * (0.9 + Math.random() * 0.2),
@@ -164,7 +182,7 @@
     });
   }
   function waveDone() {
-    if (spawnLeft > 0) return false;
+    if (spawnQueue.length) return false;
     for (var i = 0; i < raiders.length; i++) if (raiders[i].state === "march") return false;
     return true;
   }
@@ -186,11 +204,22 @@
     }
     player.x = Math.max(14, Math.min(W - 14, player.x));
     player.y = Math.max(14, Math.min(H - 14, player.y));
+    // the castle is solid — no camping on the keep
+    var kdx = player.x - keepX, kdy = player.y - keepY;
+    var kd = Math.sqrt(kdx * kdx + kdy * kdy);
+    if (kd < KEEP_R + 14) {
+      kd = kd || 1;
+      player.x = keepX + kdx / kd * (KEEP_R + 14);
+      player.y = keepY + kdy / kd * (KEEP_R + 14);
+    }
 
-    // spawn schedule
-    if (spawnLeft > 0) {
-      spawnT -= dt;
-      if (spawnT <= 0) { spawnRaider(); spawnLeft--; spawnT = 0.75; }
+    // spawn schedule (wave-time based, grouped arrivals)
+    waveT += dt;
+    for (var s = spawnQueue.length - 1; s >= 0; s--) {
+      if (spawnQueue[s].t <= waveT) {
+        spawnRaider(spawnQueue[s].x, spawnQueue[s].y);
+        spawnQueue.splice(s, 1);
+      }
     }
 
     // raiders
@@ -200,8 +229,13 @@
       if (r.state === "march") {
         var rx = keepX - r.x, ry = keepY - r.y;
         var rd = Math.sqrt(rx * rx + ry * ry) || 1;
-        r.x += rx / rd * r.speed * dt;
-        r.y += ry / rd * r.speed * dt;
+        // final charge: raiders sprint the last stretch to the gate, so a
+        // parked archer barely gets a shot — meet them in the field instead
+        if (!r.charging && rd < 130) r.charging = true;
+        var sp2 = r.charging ? r.speed * 1.75 : r.speed;
+        r.x += rx / rd * sp2 * dt;
+        r.y += ry / rd * sp2 * dt;
+        if (r.charging) r.phase += dt * 7;
         r.face = rx > 0 ? 1 : -1;
         if (rd < KEEP_R) {
           hearts--;
@@ -241,8 +275,9 @@
           var tt = Math.sqrt(o.d2) / ARROW_SPEED;
           var rx2 = keepX - r.x, ry2 = keepY - r.y;
           var rd2 = Math.sqrt(rx2 * rx2 + ry2 * ry2) || 1;
-          var ax = r.x + rx2 / rd2 * r.speed * tt - player.x;
-          var ay = r.y + ry2 / rd2 * r.speed * tt - player.y;
+          var esp = r.charging ? r.speed * 1.75 : r.speed;
+          var ax = r.x + rx2 / rd2 * esp * tt - player.x;
+          var ay = r.y + ry2 / rd2 * esp * tt - player.y;
           var ad = Math.sqrt(ax * ax + ay * ay) || 1;
           arrows.push({ x: player.x, y: player.y - 10, vx: ax / ad * ARROW_SPEED, vy: ay / ad * ARROW_SPEED, life: RANGE / ARROW_SPEED + 0.25 });
         });
@@ -433,8 +468,8 @@
       ctx.globalAlpha = Math.max(0, 1 - r.t / 2.2);
     }
     ctx.scale(r.face || 1, 1);
-    var waddle = r.state === "march" ? Math.sin(r.phase) * 0.08 : 0;
-    ctx.rotate(waddle);
+    var waddle = r.state === "march" ? Math.sin(r.phase) * (r.charging ? 0.13 : 0.08) : 0;
+    ctx.rotate(waddle + (r.charging && r.state === "march" ? 0.16 : 0));
     // shadow
     if (r.state !== "down") {
       ctx.fillStyle = "rgba(0,0,0,0.25)";
@@ -588,7 +623,7 @@
     raiders = []; arrows = []; puffs = [];
     hearts = HEARTS_MAX;
     wave = 1; kills = 0;
-    spawnLeft = 0; spawnT = 0; breatherT = 0;
+    breatherT = 0;
     over = false; running = true;
     elapsed = 0;
     player.x = keepX; player.y = keepY + 86;
