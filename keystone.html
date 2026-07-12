@@ -1,0 +1,888 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#11151c" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Tranquil" />
+<link rel="apple-touch-icon" href="icon.png" />
+<link rel="icon" href="icon.png" />
+<link rel="manifest" href="manifest.json" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="shared.css" />
+<title>Keystone — Tranquil</title>
+<style>
+  #tray {
+    display: flex; align-items: center; gap: 10px;
+    margin: 8px 0 6px;
+  }
+  .piece-meta { flex: 1; min-width: 0; }
+  .piece-name { font-weight: 800; font-size: 15px; }
+  .piece-hint { color: var(--muted); font-size: 11.5px; margin-top: 2px; }
+  #queue { display: flex; align-items: center; gap: 10px; flex: none; }
+  #queue .q-lbl { color: var(--muted); font-size: 11px; font-weight: 700; }
+  .q-shape {
+    background: linear-gradient(180deg, #d9b98c, #c4a06e);
+    border-radius: 3px; opacity: 0.8;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.25);
+  }
+  .q-shape:nth-child(3) { opacity: 0.55; }
+  .q-shape:nth-child(4) { opacity: 0.35; }
+
+  .play-area { position: relative; }
+  #stage {
+    border-radius: 14px; display: block;
+    touch-action: none; user-select: none; -webkit-user-select: none;
+  }
+  #controls {
+    position: absolute; left: 0; right: 0; bottom: 12px;
+    display: flex; justify-content: center; gap: 10px;
+    pointer-events: none;
+  }
+  #controls button {
+    pointer-events: auto;
+    border: none; cursor: pointer; font-weight: 800; font-size: 14px;
+    border-radius: 999px; padding: 12px 22px;
+    transition: transform 100ms ease, opacity 140ms ease;
+  }
+  #controls button:active { transform: translateY(1px) scale(0.98); }
+  #rot-btn { background: var(--panel); color: var(--ink); box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
+  #drop-btn { background: var(--accent); color: #06231e; box-shadow: 0 4px 14px rgba(93,214,192,0.35); }
+  #drop-btn:disabled { opacity: 0.4; cursor: default; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="topbar">
+    <div class="brand">
+      <a href="index.html" class="icon-btn" aria-label="Back to games">‹</a>
+      <span class="title">Keystone</span>
+    </div>
+    <div class="bar-actions">
+      <button id="lb-btn" class="icon-btn" aria-label="High scores">🏆</button>
+      <button id="restart" class="icon-btn" aria-label="New game">↻</button>
+      <button id="settings-btn" class="icon-btn" aria-label="Settings">⚙</button>
+    </div>
+  </header>
+
+  <div class="scores">
+    <div class="score-box"><div class="score-label">Height</div><div class="score-val" id="height">0.0 m</div></div>
+    <div class="score-box"><div class="score-label">Stones left</div><div class="score-val" id="left">24</div></div>
+    <div class="score-box best"><div class="score-label">Best</div><div class="score-val" id="best">—</div></div>
+  </div>
+
+  <div id="tray">
+    <div class="piece-meta">
+      <div class="piece-name" id="cur-name">Block</div>
+      <div class="piece-hint">Drag the stone into place, then drop it</div>
+    </div>
+    <div id="queue"><span class="q-lbl">Next</span><div class="q-shape" id="q0"></div><div class="q-shape" id="q1"></div><div class="q-shape" id="q2"></div></div>
+  </div>
+
+  <div class="play-area">
+    <canvas id="stage"></canvas>
+    <div id="controls">
+      <button id="rot-btn" aria-label="Rotate stone">⟲ Rotate</button>
+      <button id="drop-btn" aria-label="Drop stone">Drop stone</button>
+    </div>
+  </div>
+</div>
+
+<div id="settings-overlay" class="modal-overlay">
+  <div class="modal settings">
+    <h2>Keystone</h2>
+    <div class="setting-row">
+      <span class="label">Sound</span>
+      <button id="sound-toggle" class="toggle on">On</button>
+    </div>
+    <div class="how">
+      <p class="how-title">How to play</p>
+      <p class="body">Raise a stone tower over the water. Drag each stone where you want it, rotate it if it helps, and drop it — real gravity decides what stands. You get 24 stones; anything that topples into the water is gone for good. Your score is the height of whatever is still standing at the end. Build wide for safety, or narrow and brave for the leaderboard.</p>
+    </div>
+    <button id="settings-share" class="share">Share the game</button>
+    <button id="settings-close" class="ghost-btn">Done</button>
+    <div class="version-tag" id="app-version"></div>
+  </div>
+</div>
+
+<script src="leaderboard.js?v=22"></script>
+<script>
+(function () {
+  "use strict";
+
+  // ==================== Rigid-body physics (box2d-lite style) ====================
+  // Oriented boxes, contact clipping, accumulated impulses with warm starting.
+  var GRAV = 850;          // px/s^2
+  var DT = 1 / 120;        // fixed physics step (2 per render frame)
+  var ITERS = 10;          // solver iterations
+  var SLOP = 0.4;          // allowed penetration, px
+  var BIAS = 0.2;          // Baumgarte position-correction factor
+  var MAX_V = 1600;
+
+  var bodyIdSeq = 1;
+  function Body(w, h, density) {
+    this.id = bodyIdSeq++;
+    this.hw = w / 2; this.hh = h / 2;
+    this.px = 0; this.py = 0; this.a = 0;
+    this.vx = 0; this.vy = 0; this.av = 0;
+    this.friction = 0.85;
+    if (density > 0) {
+      this.m = density * w * h;
+      this.invM = 1 / this.m;
+      this.I = this.m * (w * w + h * h) / 12;
+      this.invI = 1 / this.I;
+    } else { this.m = 0; this.invM = 0; this.I = 0; this.invI = 0; }
+  }
+
+  // Contact points between two oriented boxes: SAT face pick, then clip the
+  // incident edge against the reference face. Up to 2 contacts, each with a
+  // stable feature id so impulses can be carried across frames.
+  function collide(A, B) {
+    var hAx = A.hw, hAy = A.hh, hBx = B.hw, hBy = B.hh;
+    var cA = Math.cos(A.a), sA = Math.sin(A.a), cB = Math.cos(B.a), sB = Math.sin(B.a);
+    var dpx = B.px - A.px, dpy = B.py - A.py;
+    var dAx = cA * dpx + sA * dpy, dAy = -sA * dpx + cA * dpy;
+    var dBx = cB * dpx + sB * dpy, dBy = -sB * dpx + cB * dpy;
+    // C = RotA^T * RotB and its abs
+    var C11 = cA * cB + sA * sB, C12 = sA * cB - cA * sB;
+    var C21 = -C12, C22 = C11;
+    var a11 = Math.abs(C11), a12 = Math.abs(C12), a21 = Math.abs(C21), a22 = Math.abs(C22);
+
+    var fAx = Math.abs(dAx) - hAx - (a11 * hBx + a12 * hBy);
+    var fAy = Math.abs(dAy) - hAy - (a21 * hBx + a22 * hBy);
+    if (fAx > 0 || fAy > 0) return null;
+    var fBx = Math.abs(dBx) - hBx - (a11 * hAx + a21 * hAy);
+    var fBy = Math.abs(dBy) - hBy - (a12 * hAx + a22 * hAy);
+    if (fBx > 0 || fBy > 0) return null;
+
+    // pick reference axis (with tolerance so it doesn't flip-flop)
+    var axis = 0, sep = fAx, nx = dAx > 0 ? cA : -cA, ny = dAx > 0 ? sA : -sA;
+    var RT = 0.95, AT = 0.01;
+    if (fAy > RT * sep + AT * hAy) { axis = 1; sep = fAy; nx = dAy > 0 ? -sA : sA; ny = dAy > 0 ? cA : -cA; }
+    if (fBx > RT * sep + AT * hBx) { axis = 2; sep = fBx; nx = dBx > 0 ? cB : -cB; ny = dBx > 0 ? sB : -sB; }
+    if (fBy > RT * sep + AT * hBy) { axis = 3; sep = fBy; nx = dBy > 0 ? -sB : sB; ny = dBy > 0 ? cB : -cB; }
+
+    var fnx, fny, front, sideNx, sideNy, side, negSide, posSide, negEdge, posEdge;
+    var incBody, refIsA;
+    if (axis === 0) {
+      fnx = nx; fny = ny; front = A.px * fnx + A.py * fny + hAx;
+      sideNx = -sA; sideNy = cA; side = A.px * sideNx + A.py * sideNy;
+      negSide = -side + hAy; posSide = side + hAy; negEdge = 3; posEdge = 1;
+      incBody = B; refIsA = true;
+    } else if (axis === 1) {
+      fnx = nx; fny = ny; front = A.px * fnx + A.py * fny + hAy;
+      sideNx = cA; sideNy = sA; side = A.px * sideNx + A.py * sideNy;
+      negSide = -side + hAx; posSide = side + hAx; negEdge = 2; posEdge = 4;
+      incBody = B; refIsA = true;
+    } else if (axis === 2) {
+      fnx = -nx; fny = -ny; front = B.px * fnx + B.py * fny + hBx;
+      sideNx = -sB; sideNy = cB; side = B.px * sideNx + B.py * sideNy;
+      negSide = -side + hBy; posSide = side + hBy; negEdge = 3; posEdge = 1;
+      incBody = A; refIsA = false;
+    } else {
+      fnx = -nx; fny = -ny; front = B.px * fnx + B.py * fny + hBy;
+      sideNx = cB; sideNy = sB; side = B.px * sideNx + B.py * sideNy;
+      negSide = -side + hBx; posSide = side + hBx; negEdge = 2; posEdge = 4;
+      incBody = A; refIsA = false;
+    }
+
+    // incident edge: the face of incBody most anti-parallel to fn
+    var ci = Math.cos(incBody.a), si = Math.sin(incBody.a);
+    var lnx = -(ci * fnx + si * fny), lny = -(-si * fnx + ci * fny);
+    var hx = incBody.hw, hy = incBody.hh;
+    var inc; // [x, y, edge1, edge2] pairs in local coords
+    if (Math.abs(lnx) > Math.abs(lny)) {
+      inc = lnx > 0
+        ? [hx, -hy, 3, 4, hx, hy, 4, 1]
+        : [-hx, hy, 1, 2, -hx, -hy, 2, 3];
+    } else {
+      inc = lny > 0
+        ? [hx, hy, 4, 1, -hx, hy, 1, 2]
+        : [-hx, -hy, 2, 3, hx, -hy, 3, 4];
+    }
+    // to world
+    var pts = [];
+    for (var k = 0; k < 2; k++) {
+      var lx = inc[k * 4], ly = inc[k * 4 + 1];
+      pts.push({
+        x: incBody.px + ci * lx - si * ly,
+        y: incBody.py + si * lx + ci * ly,
+        e1: inc[k * 4 + 2], e2: inc[k * 4 + 3]
+      });
+    }
+    // clip against the two side planes of the reference face
+    function clip(v, nX, nY, offset, edge) {
+      var out = [];
+      var d0 = nX * v[0].x + nY * v[0].y - offset;
+      var d1 = nX * v[1].x + nY * v[1].y - offset;
+      if (d0 <= 0) out.push(v[0]);
+      if (d1 <= 0) out.push(v[1]);
+      if (d0 * d1 < 0) {
+        var t = d0 / (d0 - d1);
+        out.push({
+          x: v[0].x + t * (v[1].x - v[0].x),
+          y: v[0].y + t * (v[1].y - v[0].y),
+          e1: edge, e2: edge, clipped: true
+        });
+      }
+      return out;
+    }
+    pts = clip(pts, -sideNx, -sideNy, negSide, negEdge);
+    if (pts.length < 2) return null;
+    pts = clip(pts, sideNx, sideNy, posSide, posEdge);
+    if (pts.length < 2) return null;
+
+    var contacts = [];
+    for (var m = 0; m < 2; m++) {
+      var s2 = fnx * pts[m].x + fny * pts[m].y - front;
+      if (s2 <= 0) {
+        contacts.push({
+          x: pts[m].x - s2 * fnx, y: pts[m].y - s2 * fny,
+          nx: refIsA ? fnx : -fnx, ny: refIsA ? fny : -fny, // normal always A -> B
+          sep: s2,
+          id: (refIsA ? 0 : 64) + pts[m].e1 * 8 + pts[m].e2,
+          Pn: 0, Pt: 0
+        });
+      }
+    }
+    return contacts.length ? contacts : null;
+  }
+
+  function Arbiter(b1, b2, contacts) {
+    this.b1 = b1; this.b2 = b2;
+    this.contacts = contacts;
+    this.friction = Math.sqrt(b1.friction * b2.friction);
+  }
+  Arbiter.prototype.merge = function (fresh) {
+    for (var i = 0; i < fresh.length; i++) {
+      for (var j = 0; j < this.contacts.length; j++) {
+        if (this.contacts[j].id === fresh[i].id) {
+          fresh[i].Pn = this.contacts[j].Pn;
+          fresh[i].Pt = this.contacts[j].Pt;
+          break;
+        }
+      }
+    }
+    this.contacts = fresh;
+  };
+  Arbiter.prototype.preStep = function (invDt) {
+    var b1 = this.b1, b2 = this.b2;
+    for (var i = 0; i < this.contacts.length; i++) {
+      var c = this.contacts[i];
+      c.r1x = c.x - b1.px; c.r1y = c.y - b1.py;
+      c.r2x = c.x - b2.px; c.r2y = c.y - b2.py;
+      var rn1 = c.r1x * c.nx + c.r1y * c.ny;
+      var rn2 = c.r2x * c.nx + c.r2y * c.ny;
+      var kn = b1.invM + b2.invM +
+        b1.invI * (c.r1x * c.r1x + c.r1y * c.r1y - rn1 * rn1) +
+        b2.invI * (c.r2x * c.r2x + c.r2y * c.r2y - rn2 * rn2);
+      c.mN = 1 / kn;
+      var tx = c.ny, ty = -c.nx;
+      var rt1 = c.r1x * tx + c.r1y * ty;
+      var rt2 = c.r2x * tx + c.r2y * ty;
+      var kt = b1.invM + b2.invM +
+        b1.invI * (c.r1x * c.r1x + c.r1y * c.r1y - rt1 * rt1) +
+        b2.invI * (c.r2x * c.r2x + c.r2y * c.r2y - rt2 * rt2);
+      c.mT = 1 / kt;
+      c.bias = -BIAS * invDt * Math.min(0, c.sep + SLOP);
+      // warm start
+      var Px = c.Pn * c.nx + c.Pt * tx, Py = c.Pn * c.ny + c.Pt * ty;
+      b1.vx -= b1.invM * Px; b1.vy -= b1.invM * Py;
+      b1.av -= b1.invI * (c.r1x * Py - c.r1y * Px);
+      b2.vx += b2.invM * Px; b2.vy += b2.invM * Py;
+      b2.av += b2.invI * (c.r2x * Py - c.r2y * Px);
+    }
+  };
+  Arbiter.prototype.applyImpulse = function () {
+    var b1 = this.b1, b2 = this.b2;
+    for (var i = 0; i < this.contacts.length; i++) {
+      var c = this.contacts[i];
+      var dvx = b2.vx - b2.av * c.r2y - b1.vx + b1.av * c.r1y;
+      var dvy = b2.vy + b2.av * c.r2x - b1.vy - b1.av * c.r1x;
+      var vn = dvx * c.nx + dvy * c.ny;
+      var dPn = c.mN * (-vn + c.bias);
+      var Pn0 = c.Pn;
+      c.Pn = Math.max(Pn0 + dPn, 0);
+      dPn = c.Pn - Pn0;
+      var Px = dPn * c.nx, Py = dPn * c.ny;
+      b1.vx -= b1.invM * Px; b1.vy -= b1.invM * Py;
+      b1.av -= b1.invI * (c.r1x * Py - c.r1y * Px);
+      b2.vx += b2.invM * Px; b2.vy += b2.invM * Py;
+      b2.av += b2.invI * (c.r2x * Py - c.r2y * Px);
+
+      dvx = b2.vx - b2.av * c.r2y - b1.vx + b1.av * c.r1y;
+      dvy = b2.vy + b2.av * c.r2x - b1.vy - b1.av * c.r1x;
+      var tx = c.ny, ty = -c.nx;
+      var vt = dvx * tx + dvy * ty;
+      var dPt = c.mT * (-vt);
+      var maxPt = this.friction * c.Pn;
+      var Pt0 = c.Pt;
+      c.Pt = Math.max(-maxPt, Math.min(maxPt, Pt0 + dPt));
+      dPt = c.Pt - Pt0;
+      Px = dPt * tx; Py = dPt * ty;
+      b1.vx -= b1.invM * Px; b1.vy -= b1.invM * Py;
+      b1.av -= b1.invI * (c.r1x * Py - c.r1y * Px);
+      b2.vx += b2.invM * Px; b2.vy += b2.invM * Py;
+      b2.av += b2.invI * (c.r2x * Py - c.r2y * Px);
+    }
+  };
+
+  function aabb(b) {
+    var c = Math.abs(Math.cos(b.a)), s = Math.abs(Math.sin(b.a));
+    var ex = b.hw * c + b.hh * s, ey = b.hw * s + b.hh * c;
+    return { l: b.px - ex, r: b.px + ex, t: b.py - ey, b: b.py + ey };
+  }
+
+  var bodies = [];          // dynamic stones
+  var plinth;               // static base
+  var arbiters = {};        // "id1:id2" -> Arbiter
+  var impactCb = null;
+
+  function physStep() {
+    var all = bodies.concat([plinth]);
+    var i, j, key;
+    var seen = {};
+    for (i = 0; i < all.length; i++) {
+      var A = all[i], ba = aabb(A);
+      for (j = i + 1; j < all.length; j++) {
+        var B = all[j];
+        if (A.invM === 0 && B.invM === 0) continue;
+        var bb = aabb(B);
+        if (ba.r < bb.l || bb.r < ba.l || ba.b < bb.t || bb.b < ba.t) continue;
+        var b1 = A.id < B.id ? A : B, b2 = A.id < B.id ? B : A;
+        var cts = collide(b1, b2);
+        key = b1.id + ":" + b2.id;
+        if (cts) {
+          seen[key] = true;
+          if (arbiters[key]) arbiters[key].merge(cts);
+          else {
+            arbiters[key] = new Arbiter(b1, b2, cts);
+            if (impactCb) {
+              var rel = Math.abs((b2.vx - b1.vx) * cts[0].nx + (b2.vy - b1.vy) * cts[0].ny);
+              if (rel > 50) impactCb(rel);
+            }
+          }
+        }
+      }
+    }
+    for (key in arbiters) if (!seen[key]) delete arbiters[key];
+
+    for (i = 0; i < bodies.length; i++) {
+      var b = bodies[i];
+      b.vy += GRAV * DT;
+      b.vx *= 0.9995; b.vy *= 0.9995; b.av *= 0.996;
+      var sp = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
+      if (sp > MAX_V) { b.vx *= MAX_V / sp; b.vy *= MAX_V / sp; }
+    }
+    var invDt = 1 / DT;
+    for (key in arbiters) arbiters[key].preStep(invDt);
+    for (var it = 0; it < ITERS; it++) for (key in arbiters) arbiters[key].applyImpulse();
+    for (i = 0; i < bodies.length; i++) {
+      var d = bodies[i];
+      d.px += d.vx * DT; d.py += d.vy * DT; d.a += d.av * DT;
+    }
+  }
+
+  // ==================== Game ====================
+  var STONES = {
+    column: { w: 32, h: 88,  name: "Column" },
+    block:  { w: 54, h: 54,  name: "Block" },
+    slab:   { w: 84, h: 42,  name: "Slab" },
+    lintel: { w: 122, h: 26, name: "Lintel" }
+  };
+  var BAG_N = 24; // 6 of each
+  var PLINTH_W = 300, PLINTH_TOP = 0; // plinth top edge is y = 0; up is -y
+  var WATER_Y = 210;
+  var KILL_Y = 340;
+
+  var muted = localStorage.getItem("tranquil_muted") === "1";
+
+  var bag = [];             // remaining stone type ids (bag[0] becomes the next ghost)
+  var ghost = null;         // { type, px, py, a }
+  var lost = 0;
+  var settled = true;
+  var settleFrames = 0;
+  var sinceDrop = 0;        // seconds since last drop (settle fail-safe)
+  var over = false;
+  var finished = false;
+  var best = null;
+  var heightDm = 0;         // current tower height in decimeters (score value)
+
+  var playArea = document.querySelector(".play-area");
+  var canvas = document.getElementById("stage");
+  var ctx = canvas.getContext("2d");
+  if (!ctx.roundRect) {
+    CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, r) {
+      r = Math.min(r, w / 2, h / 2);
+      this.moveTo(x + r, y);
+      this.arcTo(x + w, y, x + w, y + h, r);
+      this.arcTo(x + w, y + h, x, y + h, r);
+      this.arcTo(x, y + h, x, y, r);
+      this.arcTo(x, y, x + w, y, r);
+      this.closePath();
+    };
+  }
+  var heightEl = document.getElementById("height");
+  var leftEl = document.getElementById("left");
+  var bestEl = document.getElementById("best");
+  var curNameEl = document.getElementById("cur-name");
+  var qEls = [document.getElementById("q0"), document.getElementById("q1"), document.getElementById("q2")];
+  var dropBtn = document.getElementById("drop-btn");
+  var rotBtn = document.getElementById("rot-btn");
+  var settingsOverlay = document.getElementById("settings-overlay");
+  var soundToggle = document.getElementById("sound-toggle");
+
+  // ---- Sound ----
+  var actx = null;
+  function audio() {
+    if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { actx = null; } }
+    if (actx && actx.state === "suspended") actx.resume();
+  }
+  function tone(f, d, t, g) {
+    if (muted || !actx) return;
+    var o = actx.createOscillator(), gn = actx.createGain();
+    o.type = t || "sine"; o.frequency.value = f;
+    gn.gain.setValueAtTime(0.0001, actx.currentTime);
+    gn.gain.exponentialRampToValueAtTime(g || 0.1, actx.currentTime + 0.01);
+    gn.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + d);
+    o.connect(gn); gn.connect(actx.destination); o.start(); o.stop(actx.currentTime + d + 0.02);
+  }
+  var lastThunk = 0;
+  function sfxThunk(rel) {
+    var n = Date.now();
+    if (n - lastThunk < 90) return;
+    lastThunk = n;
+    tone(70 + Math.min(60, rel * 0.1), 0.09, "triangle", Math.min(0.14, 0.05 + rel * 0.0004));
+  }
+  function sfxRotate() { tone(392, 0.05, "sine", 0.04); }
+  function sfxPlop() { tone(240, 0.12, "sine", 0.08); setTimeout(function () { tone(140, 0.16, "sine", 0.06); }, 60); }
+  function sfxDone() { [523.25, 659.25, 783.99, 1046.5].forEach(function (f, i) { setTimeout(function () { tone(f, 0.4, "sine", 0.12); }, i * 110); }); }
+  impactCb = sfxThunk;
+
+  // ---- Bag / ghost ----
+  function buildBag() {
+    bag = [];
+    Object.keys(STONES).forEach(function (t) { for (var i = 0; i < BAG_N / 4; i++) bag.push(t); });
+    for (var k = bag.length - 1; k > 0; k--) {
+      var j = Math.floor(Math.random() * (k + 1));
+      var tmp = bag[k]; bag[k] = bag[j]; bag[j] = tmp;
+    }
+  }
+  function stackTopY() {
+    var top = PLINTH_TOP;
+    for (var i = 0; i < bodies.length; i++) {
+      var b = bodies[i];
+      var c = Math.abs(Math.cos(b.a)), s = Math.abs(Math.sin(b.a));
+      top = Math.min(top, b.py - (b.hw * s + b.hh * c));
+    }
+    return top;
+  }
+  function nextGhost() {
+    if (!bag.length) { ghost = null; updateTray(); return; }
+    var t = bag[0];
+    ghost = { type: t, px: 0, py: stackTopY() - 130, a: 0 };
+    updateTray();
+  }
+  function ghostBody() {
+    var s = STONES[ghost.type];
+    var gb = new Body(s.w, s.h, 0.001);
+    bodyIdSeq--; // don't burn ids on ghosts
+    gb.px = ghost.px; gb.py = ghost.py; gb.a = ghost.a;
+    return gb;
+  }
+  function ghostValid() {
+    if (!ghost) return false;
+    var gb = ghostBody();
+    if (collide(gb, plinth)) return false;
+    for (var i = 0; i < bodies.length; i++) if (collide(gb, bodies[i])) return false;
+    var wa = aabb(gb);
+    if (wa.b > WATER_Y - 4) return false; // must start above the water
+    return true;
+  }
+
+  function canDrop() {
+    return !over && ghost && (settled || sinceDrop > 6) && ghostValid();
+  }
+
+  function dropStone() {
+    if (!canDrop()) return;
+    var t = bag.shift();
+    var s = STONES[t];
+    var b = new Body(s.w, s.h, 0.001);
+    b.px = ghost.px; b.py = ghost.py; b.a = ghost.a;
+    b.shade = 0.5 + Math.random(); // per-stone tint variation
+    bodies.push(b);
+    settled = false;
+    settleFrames = 0;
+    sinceDrop = 0;
+    nextGhost();
+  }
+
+  function rotateStone() {
+    if (over || !ghost) return;
+    ghost.a += Math.PI / 2;
+    if (ghost.a > Math.PI * 1.9) ghost.a = 0;
+    sfxRotate();
+  }
+
+  // ---- Settle / scoring ----
+  function updateSettle(dt) {
+    sinceDrop += dt;
+    var calm = true;
+    for (var i = 0; i < bodies.length; i++) {
+      var b = bodies[i];
+      if (b.vx * b.vx + b.vy * b.vy > 64 || Math.abs(b.av) > 0.18) { calm = false; break; }
+    }
+    settleFrames = calm ? settleFrames + 1 : 0;
+    settled = settleFrames > 40;
+    if (settled) heightDm = Math.max(0, Math.round((PLINTH_TOP - stackTopY()) / 10));
+  }
+
+  function removeDrowned() {
+    for (var i = bodies.length - 1; i >= 0; i--) {
+      var bx = aabb(bodies[i]);
+      if (bodies[i].py > KILL_Y || Math.abs(bodies[i].px) > 900 || bx.t > WATER_Y + 12) {
+        bodies.splice(i, 1);
+        lost++;
+        sfxPlop();
+      }
+    }
+  }
+
+  function maybeFinish() {
+    if (over || finished || bag.length || ghost || !settled) return;
+    finished = true;
+    over = true;
+    if (best === null || heightDm > best) { best = heightDm; localStorage.setItem("tranquil_keystone_best", String(best)); }
+    sfxDone();
+    var meters = (heightDm / 10).toFixed(1);
+    setTimeout(function () {
+      LB.finish({
+        game: "keystone",
+        value: heightDm,
+        resultTitle: "The tower stands!",
+        subtitle: meters + " m tall · " + (lost === 0 ? "not one stone lost" : lost + (lost === 1 ? " stone" : " stones") + " lost to the water"),
+        onPlayAgain: newGame
+      });
+    }, 900);
+  }
+
+  // ---- Input: drag ghost, buttons, keys ----
+  var dragging = false;
+  function toWorld(clientX, clientY) {
+    var r = canvas.getBoundingClientRect();
+    return {
+      x: (clientX - r.left - r.width / 2) / view.scale,
+      y: (clientY - r.top) / view.scale + view.top
+    };
+  }
+  canvas.addEventListener("pointerdown", function (e) {
+    if (over || !ghost) return;
+    dragging = true;
+    canvas.setPointerCapture(e.pointerId);
+    var w = toWorld(e.clientX, e.clientY);
+    ghost.px = w.x; ghost.py = w.y - 60;
+    e.preventDefault();
+  });
+  canvas.addEventListener("pointermove", function (e) {
+    if (!dragging || !ghost) return;
+    var w = toWorld(e.clientX, e.clientY);
+    ghost.px = Math.max(-420, Math.min(420, w.x));
+    ghost.py = Math.min(WATER_Y - 40, w.y - 60);
+    e.preventDefault();
+  });
+  canvas.addEventListener("pointerup", function () { dragging = false; });
+  canvas.addEventListener("pointercancel", function () { dragging = false; });
+  dropBtn.addEventListener("click", dropStone);
+  rotBtn.addEventListener("click", rotateStone);
+  document.addEventListener("keydown", function (e) {
+    if (over || !ghost) return;
+    if (e.key === "ArrowLeft") { ghost.px -= e.shiftKey ? 2 : 12; e.preventDefault(); }
+    else if (e.key === "ArrowRight") { ghost.px += e.shiftKey ? 2 : 12; e.preventDefault(); }
+    else if (e.key === "ArrowUp") { ghost.py -= 12; e.preventDefault(); }
+    else if (e.key === "ArrowDown") { ghost.py = Math.min(WATER_Y - 40, ghost.py + 12); e.preventDefault(); }
+    else if (e.key === "r" || e.key === "R") rotateStone();
+    else if (e.key === " " || e.key === "Enter") { dropStone(); e.preventDefault(); }
+  });
+
+  // ---- Camera ----
+  var view = { top: -430, scale: 1 };
+  function targetView() {
+    var top = Math.min(-430, stackTopY() - 260);
+    if (ghost) top = Math.min(top, ghost.py - 120);
+    return top;
+  }
+
+  // ---- Rendering ----
+  var W = 0, H = 0, DPR = 1;
+  function sizeStage() {
+    var r = playArea.getBoundingClientRect();
+    DPR = window.devicePixelRatio || 1;
+    W = Math.floor(r.width); H = Math.floor(r.height);
+    canvas.style.width = W + "px"; canvas.style.height = H + "px";
+    canvas.width = Math.floor(W * DPR); canvas.height = Math.floor(H * DPR);
+  }
+  window.addEventListener("resize", sizeStage);
+  window.addEventListener("orientationchange", function () { setTimeout(sizeStage, 150); });
+
+  function drawStone(b, alpha, invalid) {
+    ctx.save();
+    ctx.translate(b.px, b.py);
+    ctx.rotate(b.a);
+    var w = b.hw * 2, h = b.hh * 2;
+    var sh = b.shade === undefined ? 1 : b.shade;
+    var l1 = 60 + sh * 6, l2 = 48 + sh * 6;
+    var g = ctx.createLinearGradient(0, -b.hh, 0, b.hh);
+    if (invalid) {
+      g.addColorStop(0, "rgba(224,108,120,0.55)");
+      g.addColorStop(1, "rgba(180,70,84,0.55)");
+    } else {
+      g.addColorStop(0, "hsla(33, 36%, " + l1 + "%, " + alpha + ")");
+      g.addColorStop(1, "hsla(29, 34%, " + l2 + "%, " + alpha + ")");
+    }
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    var rr = Math.min(6, b.hw, b.hh);
+    ctx.roundRect(-b.hw, -b.hh, w, h, rr);
+    ctx.fill();
+    ctx.strokeStyle = invalid ? "rgba(255,140,150,0.8)" : "rgba(60,40,20," + 0.35 * alpha + ")";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    // top edge light
+    ctx.strokeStyle = "rgba(255,240,210," + 0.28 * alpha + ")";
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(-b.hw + rr, -b.hh + 1);
+    ctx.lineTo(b.hw - rr, -b.hh + 1);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function render(t) {
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    // camera
+    var vt = targetView();
+    view.top += (vt - view.top) * 0.06;
+    view.scale = H / (KILL_Y - 40 - view.top);
+    var sc = view.scale;
+
+    // sky
+    var sky = ctx.createLinearGradient(0, 0, 0, H);
+    sky.addColorStop(0, "#10141d");
+    sky.addColorStop(0.72, "#1a2430");
+    sky.addColorStop(1, "#14202b");
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, W, H);
+    // faint stars
+    ctx.fillStyle = "rgba(255,255,255,0.10)";
+    for (var st = 0; st < 24; st++) {
+      ctx.fillRect((st * 73 + 31) % W, (st * 149 + 17) % Math.max(60, H * 0.5), 1.4, 1.4);
+    }
+
+    ctx.save();
+    ctx.translate(W / 2, -view.top * sc);
+    ctx.scale(sc, sc);
+
+    // water (world y >= WATER_Y)
+    var wg = ctx.createLinearGradient(0, WATER_Y, 0, KILL_Y);
+    wg.addColorStop(0, "rgba(46,90,110,0.85)");
+    wg.addColorStop(1, "rgba(18,36,50,0.95)");
+    ctx.fillStyle = wg;
+    ctx.fillRect(-W / sc, WATER_Y, 2 * W / sc, KILL_Y - WATER_Y + 200);
+    ctx.strokeStyle = "rgba(150,220,230,0.25)";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    var shimmer = Math.sin(t / 900) * 4;
+    ctx.moveTo(-W / sc, WATER_Y);
+    ctx.lineTo(W / sc, WATER_Y);
+    ctx.stroke();
+    ctx.strokeStyle = "rgba(150,220,230,0.10)";
+    ctx.beginPath();
+    ctx.moveTo(-W / sc + shimmer, WATER_Y + 10);
+    ctx.lineTo(W / sc + shimmer, WATER_Y + 10);
+    ctx.stroke();
+
+    // plinth (rock pier from the water)
+    ctx.fillStyle = "#3d4352";
+    ctx.beginPath();
+    ctx.roundRect(-PLINTH_W / 2, PLINTH_TOP, PLINTH_W, WATER_Y - PLINTH_TOP + 30, 4);
+    ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,0.07)";
+    ctx.fillRect(-PLINTH_W / 2, PLINTH_TOP, PLINTH_W, 5);
+    ctx.fillStyle = "rgba(0,0,0,0.22)";
+    ctx.fillRect(-PLINTH_W / 2, WATER_Y - 26, PLINTH_W, 26);
+
+    // height guide at the tower top
+    if (heightDm > 4) {
+      var gy = PLINTH_TOP - heightDm * 10;
+      ctx.strokeStyle = "rgba(93,214,192,0.35)";
+      ctx.setLineDash([6, 6]);
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(-PLINTH_W / 2 - 55, gy);
+      ctx.lineTo(PLINTH_W / 2 + 55, gy);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = "rgba(93,214,192,0.8)";
+      ctx.font = "600 13px Nunito, sans-serif";
+      ctx.textAlign = "left";
+      ctx.fillText((heightDm / 10).toFixed(1) + " m", -PLINTH_W / 2 - 55, gy - 6);
+    }
+
+    // stones
+    for (var i = 0; i < bodies.length; i++) drawStone(bodies[i], 1, false);
+
+    // ghost
+    if (ghost && !over) {
+      var gb = ghostBody();
+      gb.shade = 1;
+      var ok = ghostValid();
+      drawStone(gb, 0.5, !ok);
+      // drop path hint
+      if (ok) {
+        ctx.strokeStyle = "rgba(93,214,192,0.30)";
+        ctx.setLineDash([4, 7]);
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(ghost.px, ghost.py);
+        ctx.lineTo(ghost.px, WATER_Y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+    }
+    ctx.restore();
+  }
+
+  // ---- HUD ----
+  function updateTray() {
+    if (ghost) curNameEl.textContent = STONES[ghost.type].name;
+    else if (!bag.length) curNameEl.textContent = over ? "The tower stands" : "Settling…";
+    for (var q = 0; q < 3; q++) {
+      var t2 = bag[q + 1];
+      var el = qEls[q];
+      if (t2) {
+        var s = STONES[t2];
+        el.style.display = "block";
+        el.style.width = Math.round(s.w * 0.28) + "px";
+        el.style.height = Math.max(5, Math.round(s.h * 0.28)) + "px";
+      } else el.style.display = "none";
+    }
+  }
+  function updateHud() {
+    heightEl.textContent = (heightDm / 10).toFixed(1) + " m";
+    leftEl.textContent = bag.length;
+    bestEl.textContent = best === null ? "—" : (best / 10).toFixed(1) + " m";
+    dropBtn.disabled = !canDrop();
+  }
+
+  // ---- Main loop ----
+  var lastT = 0;
+  function frame(t) {
+    if (!lastT) lastT = t;
+    var dt = Math.min(0.05, (t - lastT) / 1000);
+    lastT = t;
+    if (!finished || !settled) {
+      physStep(); physStep();
+      removeDrowned();
+      updateSettle(dt);
+      maybeFinish();
+    }
+    render(t);
+    updateHud();
+    requestAnimationFrame(frame);
+  }
+
+  function newGame() {
+    bodies = [];
+    arbiters = {};
+    lost = 0;
+    settled = true;
+    settleFrames = 60;
+    sinceDrop = 99;
+    over = false;
+    finished = false;
+    heightDm = 0;
+    var v = localStorage.getItem("tranquil_keystone_best");
+    best = v === null ? null : Number(v);
+    buildBag();
+    nextGhost();
+    updateTray();
+    updateHud();
+  }
+
+  // ---- Settings / sound ----
+  function updateSoundToggle() { soundToggle.textContent = muted ? "Off" : "On"; soundToggle.classList.toggle("on", !muted); }
+  async function shareGame() {
+    var text = "Keystone — a calm stone-stacking game with real physics and no ads. Play it:";
+    var url = "https://pete1552.github.io/AGTest/";
+    try { if (navigator.share) { await navigator.share({ title: "Keystone", text: text, url: url }); return; } } catch (e) { return; }
+    try {
+      await navigator.clipboard.writeText(text + " " + url);
+      var b = document.getElementById("settings-share"), old = b.textContent; b.textContent = "Link copied!";
+      setTimeout(function () { b.textContent = old; }, 1500);
+    } catch (e) {}
+  }
+  soundToggle.addEventListener("click", function () {
+    muted = !muted; localStorage.setItem("tranquil_muted", muted ? "1" : "0"); updateSoundToggle();
+    if (!muted) { audio(); tone(300, 0.05, "sine", 0.07); }
+  });
+  document.getElementById("settings-btn").addEventListener("click", function () { updateSoundToggle(); settingsOverlay.classList.add("show"); });
+  document.getElementById("settings-close").addEventListener("click", function () { settingsOverlay.classList.remove("show"); });
+  settingsOverlay.addEventListener("click", function (e) { if (e.target === settingsOverlay) settingsOverlay.classList.remove("show"); });
+  document.getElementById("settings-share").addEventListener("click", shareGame);
+  document.getElementById("lb-btn").addEventListener("click", function () { LB.open("keystone"); });
+  document.getElementById("restart").addEventListener("click", newGame);
+
+  window.addEventListener("pointerdown", function () { audio(); }, { once: false });
+
+  // ---- iOS hardening ----
+  document.addEventListener("gesturestart", function (e) { e.preventDefault(); });
+  var lastTouchEnd = 0;
+  document.addEventListener("touchend", function (e) { var n = Date.now(); if (n - lastTouchEnd <= 320) e.preventDefault(); lastTouchEnd = n; }, { passive: false });
+
+  // ---- Boot ----
+  plinth = new Body(PLINTH_W, (WATER_Y - PLINTH_TOP + 60) * 2, 0);
+  plinth.px = 0; plinth.py = (WATER_Y - PLINTH_TOP + 60) + PLINTH_TOP; // top edge at PLINTH_TOP
+
+  // test hook for scripted play (harmless in production)
+  window.__ks = {
+    drop: function (x, rot) {
+      if (!ghost) return false;
+      ghost.px = x; ghost.a = (rot || 0) * Math.PI / 2;
+      // gentle placement: rest just above the local support at this x
+      var s = STONES[ghost.type];
+      var flat = (rot || 0) % 2 === 1;
+      var extY = flat ? s.w / 2 : s.h / 2, extX = flat ? s.h / 2 : s.w / 2;
+      var y = PLINTH_TOP - extY - 4;
+      for (var i = 0; i < bodies.length; i++) {
+        var bb = aabb(bodies[i]);
+        if (bb.r > x - extX - 2 && bb.l < x + extX + 2) y = Math.min(y, bb.t - extY - 4);
+      }
+      ghost.py = y;
+      var guard = 0;
+      while (!ghostValid() && guard++ < 60) ghost.py -= 8;
+      if (!canDrop()) return false;
+      dropStone();
+      return true;
+    },
+    state: function () {
+      return { bag: bag.length, bodies: bodies.length, lost: lost, settled: settled, heightDm: heightDm, over: over,
+               nan: bodies.some(function (b) { return !isFinite(b.px + b.py + b.a); }) };
+    }
+  };
+
+  updateSoundToggle();
+  sizeStage();
+  newGame();
+  requestAnimationFrame(frame);
+  setTimeout(sizeStage, 300);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(sizeStage);
+})();
+</script>
+</body>
+</html>

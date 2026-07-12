@@ -56,9 +56,13 @@
       <span class="label">Sound</span>
       <button id="sound-toggle" class="toggle on">On</button>
     </div>
+    <div class="setting-row" id="tilt-row">
+      <span class="label">Tilt to roll</span>
+      <button id="tilt-toggle" class="toggle on">On</button>
+    </div>
     <div class="how">
       <p class="how-title">How to play</p>
-      <p class="body">Drop celestial bodies into the well — when two of the same kind touch, they fuse into the next, bigger one: spark, mote, pebble, comet, moon, planet, ringed world, giant, star… and finally a sun. Two suns cancel out entirely. Plan your drops so the pile doesn't rise past the line. Bigger fusions score more.</p>
+      <p class="body">Drop celestial bodies into the well — when two of the same kind touch, they fuse into the next, bigger one: spark, mote, pebble, comet, moon, planet, ringed world, giant, star… and finally a sun. Two suns cancel out entirely. Plan your drops so the pile doesn't rise past the line. Bigger fusions score more. On a phone, tilting the device gently rolls the pile.</p>
     </div>
     <button id="settings-share" class="share">Share the game</button>
     <button id="settings-close" class="ghost-btn">Done</button>
@@ -66,7 +70,7 @@
   </div>
 </div>
 
-<script src="leaderboard.js?v=21"></script>
+<script src="leaderboard.js?v=22"></script>
 <script>
 (function () {
   "use strict";
@@ -91,6 +95,7 @@
   var DROP_COOLDOWN = 0.45;                 // s between drops
   var OVER_SECONDS = 1.4;                   // settled time above the line before game over
   var muted = localStorage.getItem("tranquil_muted") === "1";
+  var tiltOn = localStorage.getItem("tranquil_orbit_tilt") !== "0"; // default on
 
   var bodies = [];        // {x,y,vx,vy,r,tier,born}
   var held = null;        // {tier, x} waiting to drop
@@ -160,11 +165,47 @@
   // ---- Physics: semi-implicit Euler + pairwise overlap solving.
   // Mass ~ r^2; low restitution keeps the pile calm. Same-tier contact merges. ----
   var GRAV = 1900;
+
+  // ---- Tilt-to-roll: device tilt adds a gentle sideways pull (max ~0.22 g at
+  // 18°) so the pile can be coaxed left or right. iOS requires a user-gesture
+  // permission request; the first tap (or the settings toggle) handles that. ----
+  var tiltAx = 0, tiltTarget = 0, tiltAttached = false, tiltAsked = false;
+  function onTilt(e) {
+    if (!tiltOn) { tiltTarget = 0; return; }
+    var g = e.gamma, be = e.beta;
+    if (g == null && be == null) return;
+    var angle = (screen.orientation && typeof screen.orientation.angle === "number")
+      ? screen.orientation.angle : (window.orientation || 0);
+    var v = g;
+    if (angle === 90) v = be;
+    else if (angle === -90 || angle === 270) v = be == null ? null : -be;
+    else if (angle === 180) v = g == null ? null : -g;
+    if (v == null) return;
+    tiltTarget = Math.max(-18, Math.min(18, v)) / 18 * GRAV * 0.22;
+  }
+  function attachTilt() {
+    if (tiltAttached) return;
+    tiltAttached = true;
+    window.addEventListener("deviceorientation", onTilt);
+  }
+  function enableTilt(fromGesture) {
+    if (typeof DeviceOrientationEvent === "undefined") return;
+    if (typeof DeviceOrientationEvent.requestPermission === "function") {
+      if (!fromGesture) return; // iOS: must be inside a user gesture
+      DeviceOrientationEvent.requestPermission().then(function (st) {
+        if (st === "granted") attachTilt();
+        else { tiltOn = false; localStorage.setItem("tranquil_orbit_tilt", "0"); updateTiltToggle(); }
+      }).catch(function () {});
+    } else attachTilt();
+  }
+
   function physStep(dt) {
     var i, j, b;
+    tiltAx += (tiltTarget - tiltAx) * Math.min(1, 8 * dt);
     for (i = 0; i < bodies.length; i++) {
       b = bodies[i];
       b.vy += GRAV * dt;
+      b.vx += tiltAx * dt;
       b.vx *= (1 - 0.35 * dt); // light air drag keeps things settling
       b.x += b.vx * dt;
       b.y += b.vy * dt;
@@ -391,6 +432,7 @@
     e.preventDefault();
     if (over) return;
     audio();
+    if (tiltOn && !tiltAttached && !tiltAsked) { tiltAsked = true; enableTilt(true); }
     aiming = true;
     if (held) held.x = xFromEvent(e);
     try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
@@ -445,6 +487,16 @@
 
   // ---- Settings / sound ----
   function updateSoundToggle() { soundToggle.textContent = muted ? "Off" : "On"; soundToggle.classList.toggle("on", !muted); }
+  var tiltToggle = document.getElementById("tilt-toggle");
+  function updateTiltToggle() { tiltToggle.textContent = tiltOn ? "On" : "Off"; tiltToggle.classList.toggle("on", tiltOn); }
+  tiltToggle.addEventListener("click", function () {
+    tiltOn = !tiltOn;
+    localStorage.setItem("tranquil_orbit_tilt", tiltOn ? "1" : "0");
+    updateTiltToggle();
+    if (tiltOn) enableTilt(true);
+    else tiltTarget = 0;
+  });
+  if (typeof DeviceOrientationEvent === "undefined") document.getElementById("tilt-row").style.display = "none";
   async function shareGame() {
     var text = "Orbit — a calm cosmic merge game with no ads. Play it:";
     var url = "https://pete1552.github.io/AGTest/";
@@ -459,7 +511,7 @@
     muted = !muted; localStorage.setItem("tranquil_muted", muted ? "1" : "0"); updateSoundToggle();
     if (!muted) { audio(); tone(430, 0.05, "sine", 0.06); }
   });
-  document.getElementById("settings-btn").addEventListener("click", function () { updateSoundToggle(); settingsOverlay.classList.add("show"); });
+  document.getElementById("settings-btn").addEventListener("click", function () { updateSoundToggle(); updateTiltToggle(); settingsOverlay.classList.add("show"); });
   document.getElementById("settings-close").addEventListener("click", function () { settingsOverlay.classList.remove("show"); });
   settingsOverlay.addEventListener("click", function (e) { if (e.target === settingsOverlay) settingsOverlay.classList.remove("show"); });
   document.getElementById("settings-share").addEventListener("click", shareGame);
@@ -477,6 +529,8 @@
   }
 
   updateSoundToggle();
+  updateTiltToggle();
+  if (tiltOn) enableTilt(false); // attaches immediately where no permission is needed
   sizeStage();
   newGame();
   rafId = requestAnimationFrame(loop);
