@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#11151c" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Tranquil" />
+<link rel="apple-touch-icon" href="icon.png" />
+<link rel="icon" href="icon.png" />
+<link rel="manifest" href="manifest.json" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="shared.css" />
+<title>Warden — Tranquil</title>
+<style>
+  .play-area { touch-action: none; margin: 6px 0; }
+  #stage {
+    display: block; width: 100%; height: 100%; border-radius: 16px;
+    background: #14201a;
+    touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+  }
+  .tap-hint { text-align: center; color: var(--muted); font-size: 12px; min-height: 16px; margin-top: 6px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="topbar">
+    <div class="brand">
+      <a href="index.html" class="icon-btn" aria-label="Back to games">‹</a>
+      <span class="title">Warden</span>
+    </div>
+    <div class="bar-actions">
+      <button id="lb-btn" class="icon-btn" aria-label="High scores">🏆</button>
+      <button id="restart" class="icon-btn" aria-label="New game">↻</button>
+      <button id="settings-btn" class="icon-btn" aria-label="Settings">⚙</button>
+    </div>
+  </header>
+
+  <div class="scores">
+    <div class="score-box"><div class="score-label">Band</div><div class="score-val" id="wave">1</div></div>
+    <div class="score-box"><div class="score-label">Repelled</div><div class="score-val" id="kills">0</div></div>
+    <div class="score-box best"><div class="score-label">Best</div><div class="score-val" id="best">—</div></div>
+  </div>
+
+  <div class="play-area"><canvas id="stage"></canvas></div>
+  <div class="tap-hint">Hold and drag — your warden rides to your finger and shoots on her own</div>
+</div>
+
+<div id="settings-overlay" class="modal-overlay">
+  <div class="modal settings">
+    <h2>Warden</h2>
+    <div class="setting-row">
+      <span class="label">Sound</span>
+      <button id="sound-toggle" class="toggle on">On</button>
+    </div>
+    <div class="how">
+      <p class="how-title">How to play</p>
+      <p class="body">You are the keep's mounted warden. Hold and drag anywhere — your horse rides toward your finger, and your archer looses arrows at the nearest raider all by herself. Raiders march in slow bands toward the gate; any that reach it steal a heart and slip away. Ride out to meet them, circle behind stragglers, and keep the keep. From the fifth band on, your archer nocks extra arrows. Survive as many bands as you can.</p>
+    </div>
+    <button id="settings-share" class="share">Share the game</button>
+    <button id="settings-close" class="ghost-btn">Done</button>
+    <div class="version-tag" id="app-version"></div>
+  </div>
+</div>
+
+<script src="leaderboard.js?v=24"></script>
+<script>
+(function () {
+  "use strict";
+
+  var muted = localStorage.getItem("tranquil_muted") === "1";
+
+  // ---- Tunables ----
+  var HORSE_SPEED = 175;      // px/s
+  var FIRE_CD = 0.55;         // s between volleys
+  var RANGE = 265;            // arrow reach
+  var ARROW_SPEED = 430;
+  var KEEP_R = 44;            // raiders raid inside this radius
+  var HEARTS_MAX = 5;
+  var BREATHER = 2.8;         // s between bands
+
+  var W = 300, H = 460, dpr = window.devicePixelRatio || 1;
+  var keepX = 150, keepY = 230;
+
+  var player = { x: 0, y: 0, tx: 0, ty: 0, vx: 0, face: 1, phase: 0, cd: 0 };
+  var raiders = [];  // {x,y,hp,speed,armored,state:"march"|"flee"|"down",t,face,phase}
+  var arrows = [];   // {x,y,vx,vy,life}
+  var puffs = [];    // little impact poofs {x,y,t}
+  var hearts = HEARTS_MAX;
+  var wave = 1, kills = 0;
+  var spawnLeft = 0, spawnT = 0, breatherT = 0;
+  var over = false, running = false, announced = "", announceT = 0;
+  var elapsed = 0;
+  var best = Number(localStorage.getItem("tranquil_warden_best") || 0) || 0;
+
+  var playArea = document.querySelector(".play-area");
+  var canvas = document.getElementById("stage");
+  var ctx = canvas.getContext("2d");
+  if (!ctx.roundRect) {
+    CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, r) {
+      r = Math.min(typeof r === "number" ? r : 4, w / 2, h / 2);
+      this.moveTo(x + r, y);
+      this.arcTo(x + w, y, x + w, y + h, r);
+      this.arcTo(x + w, y + h, x, y + h, r);
+      this.arcTo(x, y + h, x, y, r);
+      this.arcTo(x, y, x + w, y, r);
+      this.closePath();
+    };
+  }
+  var waveEl = document.getElementById("wave");
+  var killsEl = document.getElementById("kills");
+  var bestEl = document.getElementById("best");
+  var settingsOverlay = document.getElementById("settings-overlay");
+  var soundToggle = document.getElementById("sound-toggle");
+
+  // ---- Sound ----
+  var actx = null;
+  function audio() {
+    if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { actx = null; } }
+    if (actx && actx.state === "suspended") actx.resume();
+  }
+  function tone(f, d, t, g) {
+    if (muted || !actx) return;
+    var o = actx.createOscillator(), gn = actx.createGain();
+    o.type = t || "sine"; o.frequency.value = f;
+    gn.gain.setValueAtTime(0.0001, actx.currentTime);
+    gn.gain.exponentialRampToValueAtTime(g || 0.1, actx.currentTime + 0.01);
+    gn.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + d);
+    o.connect(gn); gn.connect(actx.destination); o.start(); o.stop(actx.currentTime + d + 0.02);
+  }
+  function sfxTwang() { tone(660, 0.05, "square", 0.025); tone(330, 0.06, "sine", 0.05); }
+  function sfxThock(armored) { tone(armored ? 150 : 200, 0.07, "triangle", 0.08); }
+  function sfxRaid() { tone(220, 0.2, "sine", 0.1); setTimeout(function () { tone(165, 0.25, "sine", 0.08); }, 120); }
+  function sfxWave() { tone(392, 0.15, "sine", 0.07); setTimeout(function () { tone(523.25, 0.2, "sine", 0.07); }, 110); }
+  function sfxOver() { [330, 247, 175].forEach(function (f, i) { setTimeout(function () { tone(f, 0.3, "sine", 0.09); }, i * 130); }); }
+
+  // ---- Waves ----
+  function bandSize(w) { return 4 + 2 * w; }
+  function raiderSpeed(w) { return 24 + Math.min(30, w * 1.6); }
+  function volleySize(w) { return Math.min(3, 1 + Math.floor(w / 5)); }
+  function startWave() {
+    spawnLeft = bandSize(wave);
+    spawnT = 0.5;
+    announced = "Band " + wave + " approaches";
+    announceT = 2.4;
+    sfxWave();
+  }
+  function spawnRaider() {
+    // arrive from a random point just outside the field's edges
+    var side = Math.floor(Math.random() * 4), x, y;
+    if (side === 0) { x = Math.random() * W; y = -16; }
+    else if (side === 1) { x = Math.random() * W; y = H + 16; }
+    else if (side === 2) { x = -16; y = Math.random() * H; }
+    else { x = W + 16; y = Math.random() * H; }
+    var armored = wave >= 4 && Math.random() < 0.22;
+    raiders.push({
+      x: x, y: y, hp: armored ? 2 : 1, armored: armored,
+      speed: raiderSpeed(wave) * (0.9 + Math.random() * 0.2),
+      state: "march", t: 0, face: 1, phase: Math.random() * 6
+    });
+  }
+  function waveDone() {
+    if (spawnLeft > 0) return false;
+    for (var i = 0; i < raiders.length; i++) if (raiders[i].state === "march") return false;
+    return true;
+  }
+
+  // ---- Update ----
+  function update(dt) {
+    elapsed += dt;
+
+    // horse chases the finger with a little ease
+    var dx = player.tx - player.x, dy = player.ty - player.y;
+    var d = Math.sqrt(dx * dx + dy * dy);
+    var moving = d > 4;
+    if (moving) {
+      var sp = Math.min(HORSE_SPEED, d * 6);
+      player.x += dx / d * sp * dt;
+      player.y += dy / d * sp * dt;
+      if (Math.abs(dx) > 2) player.face = dx > 0 ? 1 : -1;
+      player.phase += sp * dt * 0.055;
+    }
+    player.x = Math.max(14, Math.min(W - 14, player.x));
+    player.y = Math.max(14, Math.min(H - 14, player.y));
+
+    // spawn schedule
+    if (spawnLeft > 0) {
+      spawnT -= dt;
+      if (spawnT <= 0) { spawnRaider(); spawnLeft--; spawnT = 0.75; }
+    }
+
+    // raiders
+    for (var i = raiders.length - 1; i >= 0; i--) {
+      var r = raiders[i];
+      r.phase += dt * 6;
+      if (r.state === "march") {
+        var rx = keepX - r.x, ry = keepY - r.y;
+        var rd = Math.sqrt(rx * rx + ry * ry) || 1;
+        r.x += rx / rd * r.speed * dt;
+        r.y += ry / rd * r.speed * dt;
+        r.face = rx > 0 ? 1 : -1;
+        if (rd < KEEP_R) {
+          hearts--;
+          r.state = "flee"; r.t = 0;
+          sfxRaid();
+          if (hearts <= 0) { doGameOver(); return; }
+        }
+      } else if (r.state === "flee") {
+        var fx = r.x - keepX, fy = r.y - keepY;
+        var fd = Math.sqrt(fx * fx + fy * fy) || 1;
+        r.x += fx / fd * 60 * dt;
+        r.y += fy / fd * 60 * dt;
+        r.face = fx > 0 ? 1 : -1;
+        r.t += dt;
+        if (r.t > 2.2) raiders.splice(i, 1);
+      } else { // down
+        r.t += dt;
+        if (r.t > 1.1) raiders.splice(i, 1);
+      }
+    }
+
+    // archer auto-fire: nearest marching raiders within range
+    player.cd -= dt;
+    if (player.cd <= 0) {
+      var targets = raiders.filter(function (r) { return r.state === "march"; })
+        .map(function (r) {
+          var ddx = r.x - player.x, ddy = r.y - player.y;
+          return { r: r, d2: ddx * ddx + ddy * ddy };
+        })
+        .filter(function (o) { return o.d2 < RANGE * RANGE; })
+        .sort(function (a, b) { return a.d2 - b.d2; })
+        .slice(0, volleySize(wave));
+      if (targets.length) {
+        targets.forEach(function (o) {
+          var r = o.r;
+          // lead the target a touch
+          var tt = Math.sqrt(o.d2) / ARROW_SPEED;
+          var rx2 = keepX - r.x, ry2 = keepY - r.y;
+          var rd2 = Math.sqrt(rx2 * rx2 + ry2 * ry2) || 1;
+          var ax = r.x + rx2 / rd2 * r.speed * tt - player.x;
+          var ay = r.y + ry2 / rd2 * r.speed * tt - player.y;
+          var ad = Math.sqrt(ax * ax + ay * ay) || 1;
+          arrows.push({ x: player.x, y: player.y - 10, vx: ax / ad * ARROW_SPEED, vy: ay / ad * ARROW_SPEED, life: RANGE / ARROW_SPEED + 0.25 });
+        });
+        player.cd = FIRE_CD;
+        sfxTwang();
+      }
+    }
+
+    // arrows
+    for (var a = arrows.length - 1; a >= 0; a--) {
+      var ar = arrows[a];
+      ar.x += ar.vx * dt; ar.y += ar.vy * dt; ar.life -= dt;
+      var hit = false;
+      for (var j = 0; j < raiders.length; j++) {
+        var e = raiders[j];
+        if (e.state !== "march") continue;
+        var hx = e.x - ar.x, hy = e.y - ar.y;
+        if (hx * hx + hy * hy < 13 * 13) {
+          e.hp--;
+          sfxThock(e.armored);
+          puffs.push({ x: ar.x, y: ar.y, t: 0 });
+          if (e.hp <= 0) { e.state = "down"; e.t = 0; kills++; }
+          hit = true;
+          break;
+        }
+      }
+      if (hit || ar.life <= 0 || ar.x < -20 || ar.x > W + 20 || ar.y < -20 || ar.y > H + 20) arrows.splice(a, 1);
+    }
+
+    for (var p = puffs.length - 1; p >= 0; p--) { puffs[p].t += dt; if (puffs[p].t > 0.4) puffs.splice(p, 1); }
+
+    // band cleared → breather → next band
+    if (running && waveDone()) {
+      if (breatherT <= 0) { breatherT = BREATHER; announced = "Band " + wave + " repelled"; announceT = BREATHER; }
+      breatherT -= dt;
+      if (breatherT <= 0) { wave++; startWave(); }
+    }
+    if (announceT > 0) announceT -= dt;
+
+    waveEl.textContent = String(wave);
+    killsEl.textContent = String(kills);
+  }
+
+  function doGameOver() {
+    over = true; running = false;
+    sfxOver();
+    if (wave > best) { best = wave; localStorage.setItem("tranquil_warden_best", String(best)); }
+    bestEl.textContent = best ? "Band " + best : "—";
+    setTimeout(function () {
+      LB.finish({
+        game: "warden",
+        value: wave,
+        resultTitle: "The keep has fallen",
+        subtitle: "Held out to band " + wave + " · " + kills + " raiders repelled",
+        onPlayAgain: newGame
+      });
+    }, 900);
+  }
+
+  // ---- Drawing ----
+  function drawGround() {
+    var g = ctx.createRadialGradient(keepX, keepY, 40, keepX, keepY, Math.max(W, H) * 0.75);
+    g.addColorStop(0, "#1c2b22");
+    g.addColorStop(1, "#131e18");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+    // grass flecks + fireflies
+    for (var i = 0; i < 46; i++) {
+      var gx = (i * 97 + 13) % W, gy = (i * 61 + 41) % H;
+      ctx.fillStyle = "rgba(140,190,150,0.10)";
+      ctx.fillRect(gx, gy, 2, 1.4);
+    }
+    for (var f = 0; f < 5; f++) {
+      var fx2 = (f * 137 + 60) % W + Math.sin(elapsed * 0.7 + f * 2) * 12;
+      var fy2 = (f * 211 + 80) % H + Math.cos(elapsed * 0.5 + f) * 9;
+      var tw = 0.35 + 0.3 * Math.sin(elapsed * 2.2 + f * 1.7);
+      ctx.fillStyle = "rgba(220,240,160," + tw.toFixed(2) + ")";
+      ctx.beginPath(); ctx.arc(fx2, fy2, 1.5, 0, Math.PI * 2); ctx.fill();
+    }
+    // worn circle around the keep
+    ctx.strokeStyle = "rgba(200,200,180,0.06)";
+    ctx.lineWidth = 10;
+    ctx.beginPath(); ctx.arc(keepX, keepY, KEEP_R + 22, 0, Math.PI * 2); ctx.stroke();
+  }
+
+  function drawKeep() {
+    ctx.save();
+    ctx.translate(keepX, keepY);
+    // shadow
+    ctx.fillStyle = "rgba(0,0,0,0.25)";
+    ctx.beginPath(); ctx.ellipse(0, 26, 40, 12, 0, 0, Math.PI * 2); ctx.fill();
+    // body
+    ctx.fillStyle = "#565e6e";
+    ctx.beginPath(); ctx.roundRect(-30, -26, 60, 52, 5); ctx.fill();
+    ctx.fillStyle = "#626b7d";
+    ctx.beginPath(); ctx.roundRect(-30, -26, 60, 10, 5); ctx.fill();
+    // crenellations
+    ctx.fillStyle = "#565e6e";
+    for (var c = -1; c <= 1; c++) ctx.fillRect(c * 20 - 5, -34, 10, 9);
+    // corner towers
+    ctx.fillStyle = "#4b5262";
+    [[-30, -26], [30, -26], [-30, 26], [30, 26]].forEach(function (t) {
+      ctx.beginPath(); ctx.arc(t[0], t[1], 9, 0, Math.PI * 2); ctx.fill();
+    });
+    // gate (arched top)
+    ctx.fillStyle = "#3a3026";
+    ctx.beginPath();
+    ctx.moveTo(-9, 26); ctx.lineTo(-9, 14);
+    ctx.arc(0, 14, 9, Math.PI, 0);
+    ctx.lineTo(9, 26); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,0.12)"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(-9, 16); ctx.lineTo(9, 16); ctx.stroke();
+    // flag
+    var fw = Math.sin(elapsed * 3) * 3;
+    ctx.strokeStyle = "#2c3038"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(0, -34); ctx.lineTo(0, -50); ctx.stroke();
+    ctx.fillStyle = "#5dd6c0";
+    ctx.beginPath();
+    ctx.moveTo(0, -50); ctx.quadraticCurveTo(8, -49 + fw, 15, -46 + fw);
+    ctx.lineTo(0, -42); ctx.closePath(); ctx.fill();
+    ctx.restore();
+    // hearts
+    for (var h = 0; h < HEARTS_MAX; h++) {
+      var hx = keepX - (HEARTS_MAX - 1) * 7 + h * 14, hy = keepY - 60;
+      ctx.fillStyle = h < hearts ? "#e06c9f" : "rgba(255,255,255,0.14)";
+      drawHeart(hx, hy, 5);
+    }
+  }
+  function drawHeart(x, y, s) {
+    ctx.beginPath();
+    ctx.moveTo(x, y + s * 0.9);
+    ctx.bezierCurveTo(x - s * 1.4, y - s * 0.2, x - s * 0.6, y - s * 1.1, x, y - s * 0.35);
+    ctx.bezierCurveTo(x + s * 0.6, y - s * 1.1, x + s * 1.4, y - s * 0.2, x, y + s * 0.9);
+    ctx.fill();
+  }
+
+  function drawHorse() {
+    var bob = Math.sin(player.phase * 2) * 1.6;
+    var legSwing = Math.sin(player.phase * 2);
+    ctx.save();
+    ctx.translate(player.x, player.y + bob * 0.4);
+    ctx.scale(player.face, 1);
+    // shadow
+    ctx.fillStyle = "rgba(0,0,0,0.28)";
+    ctx.beginPath(); ctx.ellipse(0, 13, 15, 4.5, 0, 0, Math.PI * 2); ctx.fill();
+    // legs
+    ctx.strokeStyle = "#8a6b4f"; ctx.lineWidth = 2.6; ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(-8, 4); ctx.lineTo(-8 - legSwing * 4, 13);
+    ctx.moveTo(-4, 4); ctx.lineTo(-4 + legSwing * 4, 13);
+    ctx.moveTo(5, 4); ctx.lineTo(5 - legSwing * 4, 13);
+    ctx.moveTo(9, 4); ctx.lineTo(9 + legSwing * 4, 13);
+    ctx.stroke();
+    // body
+    ctx.fillStyle = "#9d7b5b";
+    ctx.beginPath(); ctx.ellipse(0, 0 - bob * 0.4, 13, 6.5, 0, 0, Math.PI * 2); ctx.fill();
+    // neck + head
+    ctx.beginPath(); ctx.ellipse(11, -7 - bob * 0.4, 4.5, 6, 0.6, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(15, -11 - bob * 0.4, 4, 2.6, 0.3, 0, Math.PI * 2); ctx.fill();
+    // mane + tail
+    ctx.strokeStyle = "#6d523a"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(8, -10 - bob * 0.4); ctx.quadraticCurveTo(6, -6, 7, -3); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-13, -2); ctx.quadraticCurveTo(-17, 2 + legSwing * 2, -15, 7); ctx.stroke();
+    // rider
+    ctx.fillStyle = "#3d6b63";
+    ctx.beginPath(); ctx.ellipse(-1, -10 - bob, 3.6, 5.5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#e8d4b8";
+    ctx.beginPath(); ctx.arc(-1, -17 - bob, 3, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#4a5568";
+    ctx.beginPath(); ctx.arc(-1, -18.5 - bob, 3, Math.PI, 0); ctx.fill();
+    // bow
+    ctx.strokeStyle = "#d9b98c"; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.arc(5, -11 - bob, 5, -1.1, 1.1); ctx.stroke();
+    ctx.strokeStyle = "rgba(255,255,255,0.5)"; ctx.lineWidth = 0.8;
+    ctx.beginPath(); ctx.moveTo(5 + Math.cos(-1.1) * 5, -11 - bob + Math.sin(-1.1) * 5);
+    ctx.lineTo(5 + Math.cos(1.1) * 5, -11 - bob + Math.sin(1.1) * 5); ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawRaider(r) {
+    ctx.save();
+    ctx.translate(r.x, r.y);
+    if (r.state === "down") {
+      var k = Math.min(1, r.t / 0.25);
+      ctx.globalAlpha = Math.max(0, 1 - Math.max(0, (r.t - 0.5) / 0.6));
+      ctx.rotate(1.5708 * k * (r.face || 1));
+    } else if (r.state === "flee") {
+      ctx.globalAlpha = Math.max(0, 1 - r.t / 2.2);
+    }
+    ctx.scale(r.face || 1, 1);
+    var waddle = r.state === "march" ? Math.sin(r.phase) * 0.08 : 0;
+    ctx.rotate(waddle);
+    // shadow
+    if (r.state !== "down") {
+      ctx.fillStyle = "rgba(0,0,0,0.25)";
+      ctx.beginPath(); ctx.ellipse(0, 10, 7, 2.6, 0, 0, Math.PI * 2); ctx.fill();
+    }
+    // body
+    ctx.fillStyle = r.armored ? "#5a4a5e" : "#7a5648";
+    ctx.beginPath(); ctx.roundRect(-5, -6, 10, 15, 4); ctx.fill();
+    // head
+    ctx.fillStyle = "#e8d4b8";
+    ctx.beginPath(); ctx.arc(0, -10, 4.2, 0, Math.PI * 2); ctx.fill();
+    // helm
+    ctx.fillStyle = r.armored ? "#8b93a8" : "#6b7382";
+    ctx.beginPath(); ctx.arc(0, -11.5, 4.2, Math.PI, 0); ctx.fill();
+    // shield for armored
+    if (r.armored && r.state === "march") {
+      ctx.fillStyle = "#8b93a8";
+      ctx.beginPath(); ctx.ellipse(6, 0, 3.4, 5.2, 0, 0, Math.PI * 2); ctx.fill();
+    }
+    // loot sack when fleeing
+    if (r.state === "flee") {
+      ctx.fillStyle = "#c4a06e";
+      ctx.beginPath(); ctx.arc(-6, -4, 3.6, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+    ctx.globalAlpha = 1;
+  }
+
+  function drawArrow(a) {
+    var ang = Math.atan2(a.vy, a.vx);
+    ctx.save();
+    ctx.translate(a.x, a.y);
+    ctx.rotate(ang);
+    ctx.strokeStyle = "#d9c9a8"; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(-6, 0); ctx.lineTo(5, 0); ctx.stroke();
+    ctx.fillStyle = "#e8edf4";
+    ctx.beginPath(); ctx.moveTo(7, 0); ctx.lineTo(3, -2); ctx.lineTo(3, 2); ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+
+  function render() {
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    drawGround();
+    drawKeep();
+    // draw order: downed first, then marching/fleeing by y, arrows, horse
+    var byY = raiders.slice().sort(function (a, b) { return (a.state === "down" ? -1e6 : a.y) - (b.state === "down" ? -1e6 : b.y); });
+    for (var i = 0; i < byY.length; i++) drawRaider(byY[i]);
+    for (var a = 0; a < arrows.length; a++) drawArrow(arrows[a]);
+    for (var p = 0; p < puffs.length; p++) {
+      var pf = puffs[p], k = pf.t / 0.4;
+      ctx.strokeStyle = "rgba(232,237,244," + (0.5 * (1 - k)).toFixed(2) + ")";
+      ctx.lineWidth = 1.4;
+      ctx.beginPath(); ctx.arc(pf.x, pf.y, 3 + k * 9, 0, Math.PI * 2); ctx.stroke();
+    }
+    drawHorse();
+    // band announcement
+    if (announced && announceT > 0) {
+      ctx.fillStyle = "rgba(232,237,244," + Math.min(0.75, announceT).toFixed(2) + ")";
+      ctx.font = "700 15px Quicksand, sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(announced, W / 2, 34);
+    }
+  }
+
+  // ---- Loop ----
+  var lastT = 0, rafId = 0;
+  function loop(t) {
+    if (!lastT) lastT = t;
+    var dt = Math.min(0.05, (t - lastT) / 1000);
+    lastT = t;
+    if (!over) update(dt);
+    render();
+    rafId = requestAnimationFrame(loop);
+  }
+
+  // ---- Input ----
+  function posFromEvent(e) {
+    var r = canvas.getBoundingClientRect();
+    return { x: (e.clientX - r.left) * (W / r.width), y: (e.clientY - r.top) * (H / r.height) };
+  }
+  var steering = false;
+  canvas.addEventListener("pointerdown", function (e) {
+    e.preventDefault();
+    if (over) return;
+    audio();
+    steering = true;
+    var p = posFromEvent(e);
+    player.tx = p.x; player.ty = p.y;
+    try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+  });
+  canvas.addEventListener("pointermove", function (e) {
+    if (!steering || over) return;
+    e.preventDefault();
+    var p = posFromEvent(e);
+    player.tx = p.x; player.ty = p.y;
+  });
+  canvas.addEventListener("pointerup", function () { steering = false; });
+  canvas.addEventListener("pointercancel", function () { steering = false; });
+  document.addEventListener("keydown", function (e) {
+    if (over) return;
+    var step = 26;
+    if (e.key === "ArrowLeft") { player.tx = player.x - step; player.ty = player.y; e.preventDefault(); }
+    else if (e.key === "ArrowRight") { player.tx = player.x + step; player.ty = player.y; e.preventDefault(); }
+    else if (e.key === "ArrowUp") { player.ty = player.y - step; player.tx = player.x; e.preventDefault(); }
+    else if (e.key === "ArrowDown") { player.ty = player.y + step; player.tx = player.x; e.preventDefault(); }
+  });
+
+  // ---- Sizing ----
+  function sizeStage() {
+    var r = playArea.getBoundingClientRect();
+    dpr = window.devicePixelRatio || 1;
+    W = Math.floor(r.width); H = Math.floor(r.height);
+    canvas.width = Math.floor(W * dpr); canvas.height = Math.floor(H * dpr);
+    keepX = W / 2; keepY = H / 2;
+  }
+  window.addEventListener("resize", sizeStage);
+  window.addEventListener("orientationchange", function () { setTimeout(sizeStage, 150); });
+
+  // ---- Settings / sound ----
+  function updateSoundToggle() { soundToggle.textContent = muted ? "Off" : "On"; soundToggle.classList.toggle("on", !muted); }
+  async function shareGame() {
+    var text = "Warden — a calm keep-defence ride with no ads. Play it:";
+    var url = "https://pete1552.github.io/AGTest/";
+    try { if (navigator.share) { await navigator.share({ title: "Warden — Tranquil", text: text, url: url }); return; } } catch (e) { return; }
+    try {
+      await navigator.clipboard.writeText(text + " " + url);
+      var b = document.getElementById("settings-share"), old = b.textContent; b.textContent = "Link copied!";
+      setTimeout(function () { b.textContent = old; }, 1500);
+    } catch (e) {}
+  }
+  soundToggle.addEventListener("click", function () {
+    muted = !muted; localStorage.setItem("tranquil_muted", muted ? "1" : "0"); updateSoundToggle();
+    if (!muted) { audio(); tone(300, 0.05, "sine", 0.07); }
+  });
+  document.getElementById("settings-btn").addEventListener("click", function () { updateSoundToggle(); settingsOverlay.classList.add("show"); });
+  document.getElementById("settings-close").addEventListener("click", function () { settingsOverlay.classList.remove("show"); });
+  settingsOverlay.addEventListener("click", function (e) { if (e.target === settingsOverlay) settingsOverlay.classList.remove("show"); });
+  document.getElementById("settings-share").addEventListener("click", shareGame);
+  document.getElementById("lb-btn").addEventListener("click", function () { LB.open("warden"); });
+  document.getElementById("restart").addEventListener("click", newGame);
+
+  window.addEventListener("pointerdown", function () { audio(); }, { once: false });
+
+  // ---- iOS hardening ----
+  document.addEventListener("gesturestart", function (e) { e.preventDefault(); });
+  var lastTouchEnd = 0;
+  document.addEventListener("touchend", function (e) { var n = Date.now(); if (n - lastTouchEnd <= 320) e.preventDefault(); lastTouchEnd = n; }, { passive: false });
+
+  // ---- Lifecycle ----
+  function newGame() {
+    raiders = []; arrows = []; puffs = [];
+    hearts = HEARTS_MAX;
+    wave = 1; kills = 0;
+    spawnLeft = 0; spawnT = 0; breatherT = 0;
+    over = false; running = true;
+    elapsed = 0;
+    player.x = keepX; player.y = keepY + 86;
+    player.tx = player.x; player.ty = player.y;
+    player.cd = 0.4;
+    bestEl.textContent = best ? "Band " + best : "—";
+    startWave();
+  }
+
+  // test hook for scripted play (harmless in production)
+  window.__wd = {
+    go: function (x, y) { player.tx = x; player.ty = y; },
+    state: function () {
+      return { wave: wave, kills: kills, hearts: hearts, over: over,
+        raiders: raiders.filter(function (r) { return r.state === "march"; })
+          .map(function (r) { return { x: Math.round(r.x), y: Math.round(r.y) }; }),
+        px: Math.round(player.x), py: Math.round(player.y), W: W, H: H };
+    }
+  };
+
+  updateSoundToggle();
+  sizeStage();
+  newGame();
+  rafId = requestAnimationFrame(loop);
+  setTimeout(sizeStage, 300);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(sizeStage);
+})();
+</script>
+</body>
+</html>
