@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#11151c" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Tranquil" />
+<link rel="apple-touch-icon" href="icon.png" />
+<link rel="icon" href="icon.png" />
+<link rel="manifest" href="manifest.json" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="shared.css" />
+<title>Hamlet — Tranquil</title>
+<style>
+  #tray {
+    display: flex; align-items: center; gap: 10px;
+    margin: 10px 0 6px;
+  }
+  .piece-big {
+    width: 62px; height: 62px; flex: 0 0 62px;
+    border-radius: 14px; display: flex; align-items: center; justify-content: center;
+    font-size: 34px; background: var(--panel);
+    box-shadow: inset 0 2px 0 rgba(255,255,255,0.08), 0 3px 10px rgba(0,0,0,0.3);
+    user-select: none; -webkit-user-select: none;
+  }
+  .piece-meta { flex: 1; min-width: 0; }
+  .piece-name { font-weight: 800; font-size: 15px; }
+  .piece-hint { color: var(--muted); font-size: 11.5px; line-height: 1.35; margin-top: 2px; }
+  #stash {
+    width: 54px; height: 54px; flex: 0 0 54px;
+    border-radius: 12px; background: var(--panel);
+    border: 1.5px dashed rgba(255,255,255,0.22);
+    color: var(--muted); font-size: 26px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: transform 120ms ease;
+    padding: 0;
+  }
+  #stash:active { transform: scale(0.94); }
+  #stash .s-label { font-size: 9.5px; font-weight: 700; letter-spacing: 0.4px; }
+  #queue-row {
+    display: flex; align-items: center; gap: 6px; margin: 0 0 6px;
+    color: var(--muted); font-size: 11px; font-weight: 700;
+  }
+  .q-tile {
+    width: 32px; height: 32px; border-radius: 9px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 17px; background: var(--panel); opacity: 0.75;
+    user-select: none; -webkit-user-select: none;
+  }
+  .q-tile:nth-child(3) { opacity: 0.55; }
+  .q-tile:nth-child(4) { opacity: 0.4; }
+
+  #board {
+    position: relative;
+    background: linear-gradient(180deg, rgba(96,150,96,0.14), rgba(74,124,89,0.10)), var(--panel);
+    border-radius: 14px;
+    padding: 8px;
+    display: grid;
+    gap: 5px;
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .cell {
+    border-radius: 9px;
+    background: rgba(255,255,255,0.045);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    line-height: 1;
+    transition: background 140ms ease, box-shadow 140ms ease;
+  }
+  .cell.filled { cursor: default; box-shadow: inset 0 2px 0 rgba(255,255,255,0.10), inset 0 -2px 0 rgba(0,0,0,0.14); }
+  .cell.pending {
+    box-shadow: 0 0 0 2.5px var(--accent), inset 0 0 12px rgba(93,214,192,0.25);
+    background: rgba(93,214,192,0.12);
+  }
+  .cell.pending .glyph { opacity: 0.55; }
+  .cell .glyph { pointer-events: none; }
+  .cell.pop .glyph { animation: settle 320ms ease; }
+  @keyframes settle {
+    0% { transform: scale(1.35); }
+    60% { transform: scale(0.92); }
+    100% { transform: scale(1); }
+  }
+  .float-pts {
+    position: absolute; z-index: 3; pointer-events: none;
+    font-weight: 800; font-size: 15px; color: var(--accent);
+    text-shadow: 0 2px 6px rgba(0,0,0,0.6);
+    animation: floatup 900ms ease forwards;
+  }
+  @keyframes floatup {
+    0% { opacity: 0; transform: translate(-50%, 4px); }
+    18% { opacity: 1; }
+    100% { opacity: 0; transform: translate(-50%, -34px); }
+  }
+  #hint { text-align: center; color: var(--muted); font-size: 12px; margin-top: 8px; min-height: 16px; }
+  #hint b { color: var(--accent); }
+  #pchip {
+    position: absolute; z-index: 4; pointer-events: none; display: none;
+    transform: translate(-50%, -100%);
+    background: var(--accent); color: #06231e;
+    font-weight: 800; font-size: 13px; line-height: 1;
+    padding: 5px 9px; border-radius: 999px;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.45);
+  }
+  #pchip::after {
+    content: ""; position: absolute; left: 50%; top: 100%;
+    transform: translateX(-50%);
+    border: 5px solid transparent; border-top-color: var(--accent); border-bottom: none;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="topbar">
+    <div class="brand">
+      <a href="index.html" class="icon-btn" aria-label="Back to games">‹</a>
+      <span class="title">Hamlet</span>
+    </div>
+    <div class="bar-actions">
+      <button id="lb-btn" class="icon-btn" aria-label="High scores">🏆</button>
+      <button id="restart" class="icon-btn" aria-label="New game">↻</button>
+      <button id="settings-btn" class="icon-btn" aria-label="Settings">⚙</button>
+    </div>
+  </header>
+
+  <div class="scores">
+    <div class="score-box"><div class="score-label">Score</div><div class="score-val" id="score">0</div></div>
+    <div class="score-box"><div class="score-label">Tiles left</div><div class="score-val" id="left">30</div></div>
+    <div class="score-box best"><div class="score-label">Best</div><div class="score-val" id="best">—</div></div>
+  </div>
+
+  <div id="tray">
+    <div class="piece-big" id="cur-tile">🌲</div>
+    <div class="piece-meta">
+      <div class="piece-name" id="cur-name">Grove</div>
+      <div class="piece-hint" id="cur-hint"></div>
+    </div>
+    <button id="stash" aria-label="Stash this tile"><span class="s-label">STASH</span></button>
+  </div>
+  <div id="queue-row"><span>Next</span><div class="q-tile" id="q0"></div><div class="q-tile" id="q1"></div><div class="q-tile" id="q2"></div></div>
+
+  <div class="play-area"><div id="board"></div></div>
+  <div id="hint"></div>
+</div>
+
+<div id="settings-overlay" class="modal-overlay">
+  <div class="modal settings">
+    <h2>Hamlet</h2>
+    <div class="setting-row">
+      <span class="label">Sound</span>
+      <button id="sound-toggle" class="toggle on">On</button>
+    </div>
+    <div class="how">
+      <p class="how-title">How to play</p>
+      <p class="body">Build a tiny village, one tile at a time. Tap a spot to preview your points, tap again to build. Each building earns from what's already beside it — groves love groves, fields love fields and ponds, cottages want greenery and a well, wells serve cottages, and chapels count every cottage within two tiles (but sulk near another chapel). One stash slot lets you save a tile for later. Place all 30 tiles for your final score.</p>
+    </div>
+    <button id="settings-share" class="share">Share the game</button>
+    <button id="settings-close" class="ghost-btn">Done</button>
+    <div class="version-tag" id="app-version"></div>
+  </div>
+</div>
+
+<script src="leaderboard.js?v=23"></script>
+<script>
+(function () {
+  "use strict";
+
+  var SIZE = 7, N = SIZE * SIZE;
+  // Bag of 30 tiles per game; shuffled with Math.random (date-seeded in Daily Set)
+  var BAG = { grove: 8, field: 6, cottage: 7, pond: 3, well: 3, chapel: 3 };
+
+  var TYPES = {
+    grove:   { icon: "🌲", name: "Grove",   bg: "rgba(101,199,141,0.20)",
+               hint: "+2 for each Grove beside it" },
+    field:   { icon: "🌾", name: "Field",   bg: "rgba(222,184,96,0.18)",
+               hint: "+2 per Field beside it · +2 per Pond" },
+    pond:    { icon: "🪷", name: "Pond",    bg: "rgba(96,166,222,0.20)",
+               hint: "+2 per Grove or Field beside it" },
+    cottage: { icon: "🏠", name: "Cottage", bg: "rgba(224,148,110,0.18)",
+               hint: "+2 per Grove or Pond · +4 per Well beside it" },
+    well:    { icon: "💧", name: "Well",    bg: "rgba(130,150,222,0.20)",
+               hint: "+3 for each Cottage beside it" },
+    chapel:  { icon: "⛪", name: "Chapel",  bg: "rgba(196,140,220,0.18)",
+               hint: "+3 per Cottage within 2 tiles · 0 if another Chapel is that close" }
+  };
+
+  var muted = localStorage.getItem("tranquil_muted") === "1";
+
+  var grid = [];        // type id or null, per cell
+  var queue = [];       // remaining tiles, queue[0] is current
+  var stash = null;     // one held tile
+  var pending = -1;     // cell awaiting confirm tap
+  var score = 0;
+  var placedCount = 0;
+  var bestBuild = null; // { type, pts } — nicest single placement
+  var best = null;
+  var over = false;
+
+  var playArea = document.querySelector(".play-area");
+  var board = document.getElementById("board");
+  var scoreEl = document.getElementById("score");
+  var leftEl = document.getElementById("left");
+  var bestEl = document.getElementById("best");
+  var hintEl = document.getElementById("hint");
+  var curTile = document.getElementById("cur-tile");
+  var curName = document.getElementById("cur-name");
+  var curHint = document.getElementById("cur-hint");
+  var stashBtn = document.getElementById("stash");
+  var qEls = [document.getElementById("q0"), document.getElementById("q1"), document.getElementById("q2")];
+  var settingsOverlay = document.getElementById("settings-overlay");
+  var soundToggle = document.getElementById("sound-toggle");
+  var cellEls = [];
+  var pchip = document.createElement("div");
+  pchip.id = "pchip";
+
+  // ---- Sound ----
+  var actx = null;
+  function audio() {
+    if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { actx = null; } }
+    if (actx && actx.state === "suspended") actx.resume();
+  }
+  function tone(f, d, t, g) {
+    if (muted || !actx) return;
+    var o = actx.createOscillator(), gn = actx.createGain();
+    o.type = t || "sine"; o.frequency.value = f;
+    gn.gain.setValueAtTime(0.0001, actx.currentTime);
+    gn.gain.exponentialRampToValueAtTime(g || 0.1, actx.currentTime + 0.01);
+    gn.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + d);
+    o.connect(gn); gn.connect(actx.destination); o.start(); o.stop(actx.currentTime + d + 0.02);
+  }
+  function sfxPreview() { tone(392, 0.06, "sine", 0.05); }
+  function sfxPlace() { tone(262, 0.09, "triangle", 0.08); setTimeout(function () { tone(330, 0.08, "triangle", 0.05); }, 55); }
+  function sfxNice() { tone(523.25, 0.16, "sine", 0.07); setTimeout(function () { tone(659.25, 0.2, "sine", 0.06); }, 90); }
+  function sfxStash() { tone(440, 0.07, "sine", 0.05); setTimeout(function () { tone(392, 0.07, "sine", 0.04); }, 60); }
+  function sfxDone() { [523.25, 659.25, 783.99, 1046.5].forEach(function (f, i) { setTimeout(function () { tone(f, 0.4, "sine", 0.12); }, i * 110); }); }
+
+  // ---- Scoring ----
+  function neighborsOf(idx) {
+    var r = (idx / SIZE) | 0, c = idx % SIZE, out = [];
+    if (r > 0) out.push(idx - SIZE);
+    if (r < SIZE - 1) out.push(idx + SIZE);
+    if (c > 0) out.push(idx - 1);
+    if (c < SIZE - 1) out.push(idx + 1);
+    return out;
+  }
+  function within2Of(idx) {
+    var r = (idx / SIZE) | 0, c = idx % SIZE, out = [];
+    for (var dr = -2; dr <= 2; dr++) {
+      for (var dc = -2; dc <= 2; dc++) {
+        if (dr === 0 && dc === 0) continue;
+        if (Math.abs(dr) + Math.abs(dc) > 2) continue;
+        var rr = r + dr, cc = c + dc;
+        if (rr >= 0 && rr < SIZE && cc >= 0 && cc < SIZE) out.push(rr * SIZE + cc);
+      }
+    }
+    return out;
+  }
+  function scoreFor(type, idx) {
+    var cnt = { grove: 0, field: 0, pond: 0, cottage: 0, well: 0, chapel: 0 };
+    neighborsOf(idx).forEach(function (i) { if (grid[i]) cnt[grid[i]]++; });
+    switch (type) {
+      case "grove":   return 2 * cnt.grove;
+      case "field":   return 2 * cnt.field + 2 * cnt.pond;
+      case "pond":    return 2 * cnt.grove + 2 * cnt.field;
+      case "cottage": return 2 * cnt.grove + 2 * cnt.pond + 4 * cnt.well;
+      case "well":    return 3 * cnt.cottage;
+      case "chapel":
+        var cots = 0, chapels = 0;
+        within2Of(idx).forEach(function (i) {
+          if (grid[i] === "cottage") cots++;
+          if (grid[i] === "chapel") chapels++;
+        });
+        return chapels > 0 ? 0 : 3 * cots;
+    }
+    return 0;
+  }
+
+  // ---- Queue ----
+  function buildQueue() {
+    queue = [];
+    Object.keys(BAG).forEach(function (t) {
+      for (var i = 0; i < BAG[t]; i++) queue.push(t);
+    });
+    for (var k = queue.length - 1; k > 0; k--) {
+      var j = Math.floor(Math.random() * (k + 1));
+      var tmp = queue[k]; queue[k] = queue[j]; queue[j] = tmp;
+    }
+  }
+  function current() { return queue.length ? queue[0] : null; }
+
+  // ---- Board ----
+  function buildBoard() {
+    board.style.gridTemplateColumns = "repeat(" + SIZE + ", 1fr)";
+    board.style.gridTemplateRows = "repeat(" + SIZE + ", 1fr)";
+    board.innerHTML = "";
+    cellEls = [];
+    for (var i = 0; i < N; i++) {
+      (function (idx) {
+        var d = document.createElement("div");
+        d.className = "cell";
+        var g = document.createElement("span");
+        g.className = "glyph";
+        d.appendChild(g);
+        d.addEventListener("click", function () { onCell(idx); });
+        board.appendChild(d);
+        cellEls[idx] = d;
+      })(i);
+    }
+    board.appendChild(pchip);
+  }
+
+  function showChip(idx, pts) {
+    var el = cellEls[idx];
+    pchip.textContent = "+" + pts;
+    pchip.style.left = (el.offsetLeft + el.offsetWidth / 2) + "px";
+    pchip.style.top = (el.offsetTop - 3) + "px";
+    pchip.style.display = "block";
+  }
+  function hideChip() { pchip.style.display = "none"; }
+
+  function renderCell(i) {
+    var el = cellEls[i], g = el.firstChild;
+    var t = grid[i];
+    if (t) {
+      el.classList.add("filled");
+      el.classList.remove("pending");
+      el.style.background = TYPES[t].bg;
+      g.textContent = TYPES[t].icon;
+    } else if (i === pending && current()) {
+      el.classList.add("pending");
+      el.classList.remove("filled");
+      el.style.background = "";
+      g.textContent = TYPES[current()].icon;
+    } else {
+      el.classList.remove("filled", "pending");
+      el.style.background = "";
+      g.textContent = "";
+    }
+  }
+
+  function render() {
+    for (var i = 0; i < N; i++) renderCell(i);
+    scoreEl.textContent = score;
+    leftEl.textContent = queue.length;
+    bestEl.textContent = best === null ? "—" : best;
+    var t = current();
+    if (t) {
+      curTile.textContent = TYPES[t].icon;
+      curName.textContent = TYPES[t].name;
+      curHint.textContent = TYPES[t].hint;
+    } else {
+      curTile.textContent = "✓";
+      curName.textContent = "All placed";
+      curHint.textContent = "";
+    }
+    stashBtn.innerHTML = stash ? TYPES[stash].icon : '<span class="s-label">STASH</span>';
+    for (var q = 0; q < 3; q++) qEls[q].textContent = queue[q + 1] ? TYPES[queue[q + 1]].icon : "";
+    if (!over && !t) hintEl.textContent = "";
+  }
+
+  function floatPts(idx, pts) {
+    var el = cellEls[idx];
+    var f = document.createElement("div");
+    f.className = "float-pts";
+    f.textContent = "+" + pts;
+    f.style.left = (el.offsetLeft + el.offsetWidth / 2) + "px";
+    f.style.top = (el.offsetTop - 2) + "px";
+    board.appendChild(f);
+    setTimeout(function () { if (f.parentNode) f.parentNode.removeChild(f); }, 950);
+  }
+
+  function onCell(idx) {
+    if (over || grid[idx] || !current()) return;
+    if (pending !== idx) {
+      var was = pending;
+      pending = idx;
+      if (was >= 0) renderCell(was);
+      renderCell(idx);
+      var pts = scoreFor(current(), idx);
+      showChip(idx, pts);
+      hintEl.innerHTML = "<b>+" + pts + " point" + (pts === 1 ? "" : "s") + "</b> here — tap again to build";
+      sfxPreview();
+      return;
+    }
+    place(idx);
+  }
+
+  function place(idx) {
+    hideChip();
+    var t = queue.shift();
+    var pts = scoreFor(t, idx);
+    grid[idx] = t;
+    score += pts;
+    placedCount++;
+    if (!bestBuild || pts > bestBuild.pts) bestBuild = { type: t, pts: pts };
+    pending = -1;
+    renderCell(idx);
+    cellEls[idx].classList.remove("pop");
+    void cellEls[idx].offsetWidth;
+    cellEls[idx].classList.add("pop");
+    if (pts > 0) floatPts(idx, pts);
+    if (pts >= 8) sfxNice(); else sfxPlace();
+    hintEl.textContent = "";
+    render();
+    if (!current() && !stash) finishGame();
+    else if (!current() && stash) {
+      // last queue tile placed but one is stashed — it becomes the final tile
+      queue.push(stash);
+      stash = null;
+      render();
+    }
+  }
+
+  function onStash() {
+    if (over || !current()) return;
+    var t = queue.shift();
+    if (stash) queue.unshift(stash);
+    stash = t;
+    if (!queue.length) { queue.push(stash); stash = null; } // never trap the final tile
+    pending = -1;
+    hideChip();
+    sfxStash();
+    render();
+  }
+
+  function finishGame() {
+    over = true;
+    if (best === null || score > best) { best = score; localStorage.setItem("tranquil_hamlet_best", String(best)); }
+    sfxDone();
+    var sub = placedCount + " buildings";
+    if (bestBuild && bestBuild.pts > 0) sub += " · nicest build: " + TYPES[bestBuild.type].name + " +" + bestBuild.pts;
+    setTimeout(function () {
+      LB.finish({
+        game: "hamlet",
+        value: score,
+        resultTitle: "Village complete!",
+        subtitle: sub,
+        onPlayAgain: newGame
+      });
+    }, 700);
+  }
+
+  function newGame() {
+    grid = new Array(N).fill(null);
+    stash = null;
+    pending = -1;
+    score = 0;
+    placedCount = 0;
+    bestBuild = null;
+    over = false;
+    var v = localStorage.getItem("tranquil_hamlet_best");
+    best = v === null ? null : Number(v);
+    buildQueue();
+    buildBoard();
+    hideChip();
+    hintEl.textContent = "";
+    render();
+    sizeBoard();
+  }
+
+  // ---- Sizing (largest square that fits) ----
+  function sizeBoard() {
+    var r = playArea.getBoundingClientRect();
+    var s = Math.max(0, Math.floor(Math.min(r.width, r.height)));
+    board.style.width = s + "px";
+    board.style.height = s + "px";
+    var cell = (s - 16 - (SIZE - 1) * 5) / SIZE;
+    board.style.fontSize = Math.max(10, Math.floor(cell * 0.58)) + "px";
+  }
+  window.addEventListener("resize", sizeBoard);
+  window.addEventListener("orientationchange", function () { setTimeout(sizeBoard, 150); });
+
+  // ---- Settings / sound ----
+  function updateSoundToggle() { soundToggle.textContent = muted ? "Off" : "On"; soundToggle.classList.toggle("on", !muted); }
+  async function shareGame() {
+    var text = "Hamlet — a calm village-building puzzle with no ads. Play it:";
+    var url = "https://pete1552.github.io/AGTest/";
+    try { if (navigator.share) { await navigator.share({ title: "Hamlet", text: text, url: url }); return; } } catch (e) { return; }
+    try {
+      await navigator.clipboard.writeText(text + " " + url);
+      var b = document.getElementById("settings-share"), old = b.textContent; b.textContent = "Link copied!";
+      setTimeout(function () { b.textContent = old; }, 1500);
+    } catch (e) {}
+  }
+  soundToggle.addEventListener("click", function () {
+    muted = !muted; localStorage.setItem("tranquil_muted", muted ? "1" : "0"); updateSoundToggle();
+    if (!muted) { audio(); tone(300, 0.05, "sine", 0.07); }
+  });
+  document.getElementById("settings-btn").addEventListener("click", function () { updateSoundToggle(); settingsOverlay.classList.add("show"); });
+  document.getElementById("settings-close").addEventListener("click", function () { settingsOverlay.classList.remove("show"); });
+  settingsOverlay.addEventListener("click", function (e) { if (e.target === settingsOverlay) settingsOverlay.classList.remove("show"); });
+  document.getElementById("settings-share").addEventListener("click", shareGame);
+  document.getElementById("lb-btn").addEventListener("click", function () { LB.open("hamlet"); });
+  document.getElementById("restart").addEventListener("click", newGame);
+  stashBtn.addEventListener("click", onStash);
+
+  // first pointerdown unlocks audio
+  window.addEventListener("pointerdown", function () { audio(); }, { once: false });
+
+  // ---- iOS hardening ----
+  document.addEventListener("gesturestart", function (e) { e.preventDefault(); });
+  var lastTouchEnd = 0;
+  document.addEventListener("touchend", function (e) { var n = Date.now(); if (n - lastTouchEnd <= 320) e.preventDefault(); lastTouchEnd = n; }, { passive: false });
+
+  // ---- Boot ----
+  updateSoundToggle();
+  newGame();
+  requestAnimationFrame(sizeBoard);
+  setTimeout(sizeBoard, 300);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(sizeBoard);
+})();
+</script>
+</body>
+</html>
