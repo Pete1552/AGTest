@@ -107,7 +107,7 @@
     </div>
     <div class="how">
       <p class="how-title">How to play</p>
-      <p class="body">You are the keep's mounted warden. Drag to ride; charging raiders that reach the gate steal a heart, so meet them in the field. Tap the stance button to switch weapon: <b>Bow</b> shoots at range on its own, while the <b>Lance</b> cuts down anyone you ride through (no arrows — you must dive in). The enemy adapts to whatever you favour: lean on the bow and they send <b>skirmishers</b>, who dodge most arrows but fall to the lance; lean on the lance and they send <b>pikemen</b>, who brace against a charge but are soft to arrows. <b>Shieldbearers</b> block both weapons from the front — flank them. <b>Brutes</b> just soak hits. Every repelled raider drops <b>gold</b>. Between bands, spend it in the Muster: raise <b>Footmen</b> who roam and fight, build <b>Watchtowers</b> that guard the keep, invest in a <b>Granary</b> for more gold each band, or sharpen the warden — then march. Tap a footman to select it (tap again to deselect), then tap the field to post them somewhere new — handy for covering a second approach. Survive as long as you can.</p>
+      <p class="body">You are the keep's mounted warden. Drag to ride; charging raiders that reach the gate steal a heart, so meet them in the field. Tap the stance button to switch weapon: <b>Bow</b> shoots at range on its own, while the <b>Lance</b> cuts down anyone you ride through (no arrows — you must dive in). The enemy adapts to whatever you favour: lean on the bow and they send <b>skirmishers</b>, who dodge most arrows but fall to the lance; lean on the lance and they send <b>pikemen</b>, who brace against a charge but are soft to arrows. <b>Shieldbearers</b> block both weapons from the front — flank them. <b>Brutes</b> just soak hits. Every repelled raider drops <b>gold</b>. Between bands, spend it in the Muster: raise <b>Footmen</b> who roam and fight, build <b>Watchtowers</b> that guard the keep, invest in a <b>Granary</b> for more gold each band, or sharpen the warden — then march. Only one unit answers your touch at a time: tap a footman to select it and tap the field to post them somewhere new — handy for covering a second approach — but while a footman is selected the horse holds her ground. Tap the horse to take the reins back before you can ride again. Survive as long as you can.</p>
     </div>
     <button id="settings-share" class="share">Share the game</button>
     <button id="settings-close" class="ghost-btn">Done</button>
@@ -115,7 +115,7 @@
   </div>
 </div>
 
-<script src="leaderboard.js?v=32"></script>
+<script src="leaderboard.js?v=33"></script>
 <script>
 (function () {
   "use strict";
@@ -199,7 +199,15 @@
   var wave = 1, kills = 0;
   var breatherT = 0, cleared = false, paused = false;
   var raiderSeq = 1, allySeq = 1;
-  var selectedFootId = null;   // id of the footman currently selected for a move order
+  // RTS-style single selection: "horse" (the warden herself) or a footman's
+  // id. Only the selected unit answers to your touch — selecting a footman
+  // parks the horse in place until you deliberately tap her to take the
+  // reins back, same as reselecting any other unit.
+  var selectedUnit = "horse";
+  function findAllyById(id) {
+    for (var i = 0; i < allies.length; i++) if (allies[i].id === id) return allies[i];
+    return null;
+  }
   var over = false, running = false, announced = "", announceT = 0;
   var elapsed = 0;
   var best = Number(localStorage.getItem("tranquil_warden_best") || 0) || 0;
@@ -221,7 +229,8 @@
   var tapHintEl = document.getElementById("tap-hint");
   var DEFAULT_HINT = tapHintEl.textContent;
   function updateTapHint() {
-    tapHintEl.textContent = selectedFootId != null ? "Footman selected — tap the field to post them" : DEFAULT_HINT;
+    tapHintEl.textContent = selectedUnit === "horse" ? DEFAULT_HINT
+      : "Footman selected — tap the field to post them, tap the horse to ride again";
   }
   var waveEl = document.getElementById("wave");
   var goldEl = document.getElementById("gold");
@@ -402,7 +411,7 @@
   }
   function openShop() {
     paused = true;
-    selectedFootId = null; updateTapHint();
+    selectedUnit = "horse"; updateTapHint();
     buildShopUI();
     document.getElementById("shop-overlay").classList.add("show");
   }
@@ -877,11 +886,16 @@
   }
 
   function drawSelection() {
-    if (selectedFootId == null) return;
-    var al = null;
-    for (var i = 0; i < allies.length; i++) if (allies[i].id === selectedFootId) { al = allies[i]; break; }
-    if (!al) return;
     var pulse = 0.5 + 0.5 * Math.sin(elapsed * 5);
+    if (selectedUnit === "horse") {
+      // ring under the warden — only she answers to the drag while this shows
+      ctx.strokeStyle = "rgba(93,214,192," + (0.55 + 0.35 * pulse).toFixed(2) + ")";
+      ctx.lineWidth = 1.8;
+      ctx.beginPath(); ctx.ellipse(player.x, player.y + 12, 15, 5, 0, 0, Math.PI * 2); ctx.stroke();
+      return;
+    }
+    var al = findAllyById(selectedUnit);
+    if (!al) return;
     // ring under the selected footman
     ctx.strokeStyle = "rgba(93,214,192," + (0.55 + 0.35 * pulse).toFixed(2) + ")";
     ctx.lineWidth = 1.8;
@@ -1045,28 +1059,35 @@
   }
   var steering = false;
   var downX = 0, downY = 0, downMoved = false;
-  // ---- Footman select/post: tap a footman to select it (tap it again, or
-  // tap a different one, to switch); tap the field to send the selected unit
-  // to post there instead of its auto-assigned ring spot. ----
+  function isOnHorse(p) {
+    var dx = p.x - player.x, dy = p.y - player.y;
+    return dx * dx + dy * dy < 20 * 20;
+  }
+  // ---- RTS-style selection: tap a unit to select it (only the selected unit
+  // answers to the drag); tap the field to give the selected footman a new
+  // post; tap the warden herself to take the reins back. ----
   function handleTap(p) {
     var underFoot = footmanNear(p.x, p.y, 18);
-    var consumed = false;
     if (underFoot) {
-      if (selectedFootId === underFoot.id) { selectedFootId = null; sfxDeselect(); }
-      else { selectedFootId = underFoot.id; sfxSelect(); }
-      consumed = true;
-    } else if (selectedFootId != null) {
-      var al = null;
-      for (var i = 0; i < allies.length; i++) if (allies[i].id === selectedFootId) { al = allies[i]; break; }
+      if (selectedUnit === underFoot.id) { selectedUnit = "horse"; sfxDeselect(); }
+      else { selectedUnit = underFoot.id; sfxSelect(); }
+      player.tx = player.x; player.ty = player.y; // cancel any nudge from this selection tap
+      updateTapHint();
+      return;
+    }
+    if (isOnHorse(p)) {
+      if (selectedUnit !== "horse") { selectedUnit = "horse"; sfxSelect(); updateTapHint(); }
+      return;
+    }
+    if (selectedUnit !== "horse") {
+      var al = findAllyById(selectedUnit);
       if (al) {
         var c = clampToField(p.x, p.y);
         al.rallyX = c.x; al.rallyY = c.y;
         sfxCommand();
       }
-      selectedFootId = null;
-      consumed = true;
+      // stays selected — RTS-style, so further taps keep re-posting this unit
     }
-    if (consumed) { player.tx = player.x; player.ty = player.y; updateTapHint(); } // cancel the tiny nudge
   }
   canvas.addEventListener("pointerdown", function (e) {
     e.preventDefault();
@@ -1075,7 +1096,7 @@
     steering = true;
     var p = posFromEvent(e);
     downX = p.x; downY = p.y; downMoved = false;
-    player.tx = p.x; player.ty = p.y;
+    if (selectedUnit === "horse") { player.tx = p.x; player.ty = p.y; }
     try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
   });
   canvas.addEventListener("pointermove", function (e) {
@@ -1083,7 +1104,7 @@
     e.preventDefault();
     var p = posFromEvent(e);
     if (Math.abs(p.x - downX) > 8 || Math.abs(p.y - downY) > 8) downMoved = true;
-    player.tx = p.x; player.ty = p.y;
+    if (selectedUnit === "horse") { player.tx = p.x; player.ty = p.y; }
   });
   canvas.addEventListener("pointerup", function () {
     if (!over && !downMoved) handleTap({ x: downX, y: downY });
@@ -1106,10 +1127,10 @@
   document.addEventListener("keydown", function (e) {
     if (over) return;
     var step = 26;
-    if (e.key === "ArrowLeft") { player.tx = player.x - step; player.ty = player.y; e.preventDefault(); }
-    else if (e.key === "ArrowRight") { player.tx = player.x + step; player.ty = player.y; e.preventDefault(); }
-    else if (e.key === "ArrowUp") { player.ty = player.y - step; player.tx = player.x; e.preventDefault(); }
-    else if (e.key === "ArrowDown") { player.ty = player.y + step; player.tx = player.x; e.preventDefault(); }
+    if (selectedUnit === "horse" && e.key === "ArrowLeft") { player.tx = player.x - step; player.ty = player.y; e.preventDefault(); }
+    else if (selectedUnit === "horse" && e.key === "ArrowRight") { player.tx = player.x + step; player.ty = player.y; e.preventDefault(); }
+    else if (selectedUnit === "horse" && e.key === "ArrowUp") { player.ty = player.y - step; player.tx = player.x; e.preventDefault(); }
+    else if (selectedUnit === "horse" && e.key === "ArrowDown") { player.ty = player.y + step; player.tx = player.x; e.preventDefault(); }
     else if (e.key === "q" || e.key === "Q" || e.key === " " || e.key === "Tab") { toggleStance(); e.preventDefault(); }
   });
 
@@ -1161,7 +1182,7 @@
     hearts = HEARTS_MAX;
     wave = 1; kills = 0;
     gold = 0; income = 2; nFoot = 0; nTower = 0; nGranary = 0;
-    selectedFootId = null; updateTapHint();
+    selectedUnit = "horse"; updateTapHint();
     breatherT = 0; cleared = false; paused = false;
     stat = { range: BASE.range, speed: BASE.speed, fireCd: BASE.fireCd, volley: BASE.volley, pierce: BASE.pierce, dmg: BASE.dmg };
     stance = "bow"; bowScore = 0; lanceScore = 0;
@@ -1187,7 +1208,7 @@
       return { wave: wave, kills: kills, hearts: hearts, over: over, paused: paused, gold: gold, income: income,
         stance: stance, bowScore: Math.round(bowScore * 10) / 10, lanceScore: Math.round(lanceScore * 10) / 10,
         allies: { foot: nFoot, tower: nTower, granary: nGranary },
-        selected: selectedFootId,
+        selected: selectedUnit,
         foot: allies.filter(function (a) { return a.kind === "foot"; })
           .map(function (a) { return { id: a.id, x: Math.round(a.x), y: Math.round(a.y), t: a.targetId, rx: Math.round(a.rallyX), ry: Math.round(a.rallyY) }; }),
         stat: { range: stat.range, speed: stat.speed, fireCd: stat.fireCd, volley: stat.volley, pierce: stat.pierce, dmg: stat.dmg },
