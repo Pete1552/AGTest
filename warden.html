@@ -49,6 +49,26 @@
   .place-btn:active { transform: translateY(1px) scale(0.97); }
   .place-btn.confirm { background: var(--accent); color: #06231e; }
   .place-btn.cancel { background: var(--grid); color: var(--ink); }
+  .train-panel {
+    position: absolute; left: 0; right: 0; bottom: 12px;
+    display: flex; justify-content: center; align-items: center; gap: 7px;
+  }
+  .train-btn {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+    width: 42px; height: 42px; border: none; cursor: pointer; border-radius: 50%;
+    background: var(--panel); box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    transition: transform 100ms ease, opacity 140ms ease;
+    -webkit-user-select: none; user-select: none; touch-action: manipulation;
+  }
+  .train-btn:active { transform: scale(0.94); }
+  .train-btn.poor { opacity: 0.4; }
+  .train-btn .tb-icon { font-size: 15px; line-height: 1; }
+  .train-btn .tb-cost { font-size: 8.5px; font-weight: 800; color: #f2c94c; line-height: 1; }
+  .train-queue {
+    font-size: 11px; font-weight: 700; color: var(--muted);
+    background: var(--panel); padding: 8px 12px; border-radius: 999px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4); white-space: nowrap;
+  }
   .draft-sub { text-align: center; color: var(--muted); font-size: 12.5px; margin: -4px 0 10px; }
   .modal.shop { max-height: 88vh; display: flex; flex-direction: column; }
   .shop-head { display: flex; align-items: center; justify-content: space-between; }
@@ -103,6 +123,12 @@
       <button id="place-confirm-btn" class="place-btn confirm" aria-label="Place tower">🗼 Place</button>
       <button id="place-cancel-btn" class="place-btn cancel" aria-label="Cancel">✕ Cancel</button>
     </div>
+    <div id="train-panel" class="train-panel" style="display:none">
+      <button class="train-btn" data-troop="archer" aria-label="Train Archer"><span class="tb-icon">🏹</span><span class="tb-cost"></span></button>
+      <button class="train-btn" data-troop="spearman" aria-label="Train Spearman"><span class="tb-icon">🔱</span><span class="tb-cost"></span></button>
+      <button class="train-btn" data-troop="catapult" aria-label="Train Catapult"><span class="tb-icon">💥</span><span class="tb-cost"></span></button>
+      <span class="train-queue" id="train-queue-badge">Empty queue</span>
+    </div>
   </div>
   <div class="tap-hint" id="tap-hint">Drag to ride · tap the button to switch bow / lance</div>
 </div>
@@ -125,7 +151,7 @@
     </div>
     <div class="how">
       <p class="how-title">How to play</p>
-      <p class="body">You are the keep's mounted warden. Drag to ride; charging raiders that reach the gate steal a heart, so meet them in the field. Tap the stance button to switch weapon: <b>Bow</b> shoots at range on its own, while the <b>Lance</b> cuts down anyone you ride through (no arrows — you must dive in). The enemy adapts to whatever you favour: lean on the bow and they send <b>skirmishers</b>, who dodge most arrows but fall to the lance; lean on the lance and they send <b>pikemen</b>, who brace against a charge but are soft to arrows. <b>Shieldbearers</b> block both weapons from the front — flank them. <b>Brutes</b> just soak hits. Every repelled raider drops <b>gold</b>. Between bands, spend it in the Muster: raise <b>Footmen</b> who roam and fight, invest in a <b>Granary</b> for more gold each band, or sharpen the warden — or build a <b>Watchtower</b>, which you drag into place yourself before confirming, so you can wall off exactly the approach that's giving you trouble. Then march. Only one unit answers your touch at a time: tap a footman to select it and tap the field to post them somewhere new — handy for covering a second approach — but while a footman is selected the horse holds her ground. Tap empty ground to deselect whatever's selected, or tap the horse to take the reins back before you can ride again. Survive as long as you can.</p>
+      <p class="body">You are the keep's mounted warden. Drag to ride; charging raiders that reach the gate steal a heart, so meet them in the field. Tap the stance button to switch weapon: <b>Bow</b> shoots at range on its own, while the <b>Lance</b> cuts down anyone you ride through (no arrows — you must dive in). The enemy adapts to whatever you favour: lean on the bow and they send <b>skirmishers</b>, who dodge most arrows but fall to the lance; lean on the lance and they send <b>pikemen</b>, who brace against a charge but are soft to arrows. <b>Shieldbearers</b> block both weapons from the front — flank them. <b>Brutes</b> just soak hits. Every repelled raider drops <b>gold</b>. Between bands, spend it in the Muster: raise instant <b>Footmen</b>, invest in a <b>Granary</b> for more gold each band, or sharpen the warden — or drag a <b>Watchtower</b> or <b>Barracks</b> into place yourself before confirming. Tap a placed Barracks any time during a band to train a proper roster: <b>Archers</b> shoot from range without closing in, <b>Spearmen</b> hit harder but move slower, and <b>Catapults</b> lob a blast that hits everyone nearby — each takes a few seconds to train, so queue ahead. Only one unit answers your touch at a time: tap a footman to select it and tap the field to post them somewhere new — but while one's selected the horse holds her ground. Tap empty ground to deselect whatever's selected, or tap the horse to take the reins back before you can ride again. Survive as long as you can.</p>
     </div>
     <button id="settings-share" class="share">Share the game</button>
     <button id="settings-close" class="ghost-btn">Done</button>
@@ -133,7 +159,7 @@
   </div>
 </div>
 
-<script src="leaderboard.js?v=36"></script>
+<script src="leaderboard.js?v=37"></script>
 <script>
 (function () {
   "use strict";
@@ -176,10 +202,20 @@
   // shop on the classic triangle: army (Retinue), defence (Watchtowers), or
   // economy (Granary) — plus personal Warden upgrades and mending the keep.
   var gold = 0, income = 2;
-  var nFoot = 0, nTower = 0, nGranary = 0;
-  var allies = [];  // {kind:"foot"|"tower", x, y, ...}
-  var placing = null; // { kind:"tower", x, y, cost } while dragging a bought building into place
+  var nFoot = 0, nTower = 0, nGranary = 0, nBarracks = 0;
+  var allies = [];  // {kind:"foot"|"tower"|"barracks", x, y, ...}
+  var placing = null; // { kind:"tower"|"barracks", x, y, cost } while dragging a bought building into place
   var TOWER_RANGE = 120;
+  var selectedBuilding = null; // barracks id whose training panel is open
+
+  // Troops trained at a Barracks (Footman is still the instant Retinue buy;
+  // these three add real variety to the roster). Each has its own combat
+  // role in the allies update loop, keyed off al.troop.
+  var TROOPS = {
+    archer:    { icon: "🏹", name: "Archer",    cost: 6, time: 5,  desc: "Shoots from range, never closes in" },
+    spearman:  { icon: "🔱", name: "Spearman",  cost: 7, time: 6,  desc: "Hits harder in melee, but slower afoot" },
+    catapult:  { icon: "💥", name: "Catapult",  cost: 12, time: 9, desc: "Lobs a blast that hits everyone nearby" }
+  };
   function goldFor(type) { return type === "brute" ? 4 : (type === "shield" || type === "pikeman") ? 2 : 1; }
 
   // The Muster shop. Each item: category, dynamic cost/desc, avail(), buy().
@@ -190,6 +226,15 @@
       cost: function () { return 5 + nFoot * 3; },
       avail: function () { return nFoot < 8; },
       buy: function () { nFoot++; spawnAlly("foot"); } },
+    { id: "barracks", cat: "Retinue", icon: "🏚️", name: "Barracks",
+      desc: function () { return "Trains archers, spearmen & catapults — you place it"; },
+      cost: function () { return 10 + nBarracks * 8; },
+      avail: function () { return nBarracks < 3; },
+      buy: function (paid) {
+        nBarracks++;
+        var ang = (nBarracks - 1) * 2.399963 + 3.0, rr = KEEP_R + 40;
+        startPlacingBuilding("barracks", paid, keepX + Math.cos(ang) * rr, keepY + Math.sin(ang) * rr);
+      } },
     { id: "tower",  cat: "Defenses", icon: "🗼", name: "Watchtower",
       desc: function () { return "A fixed tower that shoots nearby raiders — you place it"; },
       cost: function () { return 7 + nTower * 4; },
@@ -197,7 +242,7 @@
       buy: function (paid) {
         nTower++;
         var ang = (nTower - 1) * 2.399963, rr = KEEP_R + 34; // sensible starting spot, drag it anywhere
-        startPlacingTower(paid, keepX + Math.cos(ang) * rr, keepY + Math.sin(ang) * rr);
+        startPlacingBuilding("tower", paid, keepX + Math.cos(ang) * rr, keepY + Math.sin(ang) * rr);
       } },
     { id: "granary", cat: "Estate", icon: "🌾", name: "Granary",
       desc: function () { return "+2 gold income every band (now +" + income + ")"; },
@@ -218,7 +263,14 @@
   var player = { x: 0, y: 0, tx: 0, ty: 0, vx: 0, face: 1, phase: 0, cd: 0 };
   var raiders = [];  // {x,y,hp,speed,armored,state:"march"|"flee"|"down",t,face,phase}
   var arrows = [];   // {x,y,vx,vy,life}
+  var bombs = [];    // catapult shells: {ox,oy,tx,ty,t,dur,dmg,splash}
   var puffs = [];    // little impact poofs {x,y,t}
+  var TROOP_STATS = {
+    footman:  { speed: 96, meleeCd: 0.5, dmg: 1 },
+    spearman: { speed: 78, meleeCd: 0.9, dmg: 2 },
+    archer:   { speed: 90, range: 100, fireCd: 0.9 },
+    catapult: { speed: 55, range: 130, fireCd: 1.8, splash: 40, dmg: 2 }
+  };
   var hearts = HEARTS_MAX;
   var wave = 1, kills = 0;
   var breatherT = 0, cleared = false, paused = false;
@@ -389,27 +441,30 @@
     }
     return { x: x, y: y };
   }
-  // Same field/keep clamp, plus a nudge off any existing tower so new ones
-  // never land exactly on top of one another.
-  function clampForTower(x, y) {
+  // Same field/keep clamp, plus a nudge off any existing building of the same
+  // kind so new ones never land exactly on top of one another.
+  function clampForBuilding(kind, x, y) {
     var c = clampToField(x, y);
     x = c.x; y = c.y;
     for (var i = 0; i < allies.length; i++) {
       var a = allies[i];
-      if (a.kind !== "tower") continue;
+      if (a.kind !== kind) continue;
       var dx = x - a.x, dy = y - a.y, d = Math.sqrt(dx * dx + dy * dy);
       if (d < 26) { d = d || 1; x = a.x + dx / d * 26; y = a.y + dy / d * 26; }
     }
     return clampToField(x, y);
   }
   // ---- Building placement: drag the ghost, then Place or Cancel (refunds) ----
-  function startPlacingTower(cost, x, y) {
-    var c = clampForTower(x, y);
-    placing = { kind: "tower", x: c.x, y: c.y, cost: cost };
+  var BUILDING_LABEL = { tower: "tower", barracks: "barracks" };
+  function startPlacingBuilding(kind, cost, x, y) {
+    var c = clampForBuilding(kind, x, y);
+    placing = { kind: kind, x: c.x, y: c.y, cost: cost };
     document.getElementById("shop-overlay").classList.remove("show");
     document.getElementById("stance-btn").style.display = "none";
     document.getElementById("place-bar").style.display = "flex";
-    tapHintEl.textContent = "Drag to place the tower, then tap Place";
+    document.getElementById("place-confirm-btn").textContent =
+      (kind === "tower" ? "🗼" : "🏚️") + " Place";
+    tapHintEl.textContent = "Drag to place the " + BUILDING_LABEL[kind] + ", then tap Place";
   }
   function endPlacement() {
     placing = null;
@@ -418,8 +473,12 @@
   }
   function confirmPlacement() {
     if (!placing) return;
-    allies.push({ id: allySeq++, kind: "tower", x: placing.x, y: placing.y,
-      cd: Math.random() * 0.5, phase: Math.random() * 6 });
+    if (placing.kind === "barracks") {
+      allies.push({ id: allySeq++, kind: "barracks", x: placing.x, y: placing.y, queue: [] });
+    } else {
+      allies.push({ id: allySeq++, kind: "tower", x: placing.x, y: placing.y,
+        cd: Math.random() * 0.5, phase: Math.random() * 6 });
+    }
     sfxBoon();
     endPlacement();
     openShop();
@@ -427,7 +486,7 @@
   function cancelPlacement() {
     if (!placing) return;
     gold += placing.cost;
-    nTower--;
+    if (placing.kind === "barracks") nBarracks--; else nTower--;
     sfxDeselect();
     updateHud();
     endPlacement();
@@ -442,6 +501,84 @@
       if (d2 < bd) { bd = d2; best = a; }
     }
     return best;
+  }
+  function barracksNear(px, py, r) {
+    var best = null, bd = r * r;
+    for (var i = 0; i < allies.length; i++) {
+      var a = allies[i];
+      if (a.kind !== "barracks") continue;
+      var dx = a.x - px, dy = a.y - py, d2 = dx * dx + dy * dy;
+      if (d2 < bd) { bd = d2; best = a; }
+    }
+    return best;
+  }
+
+  // ---- Barracks training: tap a Barracks to open its panel, tap a troop to
+  // queue it (gold deducted immediately). Production ticks in updateProduction
+  // below, unconditional of pause, so a queue keeps cooking through the shop. ----
+  function openTrainingPanel(id) {
+    selectedBuilding = id;
+    document.getElementById("stance-btn").style.display = "none";
+    document.getElementById("train-panel").style.display = "flex";
+    buildTrainPanelUI();
+    sfxSelect();
+  }
+  function closeTrainingPanel() {
+    selectedBuilding = null;
+    document.getElementById("train-panel").style.display = "none";
+    document.getElementById("stance-btn").style.display = "";
+  }
+  function buildTrainPanelUI() {
+    var bk = findAllyById(selectedBuilding);
+    if (!bk) { closeTrainingPanel(); return; }
+    var keys = Object.keys(TROOPS);
+    for (var i = 0; i < keys.length; i++) {
+      var key = keys[i], t = TROOPS[key];
+      var btn = document.querySelector('.train-btn[data-troop="' + key + '"]');
+      if (!btn) continue;
+      btn.classList.toggle("poor", gold < t.cost);
+      btn.querySelector(".tb-cost").textContent = t.cost;
+    }
+    var badge = document.getElementById("train-queue-badge");
+    if (!bk.queue.length) badge.textContent = "Empty queue";
+    else {
+      var first = TROOPS[bk.queue[0].troop];
+      badge.textContent = first.icon + " " + Math.max(0, Math.ceil(bk.queue[0].t)) + "s" +
+        (bk.queue.length > 1 ? " +" + (bk.queue.length - 1) : "");
+    }
+  }
+  function queueTraining(barracksId, troopKey) {
+    var bk = findAllyById(barracksId);
+    var t = TROOPS[troopKey];
+    if (!bk || bk.kind !== "barracks" || !t) return;
+    if (gold < t.cost || bk.queue.length >= 5) return;
+    gold -= t.cost;
+    bk.queue.push({ troop: troopKey, t: t.time });
+    updateHud();
+    sfxBoon();
+    buildTrainPanelUI();
+  }
+  function spawnTroop(troopKey, bx, by) {
+    // trained troops share the same rally-spread pool as instant-buy footmen
+    // so returning-to-post units never stack, whatever type they are
+    nFoot++;
+    var fa = (nFoot - 1) * 2.399963 + 1.2, fr = KEEP_R + 24;
+    var rx = keepX + Math.cos(fa) * fr, ry = keepY + Math.sin(fa) * fr;
+    allies.push({ id: allySeq++, kind: "foot", troop: troopKey, x: bx, y: by, rallyX: rx, rallyY: ry,
+      cd: 0, phase: Math.random() * 6, face: 1, targetId: null });
+    sfxCommand();
+  }
+  function updateProduction(dt) {
+    for (var i = 0; i < allies.length; i++) {
+      var bk = allies[i];
+      if (bk.kind !== "barracks" || !bk.queue.length) continue;
+      bk.queue[0].t -= dt;
+      if (bk.queue[0].t <= 0) {
+        var done = bk.queue.shift();
+        spawnTroop(done.troop, bk.x, bk.y);
+      }
+    }
+    if (selectedBuilding != null) buildTrainPanelUI(); // keep the countdown live
   }
 
   // ---- Between-band Muster shop ----
@@ -663,6 +800,7 @@
     }
     for (var ai = 0; ai < allies.length; ai++) {
       var al = allies[ai];
+      if (al.kind === "barracks") continue; // production ticks separately, unconditional of pause
       al.cd -= dt;
       if (al.kind === "tower") {
         if (al.cd <= 0) {
@@ -676,8 +814,10 @@
         }
         continue;
       }
-      // ---- footman ----
-      // separation: gently push apart from other footmen so they don't stack
+      // ---- foot troop: footman (default), spearman, archer, catapult ----
+      var troop = al.troop || "footman";
+      var TS = TROOP_STATS[troop];
+      // separation: gently push apart from other foot troops so they don't stack
       var sepx = 0, sepy = 0;
       for (var si = 0; si < allies.length; si++) {
         if (si === ai || allies[si].kind !== "foot") continue;
@@ -704,20 +844,31 @@
       if (tgt) {
         var fx = tgt.x - al.x, fy = tgt.y - al.y, fd = Math.sqrt(fx * fx + fy * fy) || 1;
         al.face = fx > 0 ? 1 : -1;
-        if (fd > TYPES[tgt.type].r + 9) {
-          al.x += fx / fd * 96 * dt; al.y += fy / fd * 96 * dt;
+        var engageRange = TS.range || (TYPES[tgt.type].r + 9);
+        if (fd > engageRange) {
+          al.x += fx / fd * TS.speed * dt; al.y += fy / fd * TS.speed * dt;
           al.phase += dt * 8;
         } else if (al.cd <= 0) {
-          tgt.hp -= 1;
-          puffs.push({ x: (al.x + tgt.x) / 2, y: (al.y + tgt.y) / 2, t: 0 });
-          sfxThock(tgt.type);
-          al.cd = 0.5;
-          if (tgt.hp <= 0) { tgt.state = "down"; tgt.t = 0; kills++; gold += goldFor(tgt.type); al.targetId = null; }
+          if (troop === "archer") {
+            arrows.push({ x: al.x, y: al.y - 8, vx: fx / fd * ARROW_SPEED, vy: fy / fd * ARROW_SPEED,
+              life: engageRange / ARROW_SPEED + 0.3, pierce: 0, hit: [], dmg: 1, src: "ally" });
+            al.cd = TS.fireCd;
+            sfxTwang();
+          } else if (troop === "catapult") {
+            bombs.push({ ox: al.x, oy: al.y - 8, tx: tgt.x, ty: tgt.y, t: 0, dur: 0.55, dmg: TS.dmg, splash: TS.splash });
+            al.cd = TS.fireCd;
+          } else {
+            tgt.hp -= TS.dmg;
+            puffs.push({ x: (al.x + tgt.x) / 2, y: (al.y + tgt.y) / 2, t: 0 });
+            sfxThock(tgt.type);
+            al.cd = TS.meleeCd;
+            if (tgt.hp <= 0) { tgt.state = "down"; tgt.t = 0; kills++; gold += goldFor(tgt.type); al.targetId = null; }
+          }
         }
       } else {
         // no target: return to this unit's post (auto-assigned, or player-chosen)
         var hx = al.rallyX - al.x, hy = al.rallyY - al.y, hd = Math.sqrt(hx * hx + hy * hy) || 1;
-        if (hd > 6) { al.x += hx / hd * 55 * dt; al.y += hy / hd * 55 * dt; al.phase += dt * 5; }
+        if (hd > 6) { al.x += hx / hd * TS.speed * dt; al.y += hy / hd * TS.speed * dt; al.phase += dt * 5; }
       }
     }
 
@@ -757,6 +908,27 @@
         }
       }
       if (remove || ar.life <= 0 || ar.x < -20 || ar.x > W + 20 || ar.y < -20 || ar.y > H + 20) arrows.splice(a, 1);
+    }
+
+    // catapult shells: lob for `dur` seconds, then splash-damage every raider
+    // within `splash` px of the target point — good vs clumps, wasted on loners
+    for (var bi = bombs.length - 1; bi >= 0; bi--) {
+      var bm = bombs[bi];
+      bm.t += dt;
+      if (bm.t >= bm.dur) {
+        for (var rj = 0; rj < raiders.length; rj++) {
+          var rr2 = raiders[rj];
+          if (rr2.state !== "march") continue;
+          var bdx = rr2.x - bm.tx, bdy = rr2.y - bm.ty;
+          if (bdx * bdx + bdy * bdy < bm.splash * bm.splash) {
+            rr2.hp -= bm.dmg;
+            if (rr2.hp <= 0) { rr2.state = "down"; rr2.t = 0; kills++; gold += goldFor(rr2.type); }
+          }
+        }
+        puffs.push({ x: bm.tx, y: bm.ty, t: 0, splash: true });
+        sfxThock("brute");
+        bombs.splice(bi, 1);
+      }
     }
 
     for (var p = puffs.length - 1; p >= 0; p--) { puffs[p].t += dt; if (puffs[p].t > 0.4) puffs.splice(p, 1); }
@@ -927,7 +1099,9 @@
     ctx.save();
     ctx.translate(al.x, al.y);
     ctx.fillStyle = "rgba(0,0,0,0.22)";
-    ctx.beginPath(); ctx.ellipse(0, al.kind === "tower" ? 12 : 9, al.kind === "tower" ? 9 : 6, 3, 0, 0, Math.PI * 2); ctx.fill();
+    var shadowRy = (al.kind === "tower" || al.kind === "barracks") ? 12 : 9;
+    var shadowRx = al.kind === "barracks" ? 12 : (al.kind === "tower" ? 9 : 6);
+    ctx.beginPath(); ctx.ellipse(0, shadowRy, shadowRx, 3, 0, 0, Math.PI * 2); ctx.fill();
     if (al.kind === "tower") {
       // stout stone watchtower with a teal banner
       ctx.fillStyle = "#6a7182";
@@ -941,34 +1115,68 @@
       ctx.beginPath(); ctx.moveTo(0, -22); ctx.lineTo(0, -30); ctx.stroke();
       ctx.fillStyle = "#5dd6c0";
       ctx.beginPath(); ctx.moveTo(0, -30); ctx.lineTo(7, -28); ctx.lineTo(0, -25.5); ctx.closePath(); ctx.fill();
+    } else if (al.kind === "barracks") {
+      // squat timber training hall with a peaked roof and the same teal banner
+      ctx.fillStyle = "#5a4636";
+      ctx.beginPath(); ctx.roundRect(-12, -10, 24, 20, 3); ctx.fill();
+      ctx.fillStyle = "#6b5540";
+      ctx.beginPath(); ctx.moveTo(-14, -10); ctx.lineTo(0, -21); ctx.lineTo(14, -10); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = "#2a2018";
+      ctx.beginPath(); ctx.roundRect(-3, -2, 6, 12, 2); ctx.fill();
+      ctx.strokeStyle = "#2c3038"; ctx.lineWidth = 1.4;
+      ctx.beginPath(); ctx.moveTo(0, -21); ctx.lineTo(0, -29); ctx.stroke();
+      ctx.fillStyle = "#5dd6c0";
+      ctx.beginPath(); ctx.moveTo(0, -29); ctx.lineTo(7, -27); ctx.lineTo(0, -24.5); ctx.closePath(); ctx.fill();
     } else {
-      // footman: teal tabard, spear
+      // foot troop: footman (default), spearman, archer, or catapult
+      var troop = al.troop || "footman";
       var bob = Math.sin(al.phase * 2) * 1.2;
       ctx.scale(al.face || 1, 1);
-      ctx.strokeStyle = "#c9b28a"; ctx.lineWidth = 1.6; ctx.lineCap = "round";
-      ctx.beginPath(); ctx.moveTo(4, -12 - bob); ctx.lineTo(9, 6); ctx.stroke();
-      ctx.fillStyle = "#d7dbe4";
-      ctx.beginPath(); ctx.moveTo(4, -12 - bob); ctx.lineTo(2.5, -15 - bob); ctx.lineTo(6, -13.5 - bob); ctx.closePath(); ctx.fill();
-      ctx.fillStyle = "#357068";
-      ctx.beginPath(); ctx.roundRect(-4, -8 - bob, 8, 13, 3); ctx.fill();
-      ctx.fillStyle = "#e8d4b8";
-      ctx.beginPath(); ctx.arc(0, -11 - bob, 3.4, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = "#5b6472";
-      ctx.beginPath(); ctx.arc(0, -12.4 - bob, 3.4, Math.PI, 0); ctx.fill();
+      if (troop === "catapult") {
+        // low wheeled siege engine — no bob, sits on the ground
+        ctx.fillStyle = "#6b5540";
+        ctx.beginPath(); ctx.roundRect(-8, -4, 16, 7, 2); ctx.fill();
+        ctx.strokeStyle = "#3a3028"; ctx.lineWidth = 1.6;
+        ctx.beginPath(); ctx.arc(-5, 4, 3.4, 0, Math.PI * 2); ctx.stroke();
+        ctx.beginPath(); ctx.arc(5, 4, 3.4, 0, Math.PI * 2); ctx.stroke();
+        ctx.strokeStyle = "#c9b28a"; ctx.lineWidth = 2; ctx.lineCap = "round";
+        ctx.beginPath(); ctx.moveTo(-2, -4); ctx.lineTo(6, -16); ctx.stroke();
+        ctx.fillStyle = "#5a4636";
+        ctx.beginPath(); ctx.arc(6, -16, 3, 0, Math.PI * 2); ctx.fill();
+      } else {
+        var isSpear = troop === "spearman", isArcher = troop === "archer";
+        if (isArcher) {
+          ctx.strokeStyle = "#c9b28a"; ctx.lineWidth = 1.6;
+          ctx.beginPath(); ctx.arc(6, -9 - bob, 5, -1.1, 1.1); ctx.stroke();
+        } else {
+          ctx.strokeStyle = "#c9b28a"; ctx.lineWidth = isSpear ? 2.1 : 1.6; ctx.lineCap = "round";
+          ctx.beginPath(); ctx.moveTo(4, -12 - bob); ctx.lineTo(isSpear ? 12 : 9, 6); ctx.stroke();
+          ctx.fillStyle = "#d7dbe4";
+          ctx.beginPath(); ctx.moveTo(4, -12 - bob); ctx.lineTo(2.5, -15 - bob); ctx.lineTo(6, -13.5 - bob); ctx.closePath(); ctx.fill();
+        }
+        ctx.fillStyle = isSpear ? "#5a3a3e" : (isArcher ? "#7a6a48" : "#357068");
+        ctx.beginPath(); ctx.roundRect(-4, -8 - bob, 8, 13, 3); ctx.fill();
+        ctx.fillStyle = "#e8d4b8";
+        ctx.beginPath(); ctx.arc(0, -11 - bob, 3.4, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = isSpear ? "#4a5568" : (isArcher ? "#6b5a3a" : "#5b6472");
+        ctx.beginPath(); ctx.arc(0, -12.4 - bob, 3.4, Math.PI, 0); ctx.fill();
+      }
     }
     ctx.restore();
   }
 
   function drawPlacementGhost() {
     var x = placing.x, y = placing.y;
-    ctx.strokeStyle = "rgba(93,214,192,0.35)";
-    ctx.setLineDash([4, 5]);
-    ctx.lineWidth = 1.2;
-    ctx.beginPath(); ctx.arc(x, y, TOWER_RANGE, 0, Math.PI * 2); ctx.stroke();
-    ctx.setLineDash([]);
+    if (placing.kind === "tower") {
+      ctx.strokeStyle = "rgba(93,214,192,0.35)";
+      ctx.setLineDash([4, 5]);
+      ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.arc(x, y, TOWER_RANGE, 0, Math.PI * 2); ctx.stroke();
+      ctx.setLineDash([]);
+    }
     ctx.save();
     ctx.globalAlpha = 0.55;
-    drawAlly({ kind: "tower", x: x, y: y });
+    drawAlly({ kind: placing.kind, x: x, y: y });
     ctx.restore();
   }
 
@@ -999,6 +1207,16 @@
     }
     ctx.fillStyle = "rgba(93,214,192,0.85)";
     ctx.beginPath(); ctx.arc(al.rallyX, al.rallyY, 3, 0, Math.PI * 2); ctx.fill();
+  }
+
+  function drawBuildingSelection() {
+    if (selectedBuilding == null) return;
+    var bk = findAllyById(selectedBuilding);
+    if (!bk) return;
+    var pulse = 0.5 + 0.5 * Math.sin(elapsed * 5);
+    ctx.strokeStyle = "rgba(93,214,192," + (0.55 + 0.35 * pulse).toFixed(2) + ")";
+    ctx.lineWidth = 1.8;
+    ctx.beginPath(); ctx.ellipse(bk.x, bk.y + 12, 14, 5, 0, 0, Math.PI * 2); ctx.stroke();
   }
 
   function drawRaider(r) {
@@ -1091,18 +1309,35 @@
     ctx.restore();
   }
 
+  function drawBomb(bm) {
+    var k = Math.min(1, bm.t / bm.dur);
+    var x = bm.ox + (bm.tx - bm.ox) * k, y = bm.oy + (bm.ty - bm.oy) * k;
+    var hump = Math.sin(k * Math.PI) * 26;
+    ctx.fillStyle = "#7a7f8c";
+    ctx.beginPath(); ctx.arc(x, y - hump, 3.6, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "rgba(0,0,0,0.3)"; ctx.lineWidth = 1; ctx.stroke();
+  }
+
   function render() {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     drawGround();
     drawKeep();
     for (var ci = 0; ci < allies.length; ci++) drawAlly(allies[ci]);
-    if (placing) drawPlacementGhost(); else drawSelection();
+    if (placing) { drawPlacementGhost(); } else { drawSelection(); drawBuildingSelection(); }
     // draw order: downed first, then marching/fleeing by y, arrows, horse
     var byY = raiders.slice().sort(function (a, b) { return (a.state === "down" ? -1e6 : a.y) - (b.state === "down" ? -1e6 : b.y); });
     for (var i = 0; i < byY.length; i++) drawRaider(byY[i]);
     for (var a = 0; a < arrows.length; a++) drawArrow(arrows[a]);
+    for (var bx = 0; bx < bombs.length; bx++) drawBomb(bombs[bx]);
     for (var p = 0; p < puffs.length; p++) {
       var pf = puffs[p], k = pf.t / 0.4;
+      if (pf.splash) {
+        // a wide, fast-fading ring for a catapult impact
+        ctx.strokeStyle = "rgba(230,180,120," + (0.5 * (1 - k)).toFixed(2) + ")";
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(pf.x, pf.y, 6 + k * 34, 0, Math.PI * 2); ctx.stroke();
+        continue;
+      }
       if (pf.dodge) {
         // a light "whiff" dash beside the raider who slipped the arrow
         ctx.strokeStyle = "rgba(150,200,240," + (0.6 * (1 - k)).toFixed(2) + ")";
@@ -1135,6 +1370,7 @@
     if (!lastT) lastT = t;
     var dt = Math.min(0.05, (t - lastT) / 1000);
     lastT = t;
+    if (!over) updateProduction(dt); // barracks queues keep cooking even through the shop
     if (!over && !paused) update(dt);
     render();
     rafId = requestAnimationFrame(loop);
@@ -1161,6 +1397,15 @@
   // future selectables (the castle for repair, a tower for upgrades) will use. ----
   function selectUnit(u) { selectedUnit = u; updateTapHint(); }
   function handleTap(p) {
+    // a Barracks is stationary — tapping it just opens/closes its training
+    // panel, it's never a move-order target for anything else
+    var underBarracks = barracksNear(p.x, p.y, 20);
+    if (underBarracks) {
+      if (selectedBuilding === underBarracks.id) closeTrainingPanel();
+      else openTrainingPanel(underBarracks.id);
+      player.tx = player.x; player.ty = player.y; // cancel any nudge from this tap
+      return;
+    }
     var underFoot = footmanNear(p.x, p.y, 18);
     var target = underFoot ? underFoot.id : (isOnHorse(p) ? "horse" : null);
     if (target != null) {
@@ -1178,8 +1423,11 @@
         return; // stays selected — RTS-style, so further taps keep re-posting this unit
       }
     }
-    // nothing meaningful to do here — deselect all
-    if (selectedUnit !== null) { selectUnit(null); sfxDeselect(); }
+    // nothing meaningful to do here — deselect/close everything
+    var didSomething = false;
+    if (selectedBuilding != null) { closeTrainingPanel(); didSomething = true; }
+    if (selectedUnit !== null) { selectUnit(null); didSomething = true; }
+    if (didSomething) sfxDeselect();
   }
   canvas.addEventListener("pointerdown", function (e) {
     e.preventDefault();
@@ -1187,7 +1435,7 @@
     audio();
     var p = posFromEvent(e);
     if (placing) {
-      var pc = clampForTower(p.x, p.y); placing.x = pc.x; placing.y = pc.y;
+      var pc = clampForBuilding(placing.kind, p.x, p.y); placing.x = pc.x; placing.y = pc.y;
       try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
       return;
     }
@@ -1199,7 +1447,7 @@
   canvas.addEventListener("pointermove", function (e) {
     if (over) return;
     var p = posFromEvent(e);
-    if (placing) { e.preventDefault(); var pc2 = clampForTower(p.x, p.y); placing.x = pc2.x; placing.y = pc2.y; return; }
+    if (placing) { e.preventDefault(); var pc2 = clampForBuilding(placing.kind, p.x, p.y); placing.x = pc2.x; placing.y = pc2.y; return; }
     if (!steering) return;
     e.preventDefault();
     if (Math.abs(p.x - downX) > 8 || Math.abs(p.y - downY) > 8) downMoved = true;
@@ -1225,6 +1473,13 @@
   stanceBtn.addEventListener("click", function (e) { e.preventDefault(); if (!over) toggleStance(); });
   document.getElementById("place-confirm-btn").addEventListener("click", function (e) { e.preventDefault(); confirmPlacement(); });
   document.getElementById("place-cancel-btn").addEventListener("click", function (e) { e.preventDefault(); cancelPlacement(); });
+  var trainBtns = document.querySelectorAll(".train-btn");
+  for (var tbi = 0; tbi < trainBtns.length; tbi++) {
+    trainBtns[tbi].addEventListener("click", function (e) {
+      e.preventDefault();
+      if (selectedBuilding != null) queueTraining(selectedBuilding, this.dataset.troop);
+    });
+  }
 
   document.addEventListener("keydown", function (e) {
     if (over) return;
@@ -1280,11 +1535,12 @@
 
   // ---- Lifecycle ----
   function newGame() {
-    raiders = []; arrows = []; puffs = []; allies = [];
+    raiders = []; arrows = []; bombs = []; puffs = []; allies = [];
     hearts = HEARTS_MAX;
     wave = 1; kills = 0;
-    gold = 0; income = 2; nFoot = 0; nTower = 0; nGranary = 0;
+    gold = 0; income = 2; nFoot = 0; nTower = 0; nGranary = 0; nBarracks = 0;
     selectedUnit = "horse"; updateTapHint();
+    if (selectedBuilding != null) closeTrainingPanel();
     if (placing) endPlacement();
     breatherT = 0; cleared = false; paused = false;
     stat = { range: BASE.range, speed: BASE.speed, fireCd: BASE.fireCd, volley: BASE.volley, pierce: BASE.pierce, dmg: BASE.dmg };
@@ -1307,19 +1563,23 @@
     buy: function (id) { for (var i = 0; i < SHOP.length; i++) if (SHOP[i].id === id) { buyItem(SHOP[i]); return; } },
     march: function () { if (paused) march(); },
     tap: function (x, y) { handleTap({ x: x, y: y }); },
-    dragGhost: function (x, y) { if (placing) { var c = clampForTower(x, y); placing.x = c.x; placing.y = c.y; } },
+    dragGhost: function (x, y) { if (placing) { var c = clampForBuilding(placing.kind, x, y); placing.x = c.x; placing.y = c.y; } },
+    tapBarracks: function (id) { if (selectedBuilding === id) closeTrainingPanel(); else openTrainingPanel(id); },
+    trainAt: function (barracksId, troop) { queueTraining(barracksId, troop); },
     confirmPlace: function () { confirmPlacement(); },
     cancelPlace: function () { cancelPlacement(); },
     state: function () {
       return { wave: wave, kills: kills, hearts: hearts, over: over, paused: paused, gold: gold, income: income,
         stance: stance, bowScore: Math.round(bowScore * 10) / 10, lanceScore: Math.round(lanceScore * 10) / 10,
-        allies: { foot: nFoot, tower: nTower, granary: nGranary },
-        selected: selectedUnit,
-        placing: placing ? { x: Math.round(placing.x), y: Math.round(placing.y), cost: placing.cost } : null,
+        allies: { foot: nFoot, tower: nTower, granary: nGranary, barracks: nBarracks },
+        selected: selectedUnit, selectedBuilding: selectedBuilding,
+        placing: placing ? { kind: placing.kind, x: Math.round(placing.x), y: Math.round(placing.y), cost: placing.cost } : null,
         tower: allies.filter(function (a) { return a.kind === "tower"; })
           .map(function (a) { return { id: a.id, x: Math.round(a.x), y: Math.round(a.y) }; }),
+        barracks: allies.filter(function (a) { return a.kind === "barracks"; })
+          .map(function (a) { return { id: a.id, x: Math.round(a.x), y: Math.round(a.y), queue: a.queue.map(function (q) { return { troop: q.troop, t: Math.round(q.t * 10) / 10 }; }) }; }),
         foot: allies.filter(function (a) { return a.kind === "foot"; })
-          .map(function (a) { return { id: a.id, x: Math.round(a.x), y: Math.round(a.y), t: a.targetId, rx: Math.round(a.rallyX), ry: Math.round(a.rallyY) }; }),
+          .map(function (a) { return { id: a.id, troop: a.troop || "footman", x: Math.round(a.x), y: Math.round(a.y), t: a.targetId, rx: Math.round(a.rallyX), ry: Math.round(a.rallyY) }; }),
         stat: { range: stat.range, speed: stat.speed, fireCd: stat.fireCd, volley: stat.volley, pierce: stat.pierce, dmg: stat.dmg },
         raiders: raiders.filter(function (r) { return r.state === "march"; })
           .map(function (r) { return { x: Math.round(r.x), y: Math.round(r.y), type: r.type }; }),
