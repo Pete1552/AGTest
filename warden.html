@@ -107,7 +107,7 @@
     </div>
     <div class="how">
       <p class="how-title">How to play</p>
-      <p class="body">You are the keep's mounted warden. Drag to ride; charging raiders that reach the gate steal a heart, so meet them in the field. Tap the stance button to switch weapon: <b>Bow</b> shoots at range on its own, while the <b>Lance</b> cuts down anyone you ride through (no arrows — you must dive in). The enemy adapts to whatever you favour: lean on the bow and they send <b>skirmishers</b>, who dodge most arrows but fall to the lance; lean on the lance and they send <b>pikemen</b>, who brace against a charge but are soft to arrows. <b>Shieldbearers</b> block both weapons from the front — flank them. <b>Brutes</b> just soak hits. Every repelled raider drops <b>gold</b>. Between bands, spend it in the Muster: raise <b>Footmen</b> who roam and fight, build <b>Watchtowers</b> that guard the keep, invest in a <b>Granary</b> for more gold each band, or sharpen the warden — then march. Only one unit answers your touch at a time: tap a footman to select it and tap the field to post them somewhere new — handy for covering a second approach — but while a footman is selected the horse holds her ground. Tap the horse to take the reins back before you can ride again. Survive as long as you can.</p>
+      <p class="body">You are the keep's mounted warden. Drag to ride; charging raiders that reach the gate steal a heart, so meet them in the field. Tap the stance button to switch weapon: <b>Bow</b> shoots at range on its own, while the <b>Lance</b> cuts down anyone you ride through (no arrows — you must dive in). The enemy adapts to whatever you favour: lean on the bow and they send <b>skirmishers</b>, who dodge most arrows but fall to the lance; lean on the lance and they send <b>pikemen</b>, who brace against a charge but are soft to arrows. <b>Shieldbearers</b> block both weapons from the front — flank them. <b>Brutes</b> just soak hits. Every repelled raider drops <b>gold</b>. Between bands, spend it in the Muster: raise <b>Footmen</b> who roam and fight, build <b>Watchtowers</b> that guard the keep, invest in a <b>Granary</b> for more gold each band, or sharpen the warden — then march. Only one unit answers your touch at a time: tap a footman to select it and tap the field to post them somewhere new — handy for covering a second approach — but while a footman is selected the horse holds her ground. Tap empty ground to deselect whatever's selected, or tap the horse to take the reins back before you can ride again. Survive as long as you can.</p>
     </div>
     <button id="settings-share" class="share">Share the game</button>
     <button id="settings-close" class="ghost-btn">Done</button>
@@ -115,7 +115,7 @@
   </div>
 </div>
 
-<script src="leaderboard.js?v=33"></script>
+<script src="leaderboard.js?v=34"></script>
 <script>
 (function () {
   "use strict";
@@ -230,6 +230,7 @@
   var DEFAULT_HINT = tapHintEl.textContent;
   function updateTapHint() {
     tapHintEl.textContent = selectedUnit === "horse" ? DEFAULT_HINT
+      : selectedUnit == null ? "Nothing selected — tap the horse to ride, or a footman to command them"
       : "Footman selected — tap the field to post them, tap the horse to ride again";
   }
   var waveEl = document.getElementById("wave");
@@ -886,6 +887,7 @@
   }
 
   function drawSelection() {
+    if (selectedUnit == null) return; // nothing selected, nothing to highlight
     var pulse = 0.5 + 0.5 * Math.sin(elapsed * 5);
     if (selectedUnit === "horse") {
       // ring under the warden — only she answers to the drag while this shows
@@ -1063,31 +1065,35 @@
     var dx = p.x - player.x, dy = p.y - player.y;
     return dx * dx + dy * dy < 20 * 20;
   }
-  // ---- RTS-style selection: tap a unit to select it (only the selected unit
-  // answers to the drag); tap the field to give the selected footman a new
-  // post; tap the warden herself to take the reins back. ----
+  // ---- RTS-style selection: tap any unit (horse or footman) to select it —
+  // only the selected unit answers to the drag. Tap that same unit again to
+  // deselect it outright (nothing selected, same as clicking empty ground in
+  // any RTS — it does NOT fall back to the horse for you). Tap the field to
+  // give a selected footman a new post; tap empty ground with nothing that
+  // can be posted there clears the selection. This is the same vocabulary
+  // future selectables (the castle for repair, a tower for upgrades) will use. ----
+  function selectUnit(u) { selectedUnit = u; updateTapHint(); }
   function handleTap(p) {
     var underFoot = footmanNear(p.x, p.y, 18);
-    if (underFoot) {
-      if (selectedUnit === underFoot.id) { selectedUnit = "horse"; sfxDeselect(); }
-      else { selectedUnit = underFoot.id; sfxSelect(); }
+    var target = underFoot ? underFoot.id : (isOnHorse(p) ? "horse" : null);
+    if (target != null) {
+      if (selectedUnit === target) { selectUnit(null); sfxDeselect(); }
+      else { selectUnit(target); sfxSelect(); }
       player.tx = player.x; player.ty = player.y; // cancel any nudge from this selection tap
-      updateTapHint();
       return;
     }
-    if (isOnHorse(p)) {
-      if (selectedUnit !== "horse") { selectedUnit = "horse"; sfxSelect(); updateTapHint(); }
-      return;
-    }
-    if (selectedUnit !== "horse") {
+    // empty field — no unit here
+    if (selectedUnit !== "horse" && selectedUnit != null) {
       var al = findAllyById(selectedUnit);
       if (al) {
         var c = clampToField(p.x, p.y);
         al.rallyX = c.x; al.rallyY = c.y;
         sfxCommand();
+        return; // stays selected — RTS-style, so further taps keep re-posting this unit
       }
-      // stays selected — RTS-style, so further taps keep re-posting this unit
     }
+    // nothing meaningful to do here — deselect all
+    if (selectedUnit !== null) { selectUnit(null); sfxDeselect(); }
   }
   canvas.addEventListener("pointerdown", function (e) {
     e.preventDefault();
