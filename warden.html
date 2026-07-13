@@ -35,6 +35,20 @@
   }
   .stance-btn:active { transform: translateX(-50%) translateY(1px) scale(0.97); }
   .stance-btn.lance { background: #d7a35a; }
+  .place-bar {
+    position: absolute; left: 0; right: 0; bottom: 12px;
+    display: flex; justify-content: center; gap: 10px;
+  }
+  .place-btn {
+    border: none; cursor: pointer; font-weight: 800; font-size: 13.5px;
+    border-radius: 999px; padding: 10px 18px; font-family: var(--font-display);
+    box-shadow: 0 4px 14px rgba(0,0,0,0.4);
+    transition: transform 100ms ease;
+    -webkit-user-select: none; user-select: none; touch-action: manipulation;
+  }
+  .place-btn:active { transform: translateY(1px) scale(0.97); }
+  .place-btn.confirm { background: var(--accent); color: #06231e; }
+  .place-btn.cancel { background: var(--grid); color: var(--ink); }
   .draft-sub { text-align: center; color: var(--muted); font-size: 12.5px; margin: -4px 0 10px; }
   .modal.shop { max-height: 88vh; display: flex; flex-direction: column; }
   .shop-head { display: flex; align-items: center; justify-content: space-between; }
@@ -85,6 +99,10 @@
   <div class="play-area">
     <canvas id="stage"></canvas>
     <button id="stance-btn" class="stance-btn" aria-label="Switch stance">🏹 Bow</button>
+    <div id="place-bar" class="place-bar" style="display:none">
+      <button id="place-confirm-btn" class="place-btn confirm" aria-label="Place tower">🗼 Place</button>
+      <button id="place-cancel-btn" class="place-btn cancel" aria-label="Cancel">✕ Cancel</button>
+    </div>
   </div>
   <div class="tap-hint" id="tap-hint">Drag to ride · tap the button to switch bow / lance</div>
 </div>
@@ -107,7 +125,7 @@
     </div>
     <div class="how">
       <p class="how-title">How to play</p>
-      <p class="body">You are the keep's mounted warden. Drag to ride; charging raiders that reach the gate steal a heart, so meet them in the field. Tap the stance button to switch weapon: <b>Bow</b> shoots at range on its own, while the <b>Lance</b> cuts down anyone you ride through (no arrows — you must dive in). The enemy adapts to whatever you favour: lean on the bow and they send <b>skirmishers</b>, who dodge most arrows but fall to the lance; lean on the lance and they send <b>pikemen</b>, who brace against a charge but are soft to arrows. <b>Shieldbearers</b> block both weapons from the front — flank them. <b>Brutes</b> just soak hits. Every repelled raider drops <b>gold</b>. Between bands, spend it in the Muster: raise <b>Footmen</b> who roam and fight, build <b>Watchtowers</b> that guard the keep, invest in a <b>Granary</b> for more gold each band, or sharpen the warden — then march. Only one unit answers your touch at a time: tap a footman to select it and tap the field to post them somewhere new — handy for covering a second approach — but while a footman is selected the horse holds her ground. Tap empty ground to deselect whatever's selected, or tap the horse to take the reins back before you can ride again. Survive as long as you can.</p>
+      <p class="body">You are the keep's mounted warden. Drag to ride; charging raiders that reach the gate steal a heart, so meet them in the field. Tap the stance button to switch weapon: <b>Bow</b> shoots at range on its own, while the <b>Lance</b> cuts down anyone you ride through (no arrows — you must dive in). The enemy adapts to whatever you favour: lean on the bow and they send <b>skirmishers</b>, who dodge most arrows but fall to the lance; lean on the lance and they send <b>pikemen</b>, who brace against a charge but are soft to arrows. <b>Shieldbearers</b> block both weapons from the front — flank them. <b>Brutes</b> just soak hits. Every repelled raider drops <b>gold</b>. Between bands, spend it in the Muster: raise <b>Footmen</b> who roam and fight, invest in a <b>Granary</b> for more gold each band, or sharpen the warden — or build a <b>Watchtower</b>, which you drag into place yourself before confirming, so you can wall off exactly the approach that's giving you trouble. Then march. Only one unit answers your touch at a time: tap a footman to select it and tap the field to post them somewhere new — handy for covering a second approach — but while a footman is selected the horse holds her ground. Tap empty ground to deselect whatever's selected, or tap the horse to take the reins back before you can ride again. Survive as long as you can.</p>
     </div>
     <button id="settings-share" class="share">Share the game</button>
     <button id="settings-close" class="ghost-btn">Done</button>
@@ -115,7 +133,7 @@
   </div>
 </div>
 
-<script src="leaderboard.js?v=35"></script>
+<script src="leaderboard.js?v=36"></script>
 <script>
 (function () {
   "use strict";
@@ -160,6 +178,8 @@
   var gold = 0, income = 2;
   var nFoot = 0, nTower = 0, nGranary = 0;
   var allies = [];  // {kind:"foot"|"tower", x, y, ...}
+  var placing = null; // { kind:"tower", x, y, cost } while dragging a bought building into place
+  var TOWER_RANGE = 120;
   function goldFor(type) { return type === "brute" ? 4 : (type === "shield" || type === "pikeman") ? 2 : 1; }
 
   // The Muster shop. Each item: category, dynamic cost/desc, avail(), buy().
@@ -171,10 +191,14 @@
       avail: function () { return nFoot < 8; },
       buy: function () { nFoot++; spawnAlly("foot"); } },
     { id: "tower",  cat: "Defenses", icon: "🗼", name: "Watchtower",
-      desc: function () { return "A fixed tower that shoots nearby raiders"; },
+      desc: function () { return "A fixed tower that shoots nearby raiders — you place it"; },
       cost: function () { return 7 + nTower * 4; },
       avail: function () { return nTower < 8; },
-      buy: function () { nTower++; spawnAlly("tower"); } },
+      buy: function (paid) {
+        nTower++;
+        var ang = (nTower - 1) * 2.399963, rr = KEEP_R + 34; // sensible starting spot, drag it anywhere
+        startPlacingTower(paid, keepX + Math.cos(ang) * rr, keepY + Math.sin(ang) * rr);
+      } },
     { id: "granary", cat: "Estate", icon: "🌾", name: "Granary",
       desc: function () { return "+2 gold income every band (now +" + income + ")"; },
       cost: function () { return 6 + nGranary * 3; },
@@ -365,6 +389,50 @@
     }
     return { x: x, y: y };
   }
+  // Same field/keep clamp, plus a nudge off any existing tower so new ones
+  // never land exactly on top of one another.
+  function clampForTower(x, y) {
+    var c = clampToField(x, y);
+    x = c.x; y = c.y;
+    for (var i = 0; i < allies.length; i++) {
+      var a = allies[i];
+      if (a.kind !== "tower") continue;
+      var dx = x - a.x, dy = y - a.y, d = Math.sqrt(dx * dx + dy * dy);
+      if (d < 26) { d = d || 1; x = a.x + dx / d * 26; y = a.y + dy / d * 26; }
+    }
+    return clampToField(x, y);
+  }
+  // ---- Building placement: drag the ghost, then Place or Cancel (refunds) ----
+  function startPlacingTower(cost, x, y) {
+    var c = clampForTower(x, y);
+    placing = { kind: "tower", x: c.x, y: c.y, cost: cost };
+    document.getElementById("shop-overlay").classList.remove("show");
+    document.getElementById("stance-btn").style.display = "none";
+    document.getElementById("place-bar").style.display = "flex";
+    tapHintEl.textContent = "Drag to place the tower, then tap Place";
+  }
+  function endPlacement() {
+    placing = null;
+    document.getElementById("place-bar").style.display = "none";
+    document.getElementById("stance-btn").style.display = "";
+  }
+  function confirmPlacement() {
+    if (!placing) return;
+    allies.push({ id: allySeq++, kind: "tower", x: placing.x, y: placing.y,
+      cd: Math.random() * 0.5, phase: Math.random() * 6 });
+    sfxBoon();
+    endPlacement();
+    openShop();
+  }
+  function cancelPlacement() {
+    if (!placing) return;
+    gold += placing.cost;
+    nTower--;
+    sfxDeselect();
+    updateHud();
+    endPlacement();
+    openShop();
+  }
   function footmanNear(px, py, r) {
     var best = null, bd = r * r;
     for (var i = 0; i < allies.length; i++) {
@@ -406,8 +474,9 @@
     var c = s.cost();
     if (gold < c || !s.avail()) return;
     gold -= c;
-    s.buy();
+    s.buy(c);
     sfxBoon();
+    updateHud();
     buildShopUI(); // refresh costs/affordability
   }
   function openShop() {
@@ -421,6 +490,7 @@
     paused = false;
     wave++;
     gold += income; // estate income at the start of each band
+    updateHud();
     startWave();
   }
 
@@ -596,11 +666,11 @@
       al.cd -= dt;
       if (al.kind === "tower") {
         if (al.cd <= 0) {
-          var tt2 = nearestMarcher(al.x, al.y, 120);
+          var tt2 = nearestMarcher(al.x, al.y, TOWER_RANGE);
           if (tt2) {
             var tx = tt2.x - al.x, ty = tt2.y - al.y, td = Math.sqrt(tx * tx + ty * ty) || 1;
             arrows.push({ x: al.x, y: al.y - 6, vx: tx / td * ARROW_SPEED, vy: ty / td * ARROW_SPEED,
-              life: 120 / ARROW_SPEED + 0.3, pierce: 0, hit: [], dmg: 1, src: "tower" });
+              life: TOWER_RANGE / ARROW_SPEED + 0.3, pierce: 0, hit: [], dmg: 1, src: "tower" });
             al.cd = 0.9;
           }
         }
@@ -699,6 +769,9 @@
     }
     if (announceT > 0) announceT -= dt;
 
+    updateHud();
+  }
+  function updateHud() {
     waveEl.textContent = String(wave);
     goldEl.textContent = String(gold);
   }
@@ -886,6 +959,19 @@
     ctx.restore();
   }
 
+  function drawPlacementGhost() {
+    var x = placing.x, y = placing.y;
+    ctx.strokeStyle = "rgba(93,214,192,0.35)";
+    ctx.setLineDash([4, 5]);
+    ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.arc(x, y, TOWER_RANGE, 0, Math.PI * 2); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.save();
+    ctx.globalAlpha = 0.55;
+    drawAlly({ kind: "tower", x: x, y: y });
+    ctx.restore();
+  }
+
   function drawSelection() {
     if (selectedUnit == null) return; // nothing selected, nothing to highlight
     var pulse = 0.5 + 0.5 * Math.sin(elapsed * 5);
@@ -1010,7 +1096,7 @@
     drawGround();
     drawKeep();
     for (var ci = 0; ci < allies.length; ci++) drawAlly(allies[ci]);
-    drawSelection();
+    if (placing) drawPlacementGhost(); else drawSelection();
     // draw order: downed first, then marching/fleeing by y, arrows, horse
     var byY = raiders.slice().sort(function (a, b) { return (a.state === "down" ? -1e6 : a.y) - (b.state === "down" ? -1e6 : b.y); });
     for (var i = 0; i < byY.length; i++) drawRaider(byY[i]);
@@ -1099,20 +1185,28 @@
     e.preventDefault();
     if (over) return;
     audio();
-    steering = true;
     var p = posFromEvent(e);
+    if (placing) {
+      var pc = clampForTower(p.x, p.y); placing.x = pc.x; placing.y = pc.y;
+      try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+      return;
+    }
+    steering = true;
     downX = p.x; downY = p.y; downMoved = false;
     if (selectedUnit === "horse") { player.tx = p.x; player.ty = p.y; }
     try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
   });
   canvas.addEventListener("pointermove", function (e) {
-    if (!steering || over) return;
-    e.preventDefault();
+    if (over) return;
     var p = posFromEvent(e);
+    if (placing) { e.preventDefault(); var pc2 = clampForTower(p.x, p.y); placing.x = pc2.x; placing.y = pc2.y; return; }
+    if (!steering) return;
+    e.preventDefault();
     if (Math.abs(p.x - downX) > 8 || Math.abs(p.y - downY) > 8) downMoved = true;
     if (selectedUnit === "horse") { player.tx = p.x; player.ty = p.y; }
   });
   canvas.addEventListener("pointerup", function () {
+    if (placing) return; // confirmed/cancelled via the buttons, not by lifting your finger
     if (!over && !downMoved) handleTap({ x: downX, y: downY });
     steering = false;
   });
@@ -1129,6 +1223,8 @@
     audio(); tone(stance === "bow" ? 520 : 300, 0.06, "sine", 0.05);
   }
   stanceBtn.addEventListener("click", function (e) { e.preventDefault(); if (!over) toggleStance(); });
+  document.getElementById("place-confirm-btn").addEventListener("click", function (e) { e.preventDefault(); confirmPlacement(); });
+  document.getElementById("place-cancel-btn").addEventListener("click", function (e) { e.preventDefault(); cancelPlacement(); });
 
   document.addEventListener("keydown", function (e) {
     if (over) return;
@@ -1189,6 +1285,7 @@
     wave = 1; kills = 0;
     gold = 0; income = 2; nFoot = 0; nTower = 0; nGranary = 0;
     selectedUnit = "horse"; updateTapHint();
+    if (placing) endPlacement();
     breatherT = 0; cleared = false; paused = false;
     stat = { range: BASE.range, speed: BASE.speed, fireCd: BASE.fireCd, volley: BASE.volley, pierce: BASE.pierce, dmg: BASE.dmg };
     stance = "bow"; bowScore = 0; lanceScore = 0;
@@ -1210,11 +1307,17 @@
     buy: function (id) { for (var i = 0; i < SHOP.length; i++) if (SHOP[i].id === id) { buyItem(SHOP[i]); return; } },
     march: function () { if (paused) march(); },
     tap: function (x, y) { handleTap({ x: x, y: y }); },
+    dragGhost: function (x, y) { if (placing) { var c = clampForTower(x, y); placing.x = c.x; placing.y = c.y; } },
+    confirmPlace: function () { confirmPlacement(); },
+    cancelPlace: function () { cancelPlacement(); },
     state: function () {
       return { wave: wave, kills: kills, hearts: hearts, over: over, paused: paused, gold: gold, income: income,
         stance: stance, bowScore: Math.round(bowScore * 10) / 10, lanceScore: Math.round(lanceScore * 10) / 10,
         allies: { foot: nFoot, tower: nTower, granary: nGranary },
         selected: selectedUnit,
+        placing: placing ? { x: Math.round(placing.x), y: Math.round(placing.y), cost: placing.cost } : null,
+        tower: allies.filter(function (a) { return a.kind === "tower"; })
+          .map(function (a) { return { id: a.id, x: Math.round(a.x), y: Math.round(a.y) }; }),
         foot: allies.filter(function (a) { return a.kind === "foot"; })
           .map(function (a) { return { id: a.id, x: Math.round(a.x), y: Math.round(a.y), t: a.targetId, rx: Math.round(a.rallyX), ry: Math.round(a.rallyY) }; }),
         stat: { range: stat.range, speed: stat.speed, fireCd: stat.fireCd, volley: stat.volley, pierce: stat.pierce, dmg: stat.dmg },
