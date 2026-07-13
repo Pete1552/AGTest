@@ -115,7 +115,7 @@
   </div>
 </div>
 
-<script src="leaderboard.js?v=30"></script>
+<script src="leaderboard.js?v=31"></script>
 <script>
 (function () {
   "use strict";
@@ -324,8 +324,11 @@
       allies.push({ kind: "tower", x: keepX + Math.cos(ang) * rr, y: keepY + Math.sin(ang) * rr,
         cd: Math.random() * 0.5, phase: Math.random() * 6 });
     } else {
-      allies.push({ kind: "foot", x: keepX + (Math.random() - 0.5) * 30, y: keepY + KEEP_R + 20,
-        cd: 0, phase: Math.random() * 6, face: 1 });
+      // spread footmen around the keep so they don't start in one stack
+      var fa = (nFoot - 1) * 2.399963 + 1.2;
+      var fr = KEEP_R + 24;
+      allies.push({ kind: "foot", x: keepX + Math.cos(fa) * fr, y: keepY + Math.sin(fa) * fr,
+        cd: 0, phase: Math.random() * 6, face: 1, rallyA: fa, targetId: null });
     }
   }
 
@@ -529,6 +532,20 @@
       }
       return best;
     }
+    // Index marching raiders and tally how many footmen already claim each, so
+    // the retinue spreads across the threat instead of dogpiling one raider.
+    var byId = {}, mi;
+    for (mi = 0; mi < raiders.length; mi++) if (raiders[mi].state === "march") byId[raiders[mi].id] = raiders[mi];
+    var claims = {};
+    for (mi = 0; mi < allies.length; mi++) {
+      var af = allies[mi];
+      if (af.kind !== "foot" || af.targetId == null) continue;
+      var ct = byId[af.targetId];
+      if (!ct) { af.targetId = null; continue; }
+      var cdx = ct.x - af.x, cdy = ct.y - af.y;
+      if (cdx * cdx + cdy * cdy > 300 * 300) { af.targetId = null; continue; } // leash
+      claims[af.targetId] = (claims[af.targetId] || 0) + 1;
+    }
     for (var ai = 0; ai < allies.length; ai++) {
       var al = allies[ai];
       al.cd -= dt;
@@ -542,26 +559,51 @@
             al.cd = 0.9;
           }
         }
-      } else { // footman
-        var tgt = nearestMarcher(al.x, al.y, 260);
-        if (tgt) {
-          var fx = tgt.x - al.x, fy = tgt.y - al.y, fd = Math.sqrt(fx * fx + fy * fy) || 1;
-          al.face = fx > 0 ? 1 : -1;
-          if (fd > TYPES[tgt.type].r + 9) {
-            al.x += fx / fd * 96 * dt; al.y += fy / fd * 96 * dt;
-            al.phase += dt * 8;
-          } else if (al.cd <= 0) {
-            tgt.hp -= 1;
-            puffs.push({ x: (al.x + tgt.x) / 2, y: (al.y + tgt.y) / 2, t: 0 });
-            sfxThock(tgt.type);
-            al.cd = 0.5;
-            if (tgt.hp <= 0) { tgt.state = "down"; tgt.t = 0; kills++; gold += goldFor(tgt.type); }
-          }
-        } else {
-          // no target: drift back toward the keep
-          var hx = keepX - al.x, hy = (keepY + KEEP_R + 20) - al.y, hd = Math.sqrt(hx * hx + hy * hy) || 1;
-          if (hd > 6) { al.x += hx / hd * 55 * dt; al.y += hy / hd * 55 * dt; al.phase += dt * 5; }
+        continue;
+      }
+      // ---- footman ----
+      // separation: gently push apart from other footmen so they don't stack
+      var sepx = 0, sepy = 0;
+      for (var si = 0; si < allies.length; si++) {
+        if (si === ai || allies[si].kind !== "foot") continue;
+        var ox = al.x - allies[si].x, oy = al.y - allies[si].y, od2 = ox * ox + oy * oy;
+        if (od2 < 17 * 17 && od2 > 0.01) { var od = Math.sqrt(od2); sepx += ox / od * (17 - od); sepy += oy / od * (17 - od); }
+      }
+      al.x += sepx * 5 * dt; al.y += sepy * 5 * dt;
+
+      // claim a target: prefer the least-claimed raider in reach, tie-break nearest
+      if (al.targetId == null || !byId[al.targetId]) {
+        al.targetId = null;
+        var best = null, bestScore = Infinity;
+        for (mi = 0; mi < raiders.length; mi++) {
+          var rc = raiders[mi];
+          if (rc.state !== "march") continue;
+          var rdx = rc.x - al.x, rdy = rc.y - al.y, rd2 = rdx * rdx + rdy * rdy;
+          if (rd2 > 300 * 300) continue;
+          var score = (claims[rc.id] || 0) * 1e7 + rd2;
+          if (score < bestScore) { bestScore = score; best = rc; }
         }
+        if (best) { al.targetId = best.id; claims[best.id] = (claims[best.id] || 0) + 1; }
+      }
+      var tgt = al.targetId != null ? byId[al.targetId] : null;
+      if (tgt) {
+        var fx = tgt.x - al.x, fy = tgt.y - al.y, fd = Math.sqrt(fx * fx + fy * fy) || 1;
+        al.face = fx > 0 ? 1 : -1;
+        if (fd > TYPES[tgt.type].r + 9) {
+          al.x += fx / fd * 96 * dt; al.y += fy / fd * 96 * dt;
+          al.phase += dt * 8;
+        } else if (al.cd <= 0) {
+          tgt.hp -= 1;
+          puffs.push({ x: (al.x + tgt.x) / 2, y: (al.y + tgt.y) / 2, t: 0 });
+          sfxThock(tgt.type);
+          al.cd = 0.5;
+          if (tgt.hp <= 0) { tgt.state = "down"; tgt.t = 0; kills++; gold += goldFor(tgt.type); al.targetId = null; }
+        }
+      } else {
+        // no target: rally to a spread-out post around the keep
+        var rx = keepX + Math.cos(al.rallyA) * (KEEP_R + 24), ry = keepY + Math.sin(al.rallyA) * (KEEP_R + 24);
+        var hx = rx - al.x, hy = ry - al.y, hd = Math.sqrt(hx * hx + hy * hy) || 1;
+        if (hd > 6) { al.x += hx / hd * 55 * dt; al.y += hy / hd * 55 * dt; al.phase += dt * 5; }
       }
     }
 
@@ -1056,6 +1098,7 @@
       return { wave: wave, kills: kills, hearts: hearts, over: over, paused: paused, gold: gold, income: income,
         stance: stance, bowScore: Math.round(bowScore * 10) / 10, lanceScore: Math.round(lanceScore * 10) / 10,
         allies: { foot: nFoot, tower: nTower, granary: nGranary },
+        foot: allies.filter(function (a) { return a.kind === "foot"; }).map(function (a) { return { x: Math.round(a.x), y: Math.round(a.y), t: a.targetId }; }),
         stat: { range: stat.range, speed: stat.speed, fireCd: stat.fireCd, volley: stat.volley, pierce: stat.pierce, dmg: stat.dmg },
         raiders: raiders.filter(function (r) { return r.state === "march"; })
           .map(function (r) { return { x: Math.round(r.x), y: Math.round(r.y), type: r.type }; }),
