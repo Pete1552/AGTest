@@ -151,7 +151,7 @@
     </div>
     <div class="how">
       <p class="how-title">How to play</p>
-      <p class="body">You are the keep's mounted warden. Drag to ride; charging raiders that reach the gate steal a heart, so meet them in the field. Tap the stance button to switch weapon: <b>Bow</b> shoots at range on its own, while the <b>Lance</b> cuts down anyone you ride through (no arrows — you must dive in). The enemy adapts to whatever you favour: lean on the bow and they send <b>skirmishers</b>, who dodge most arrows but fall to the lance; lean on the lance and they send <b>pikemen</b>, who brace against a charge but are soft to arrows. <b>Shieldbearers</b> block both weapons from the front — flank them. <b>Brutes</b> just soak hits. Every repelled raider drops <b>gold</b>. Between bands, spend it in the Muster: raise instant <b>Footmen</b>, invest in a <b>Granary</b> for more gold each band, or sharpen the warden — or drag a <b>Watchtower</b> or <b>Barracks</b> into place yourself before confirming. Tap a placed Barracks any time during a band to train a proper roster: <b>Archers</b> shoot from range without closing in, <b>Spearmen</b> hit harder but move slower, and <b>Catapults</b> lob a blast that hits everyone nearby — each takes a few seconds to train, so queue ahead. Only one unit answers your touch at a time: tap a footman to select it and tap the field to post them somewhere new — but while one's selected the horse holds her ground. Tap empty ground to deselect whatever's selected, or tap the horse to take the reins back before you can ride again. Survive as long as you can.</p>
+      <p class="body">You are the keep's mounted warden. Drag to ride; charging raiders that reach the gate steal a heart, so meet them in the field. Tap the stance button to switch weapon: <b>Bow</b> shoots at range on its own, while the <b>Lance</b> cuts down anyone you ride through (no arrows — you must dive in). The enemy adapts to whatever you favour: lean on the bow and they send <b>skirmishers</b>, who dodge most arrows but fall to the lance; lean on the lance and they send <b>pikemen</b>, who brace against a charge but are soft to arrows. <b>Shieldbearers</b> block both weapons from the front — flank them. <b>Brutes</b> just soak hits. Every repelled raider drops <b>gold</b>. Between bands, spend it in the Muster: raise instant <b>Footmen</b>, invest in a <b>Granary</b> for more gold each band, or sharpen the warden — or drag a <b>Watchtower</b> or <b>Barracks</b> into place yourself before confirming. Tap a placed Barracks any time during a band to train a proper roster: <b>Archers</b> shoot from range without closing in, <b>Spearmen</b> hit harder but move slower, and <b>Catapults</b> lob a blast that hits everyone nearby — each takes a few seconds to train, so queue ahead. Only your selection answers your touch: tap a footman to select it, or drag a box over several to select them as a group, then tap the field to post them somewhere new — but while any are selected the horse holds her ground. Tap empty ground to deselect, or tap the horse to take the reins back before you can ride again. Survive as long as you can.</p>
     </div>
     <button id="settings-share" class="share">Share the game</button>
     <button id="settings-close" class="ghost-btn">Done</button>
@@ -159,7 +159,7 @@
   </div>
 </div>
 
-<script src="leaderboard.js?v=37"></script>
+<script src="leaderboard.js?v=38"></script>
 <script>
 (function () {
   "use strict";
@@ -280,6 +280,10 @@
   // parks the horse in place until you deliberately tap her to take the
   // reins back, same as reselecting any other unit.
   var selectedUnit = "horse";
+  // a drag-box selection of multiple footmen; mutually exclusive with
+  // selectedUnit — picking a group clears the single selection and vice versa
+  var selectedGroup = [];
+  var boxSel = null; // {x0,y0,x1,y1} while a marquee drag is in progress
   function findAllyById(id) {
     for (var i = 0; i < allies.length; i++) if (allies[i].id === id) return allies[i];
     return null;
@@ -305,8 +309,9 @@
   var tapHintEl = document.getElementById("tap-hint");
   var DEFAULT_HINT = tapHintEl.textContent;
   function updateTapHint() {
-    tapHintEl.textContent = selectedUnit === "horse" ? DEFAULT_HINT
-      : selectedUnit == null ? "Nothing selected — tap the horse to ride, or a footman to command them"
+    tapHintEl.textContent = selectedGroup.length > 1 ? selectedGroup.length + " footmen selected — tap the field to post them together"
+      : selectedUnit === "horse" ? DEFAULT_HINT
+      : selectedUnit == null ? "Nothing selected — tap the horse to ride, drag a box to group footmen"
       : "Footman selected — tap the field to post them, tap the horse to ride again";
   }
   var waveEl = document.getElementById("wave");
@@ -1180,19 +1185,8 @@
     ctx.restore();
   }
 
-  function drawSelection() {
-    if (selectedUnit == null) return; // nothing selected, nothing to highlight
-    var pulse = 0.5 + 0.5 * Math.sin(elapsed * 5);
-    if (selectedUnit === "horse") {
-      // ring under the warden — only she answers to the drag while this shows
-      ctx.strokeStyle = "rgba(93,214,192," + (0.55 + 0.35 * pulse).toFixed(2) + ")";
-      ctx.lineWidth = 1.8;
-      ctx.beginPath(); ctx.ellipse(player.x, player.y + 12, 15, 5, 0, 0, Math.PI * 2); ctx.stroke();
-      return;
-    }
-    var al = findAllyById(selectedUnit);
-    if (!al) return;
-    // ring under the selected footman
+  function drawFootRing(al, pulse) {
+    // ring under a selected footman
     ctx.strokeStyle = "rgba(93,214,192," + (0.55 + 0.35 * pulse).toFixed(2) + ")";
     ctx.lineWidth = 1.8;
     ctx.beginPath(); ctx.ellipse(al.x, al.y + 9, 10, 4, 0, 0, Math.PI * 2); ctx.stroke();
@@ -1207,6 +1201,37 @@
     }
     ctx.fillStyle = "rgba(93,214,192,0.85)";
     ctx.beginPath(); ctx.arc(al.rallyX, al.rallyY, 3, 0, Math.PI * 2); ctx.fill();
+  }
+  function drawSelection() {
+    if (selectedUnit == null && selectedGroup.length === 0) return; // nothing selected
+    var pulse = 0.5 + 0.5 * Math.sin(elapsed * 5);
+    if (selectedUnit === "horse") {
+      // ring under the warden — only she answers to the drag while this shows
+      ctx.strokeStyle = "rgba(93,214,192," + (0.55 + 0.35 * pulse).toFixed(2) + ")";
+      ctx.lineWidth = 1.8;
+      ctx.beginPath(); ctx.ellipse(player.x, player.y + 12, 15, 5, 0, 0, Math.PI * 2); ctx.stroke();
+      return;
+    }
+    if (selectedGroup.length) {
+      for (var gi = 0; gi < selectedGroup.length; gi++) {
+        var gal = findAllyById(selectedGroup[gi]);
+        if (gal) drawFootRing(gal, pulse);
+      }
+      return;
+    }
+    var al = findAllyById(selectedUnit);
+    if (!al) return;
+    drawFootRing(al, pulse);
+  }
+  function drawSelectionBox() {
+    if (!boxSel) return;
+    var x0 = Math.min(boxSel.x0, boxSel.x1), y0 = Math.min(boxSel.y0, boxSel.y1);
+    var w = Math.abs(boxSel.x1 - boxSel.x0), h = Math.abs(boxSel.y1 - boxSel.y0);
+    ctx.fillStyle = "rgba(93,214,192,0.12)";
+    ctx.fillRect(x0, y0, w, h);
+    ctx.strokeStyle = "rgba(93,214,192,0.6)";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x0, y0, w, h);
   }
 
   function drawBuildingSelection() {
@@ -1323,7 +1348,7 @@
     drawGround();
     drawKeep();
     for (var ci = 0; ci < allies.length; ci++) drawAlly(allies[ci]);
-    if (placing) { drawPlacementGhost(); } else { drawSelection(); drawBuildingSelection(); }
+    if (placing) { drawPlacementGhost(); } else { drawSelection(); drawBuildingSelection(); drawSelectionBox(); }
     // draw order: downed first, then marching/fleeing by y, arrows, horse
     var byY = raiders.slice().sort(function (a, b) { return (a.state === "down" ? -1e6 : a.y) - (b.state === "down" ? -1e6 : b.y); });
     for (var i = 0; i < byY.length; i++) drawRaider(byY[i]);
@@ -1395,7 +1420,20 @@
   // kicking you back out mid-order). Tap empty ground with nothing that can
   // be posted there clears the selection. This is the same vocabulary
   // future selectables (the castle for repair, a tower for upgrades) will use. ----
-  function selectUnit(u) { selectedUnit = u; updateTapHint(); }
+  function selectUnit(u) { selectedUnit = u; selectedGroup = []; updateTapHint(); }
+  // scatter a group order around the tapped point (golden-angle spacing,
+  // same pattern used to fan out spawn rally posts) so units don't stack
+  function postGroupOrder(px, py) {
+    var ids = selectedGroup, n = ids.length;
+    for (var i = 0; i < n; i++) {
+      var al = findAllyById(ids[i]);
+      if (!al) continue;
+      var ang = i * 2.399963, rad = n > 1 ? 16 : 0;
+      var c = clampToField(px + Math.cos(ang) * rad, py + Math.sin(ang) * rad);
+      al.rallyX = c.x; al.rallyY = c.y;
+    }
+    sfxCommand();
+  }
   function handleTap(p) {
     // a Barracks is stationary — tapping it just opens/closes its training
     // panel, it's never a move-order target for anything else
@@ -1409,11 +1447,12 @@
     var underFoot = footmanNear(p.x, p.y, 18);
     var target = underFoot ? underFoot.id : (isOnHorse(p) ? "horse" : null);
     if (target != null) {
-      if (selectedUnit !== target) { selectUnit(target); sfxSelect(); player.tx = player.x; player.ty = player.y; }
+      if (selectedGroup.length || selectedUnit !== target) { selectUnit(target); sfxSelect(); player.tx = player.x; player.ty = player.y; }
       // tapping the already-selected unit's own sprite is a harmless no-op
       return;
     }
     // empty field — no unit here
+    if (selectedGroup.length) { postGroupOrder(p.x, p.y); return; }
     if (selectedUnit !== "horse" && selectedUnit != null) {
       var al = findAllyById(selectedUnit);
       if (al) {
@@ -1452,13 +1491,31 @@
     e.preventDefault();
     if (Math.abs(p.x - downX) > 8 || Math.abs(p.y - downY) > 8) downMoved = true;
     if (selectedUnit === "horse") { player.tx = p.x; player.ty = p.y; }
+    // dragging while the horse ISN'T the one steering is otherwise a dead
+    // gesture — repurpose it as a marquee select over footmen
+    else if (downMoved) { boxSel = { x0: downX, y0: downY, x1: p.x, y1: p.y }; }
   });
   canvas.addEventListener("pointerup", function () {
     if (placing) return; // confirmed/cancelled via the buttons, not by lifting your finger
+    if (boxSel) {
+      var x0 = Math.min(boxSel.x0, boxSel.x1), x1 = Math.max(boxSel.x0, boxSel.x1);
+      var y0 = Math.min(boxSel.y0, boxSel.y1), y1 = Math.max(boxSel.y0, boxSel.y1);
+      var ids = [];
+      for (var i = 0; i < allies.length; i++) {
+        var a = allies[i];
+        if (a.kind === "foot" && a.x >= x0 && a.x <= x1 && a.y >= y0 && a.y <= y1) ids.push(a.id);
+      }
+      boxSel = null;
+      if (ids.length > 1) { selectedUnit = null; selectedGroup = ids; sfxSelect(); updateTapHint(); }
+      else if (ids.length === 1) { selectUnit(ids[0]); sfxSelect(); }
+      else if (selectedUnit !== null) { selectUnit(null); sfxDeselect(); }
+      steering = false;
+      return;
+    }
     if (!over && !downMoved) handleTap({ x: downX, y: downY });
     steering = false;
   });
-  canvas.addEventListener("pointercancel", function () { steering = false; });
+  canvas.addEventListener("pointercancel", function () { steering = false; boxSel = null; });
   // ---- Stance toggle ----
   var stanceBtn = document.getElementById("stance-btn");
   function updateStanceBtn() {
@@ -1539,7 +1596,7 @@
     hearts = HEARTS_MAX;
     wave = 1; kills = 0;
     gold = 0; income = 2; nFoot = 0; nTower = 0; nGranary = 0; nBarracks = 0;
-    selectedUnit = "horse"; updateTapHint();
+    selectedUnit = "horse"; selectedGroup = []; boxSel = null; updateTapHint();
     if (selectedBuilding != null) closeTrainingPanel();
     if (placing) endPlacement();
     breatherT = 0; cleared = false; paused = false;
@@ -1572,7 +1629,7 @@
       return { wave: wave, kills: kills, hearts: hearts, over: over, paused: paused, gold: gold, income: income,
         stance: stance, bowScore: Math.round(bowScore * 10) / 10, lanceScore: Math.round(lanceScore * 10) / 10,
         allies: { foot: nFoot, tower: nTower, granary: nGranary, barracks: nBarracks },
-        selected: selectedUnit, selectedBuilding: selectedBuilding,
+        selected: selectedUnit, selectedGroup: selectedGroup.slice(), selectedBuilding: selectedBuilding,
         placing: placing ? { kind: placing.kind, x: Math.round(placing.x), y: Math.round(placing.y), cost: placing.cost } : null,
         tower: allies.filter(function (a) { return a.kind === "tower"; })
           .map(function (a) { return { id: a.id, x: Math.round(a.x), y: Math.round(a.y) }; }),
