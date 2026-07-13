@@ -24,6 +24,17 @@
     touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
   }
   .tap-hint { text-align: center; color: var(--muted); font-size: 12px; min-height: 16px; margin-top: 6px; }
+  .play-area { position: relative; }
+  .stance-btn {
+    position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%);
+    border: none; cursor: pointer; font-weight: 800; font-size: 14px;
+    border-radius: 999px; padding: 10px 20px; color: #06231e; background: var(--accent);
+    box-shadow: 0 4px 14px rgba(0,0,0,0.4); font-family: var(--font-display);
+    transition: transform 100ms ease, background 140ms ease;
+    -webkit-user-select: none; user-select: none; touch-action: manipulation;
+  }
+  .stance-btn:active { transform: translateX(-50%) translateY(1px) scale(0.97); }
+  .stance-btn.lance { background: #d7a35a; }
   .draft-sub { text-align: center; color: var(--muted); font-size: 12.5px; margin: -4px 0 12px; }
   #boon-list { display: flex; flex-direction: column; gap: 10px; }
   #boon-list .boon {
@@ -64,8 +75,11 @@
     <div class="score-box best"><div class="score-label">Best</div><div class="score-val" id="best">—</div></div>
   </div>
 
-  <div class="play-area"><canvas id="stage"></canvas></div>
-  <div class="tap-hint">Hold and drag — your warden rides to your finger and shoots on her own</div>
+  <div class="play-area">
+    <canvas id="stage"></canvas>
+    <button id="stance-btn" class="stance-btn" aria-label="Switch stance">🏹 Bow</button>
+  </div>
+  <div class="tap-hint">Drag to ride · tap the button to switch bow / lance</div>
 </div>
 
 <div id="draft-overlay" class="modal-overlay">
@@ -85,7 +99,7 @@
     </div>
     <div class="how">
       <p class="how-title">How to play</p>
-      <p class="body">You are the keep's mounted warden. Hold and drag anywhere — your horse rides toward your finger, and your archer looses arrows on her own. Raiders march in bands toward the gate and charge the last stretch, so waiting at the walls loses; ride out to meet them. Each raider wants a different answer: <b>runners</b> are fast and must be caught early, <b>shieldbearers</b> block arrows from the keep-side so you must flank them, and <b>brutes</b> soak several hits. After every band you draft one of three boons to build up your warden. Any raider who reaches the gate steals a heart; survive as many bands as you can.</p>
+      <p class="body">You are the keep's mounted warden. Drag to ride; charging raiders that reach the gate steal a heart, so meet them in the field. Tap the stance button to switch weapon: <b>Bow</b> shoots at range on its own, while the <b>Lance</b> cuts down anyone you ride through (no arrows — you must dive in). The enemy adapts to whatever you favour: lean on the bow and they send <b>skirmishers</b>, who dodge most arrows but fall to the lance; lean on the lance and they send <b>pikemen</b>, who brace against a charge but are soft to arrows. <b>Shieldbearers</b> block both weapons from the front — flank them. <b>Brutes</b> just soak hits. Draft a boon after every band and survive as long as you can.</p>
     </div>
     <button id="settings-share" class="share">Share the game</button>
     <button id="settings-close" class="ghost-btn">Done</button>
@@ -93,7 +107,7 @@
   </div>
 </div>
 
-<script src="leaderboard.js?v=28"></script>
+<script src="leaderboard.js?v=29"></script>
 <script>
 (function () {
   "use strict";
@@ -111,15 +125,24 @@
   var BASE = { range: 185, speed: 208, fireCd: 0.5, volley: 2, pierce: 0, dmg: 1 };
   var stat = { range: 185, speed: 208, fireCd: 0.5, volley: 2, pierce: 0, dmg: 1 };
 
-  // Raider archetypes — each wants a different answer. Runners must be caught
-  // early, shieldbearers must be flanked (their shield stops arrows coming
-  // from the keep-side), brutes just soak arrows.
+  // Raider archetypes form a counter-triangle with your two stances. The enemy
+  // sends more of whatever beats the weapon you lean on (see pickType):
+  //  - skirmisher: fast, DODGES most arrows -> punishes Bow; but lance-food.
+  //  - pikeman:    braced, the Lance bounces off it -> punishes Lance; arrow-soft.
+  //  - shield:     must be flanked (blocks BOTH weapons from its keep-facing front).
+  //  - brute:      just tanky. basic: filler, dies to either.
   var TYPES = {
-    basic:  { hp: 1, spd: 1.0,  r: 6,   body: "#7a5648", helm: "#6b7382" },
-    runner: { hp: 1, spd: 1.5,  r: 5.2, body: "#8a6a3c", helm: "#b0894e" },
-    shield: { hp: 2, spd: 0.82, r: 6.4, body: "#5a4a5e", helm: "#8b93a8" },
-    brute:  { hp: 3, spd: 0.6,  r: 8.6, body: "#4a3a44", helm: "#7a7f92" }
+    basic:      { hp: 1, spd: 1.05, r: 6,   body: "#7a5648", helm: "#6b7382" },
+    skirmisher: { hp: 1, spd: 1.5,  r: 5.4, body: "#7e8a46", helm: "#b3c05e", dodge: 0.62 },
+    pikeman:    { hp: 2, spd: 0.72, r: 6.6, body: "#5a4a3a", helm: "#8a7f6b", braced: true },
+    shield:     { hp: 2, spd: 0.82, r: 6.4, body: "#5a4a5e", helm: "#8b93a8" },
+    brute:      { hp: 3, spd: 0.6,  r: 8.6, body: "#4a3a44", helm: "#7a7f92" }
   };
+
+  // ---- Stances (the counter-triangle's other half) ----
+  var LANCE_DMG = 2, LANCE_REACH = 15, LANCE_CD = 0.4;
+  var stance = "bow";              // "bow" (ranged) | "lance" (melee ride-through)
+  var bowScore = 0, lanceScore = 0; // decaying tally of how you've been killing
 
   // Boon pool for the draft. Each has avail() (can still be offered) and
   // apply(). Caps keep any one stat from running away.
@@ -194,11 +217,20 @@
   // ---- Waves ----
   function bandSize(w) { return 4 + 2 * w; }
   function raiderSpeed(w) { return 24 + Math.min(30, w * 1.6); }
+  // Adaptive composition: the more lopsided your recent kills (bow vs lance),
+  // the more the enemy fields the counter to your favoured weapon.
   function pickType(w) {
-    var r = Math.random();
-    if (w >= 6 && r < 0.13) return "brute";
-    if (w >= 4 && r < 0.32) return "shield";
-    if (w >= 2 && r < 0.52) return "runner";
+    var tot = bowScore + lanceScore + 0.001;
+    var bowFrac = bowScore / tot, lanceFrac = lanceScore / tot;
+    var wt = [["basic", 1.0]];
+    if (w >= 4) wt.push(["shield", 0.55]);
+    if (w >= 6) wt.push(["brute", 0.35]);
+    if (w >= 2) wt.push(["skirmisher", 0.25 + 1.5 * bowFrac]);   // counters Bow
+    if (w >= 3) wt.push(["pikeman", 0.25 + 1.5 * lanceFrac]);    // counters Lance
+    var total = 0, i;
+    for (i = 0; i < wt.length; i++) total += wt[i][1];
+    var roll = Math.random() * total;
+    for (i = 0; i < wt.length; i++) { roll -= wt[i][1]; if (roll <= 0) return wt[i][0]; }
     return "basic";
   }
 
@@ -212,6 +244,7 @@
   function startWave() {
     spawnQueue = [];
     waveT = 0;
+    bowScore *= 0.55; lanceScore *= 0.55; // recent bands weigh most in the enemy's read
     var remaining = bandSize(wave);
     var t = 1.2;
     while (remaining > 0) {
@@ -241,7 +274,7 @@
     raiders.push({
       id: raiderSeq++, x: x, y: y, type: type, hp: T.hp, maxhp: T.hp,
       speed: raiderSpeed(wave) * T.spd * (0.9 + Math.random() * 0.2),
-      state: "march", t: 0, face: 1, phase: Math.random() * 6, charging: false, shieldAng: 0
+      state: "march", t: 0, face: 1, phase: Math.random() * 6, charging: false, shieldAng: 0, lanceT: 0
     });
   }
   function waveDone() {
@@ -386,10 +419,9 @@
       }
     }
 
-    // archer auto-fire: prefer targets this position can actually damage
-    // (so arrows aren't wasted on shielded fronts), then by distance
+    // ---- Bow stance: auto-fire, preferring targets this position can damage ----
     player.cd -= dt;
-    if (player.cd <= 0) {
+    if (stance === "bow" && player.cd <= 0) {
       var inRange = [];
       for (var ti = 0; ti < raiders.length; ti++) {
         var rr = raiders[ti];
@@ -406,6 +438,39 @@
       }
     }
 
+    // ---- Lance stance: ride through raiders to cut them down (no arrows) ----
+    if (stance === "lance") {
+      for (var li = 0; li < raiders.length; li++) {
+        var e2 = raiders[li];
+        if (e2.state !== "march") continue;
+        e2.lanceT -= dt;
+        var lx = e2.x - player.x, ly = e2.y - player.y;
+        var ldist = Math.sqrt(lx * lx + ly * ly);
+        if (ldist < TYPES[e2.type].r + 13 + LANCE_REACH && e2.lanceT <= 0) {
+          if (TYPES[e2.type].braced) {
+            // pikeman braces — the lance bounces off and shoves you back
+            var bx = player.x - e2.x, by = player.y - e2.y, bd = Math.sqrt(bx * bx + by * by) || 1;
+            player.x += bx / bd * 12; player.y += by / bd * 12;
+            player.tx = player.x; player.ty = player.y; // stop driving into the spears
+            puffs.push({ x: (player.x + e2.x) / 2, y: (player.y + e2.y) / 2, t: 0, clink: true });
+            sfxClink();
+            e2.lanceT = 0.5;
+          } else if (!canDamage(e2)) {
+            // shieldbearer's front stops the lance too — come round the side
+            puffs.push({ x: (player.x + e2.x) / 2, y: (player.y + e2.y) / 2, t: 0, clink: true });
+            sfxClink();
+            e2.lanceT = 0.4;
+          } else {
+            e2.hp -= LANCE_DMG;
+            puffs.push({ x: e2.x, y: e2.y, t: 0 });
+            sfxThock(e2.type);
+            e2.lanceT = LANCE_CD;
+            if (e2.hp <= 0) { e2.state = "down"; e2.t = 0; kills++; lanceScore += 1; }
+          }
+        }
+      }
+    }
+
     // arrows
     for (var a = arrows.length - 1; a >= 0; a--) {
       var ar = arrows[a];
@@ -417,6 +482,12 @@
         if (ar.hit.indexOf(e.id) >= 0) continue;
         var hx = e.x - ar.x, hy = e.y - ar.y, rad = TYPES[e.type].r + 7;
         if (hx * hx + hy * hy < rad * rad) {
+          // skirmishers weave — most arrows whiff straight past them
+          if (TYPES[e.type].dodge && Math.random() < TYPES[e.type].dodge) {
+            ar.hit.push(e.id);
+            puffs.push({ x: e.x + (Math.random() - 0.5) * 8, y: e.y, t: 0, dodge: true });
+            continue; // arrow flies on
+          }
           // a shieldbearer stops arrows striking its keep-facing front
           if (e.type === "shield") {
             var nx = keepX - e.x, ny = keepY - e.y, nd = Math.sqrt(nx * nx + ny * ny) || 1;
@@ -430,7 +501,7 @@
           sfxThock(e.type);
           puffs.push({ x: ar.x, y: ar.y, t: 0 });
           ar.hit.push(e.id);
-          if (e.hp <= 0) { e.state = "down"; e.t = 0; kills++; }
+          if (e.hp <= 0) { e.state = "down"; e.t = 0; kills++; bowScore += 1; }
           if (ar.pierce > 0) ar.pierce--; else remove = true;
           break;
         }
@@ -579,12 +650,23 @@
     ctx.beginPath(); ctx.arc(-1, -17 - bob, 3, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = "#4a5568";
     ctx.beginPath(); ctx.arc(-1, -18.5 - bob, 3, Math.PI, 0); ctx.fill();
-    // bow
-    ctx.strokeStyle = "#d9b98c"; ctx.lineWidth = 1.6;
-    ctx.beginPath(); ctx.arc(5, -11 - bob, 5, -1.1, 1.1); ctx.stroke();
-    ctx.strokeStyle = "rgba(255,255,255,0.5)"; ctx.lineWidth = 0.8;
-    ctx.beginPath(); ctx.moveTo(5 + Math.cos(-1.1) * 5, -11 - bob + Math.sin(-1.1) * 5);
-    ctx.lineTo(5 + Math.cos(1.1) * 5, -11 - bob + Math.sin(1.1) * 5); ctx.stroke();
+    if (stance === "bow") {
+      // bow
+      ctx.strokeStyle = "#d9b98c"; ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.arc(5, -11 - bob, 5, -1.1, 1.1); ctx.stroke();
+      ctx.strokeStyle = "rgba(255,255,255,0.5)"; ctx.lineWidth = 0.8;
+      ctx.beginPath(); ctx.moveTo(5 + Math.cos(-1.1) * 5, -11 - bob + Math.sin(-1.1) * 5);
+      ctx.lineTo(5 + Math.cos(1.1) * 5, -11 - bob + Math.sin(1.1) * 5); ctx.stroke();
+    } else {
+      // couched lance, levelled forward
+      ctx.strokeStyle = "#cbb389"; ctx.lineWidth = 2; ctx.lineCap = "round";
+      ctx.beginPath(); ctx.moveTo(-4, -8 - bob); ctx.lineTo(22, -10 - bob); ctx.stroke();
+      ctx.fillStyle = "#e6ebf2";
+      ctx.beginPath(); ctx.moveTo(22, -10 - bob); ctx.lineTo(17, -8.5 - bob); ctx.lineTo(18, -12 - bob); ctx.closePath(); ctx.fill();
+      // small pennon
+      ctx.fillStyle = "#5dd6c0";
+      ctx.beginPath(); ctx.moveTo(6, -9 - bob); ctx.lineTo(11, -8 - bob); ctx.lineTo(6, -6.5 - bob); ctx.closePath(); ctx.fill();
+    }
     ctx.restore();
   }
 
@@ -621,10 +703,10 @@
       ctx.fillStyle = "rgba(0,0,0,0.25)";
       ctx.beginPath(); ctx.ellipse(0, 10, 7, 2.6, 0, 0, Math.PI * 2); ctx.fill();
     }
-    // runner motion streaks
-    if (r.type === "runner" && r.state === "march") {
-      ctx.strokeStyle = "rgba(255,255,255,0.18)"; ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(-8, -2); ctx.lineTo(-13, -2); ctx.moveTo(-8, 3); ctx.lineTo(-12, 3); ctx.stroke();
+    // skirmisher motion streaks (they're the fast, dodgy ones)
+    if (r.type === "skirmisher" && r.state === "march") {
+      ctx.strokeStyle = "rgba(200,230,255,0.22)"; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(-8, -2); ctx.lineTo(-14, -2); ctx.moveTo(-8, 3); ctx.lineTo(-13, 3); ctx.stroke();
     }
     // body
     ctx.fillStyle = T.body;
@@ -633,6 +715,16 @@
     if (r.type === "brute") {
       ctx.fillStyle = "rgba(255,255,255,0.10)";
       ctx.beginPath(); ctx.roundRect(-5, -3, 10, 6, 2); ctx.fill();
+    }
+    // pikeman levels a long braced spear toward the keep
+    if (r.type === "pikeman" && r.state === "march") {
+      ctx.save();
+      ctx.rotate(-(waddle + (r.charging ? 0.16 : 0))); // cancel body lean so the pike stays level
+      ctx.strokeStyle = "#c9b28a"; ctx.lineWidth = 1.6; ctx.lineCap = "round";
+      ctx.beginPath(); ctx.moveTo(2, 2); ctx.lineTo(15, -6); ctx.stroke();
+      ctx.fillStyle = "#d7dbe4";
+      ctx.beginPath(); ctx.moveTo(15, -6); ctx.lineTo(11, -5); ctx.lineTo(13, -8.5); ctx.closePath(); ctx.fill();
+      ctx.restore();
     }
     // head
     ctx.fillStyle = "#e8d4b8";
@@ -678,6 +770,16 @@
     for (var a = 0; a < arrows.length; a++) drawArrow(arrows[a]);
     for (var p = 0; p < puffs.length; p++) {
       var pf = puffs[p], k = pf.t / 0.4;
+      if (pf.dodge) {
+        // a light "whiff" dash beside the raider who slipped the arrow
+        ctx.strokeStyle = "rgba(150,200,240," + (0.6 * (1 - k)).toFixed(2) + ")";
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.moveTo(pf.x - 6 - k * 6, pf.y - 4 - k * 5);
+        ctx.lineTo(pf.x + 2 + k * 4, pf.y + 1 - k * 2);
+        ctx.stroke();
+        continue;
+      }
       ctx.strokeStyle = pf.clink
         ? "rgba(200,214,235," + (0.7 * (1 - k)).toFixed(2) + ")"
         : "rgba(232,237,244," + (0.5 * (1 - k)).toFixed(2) + ")";
@@ -728,6 +830,19 @@
   });
   canvas.addEventListener("pointerup", function () { steering = false; });
   canvas.addEventListener("pointercancel", function () { steering = false; });
+  // ---- Stance toggle ----
+  var stanceBtn = document.getElementById("stance-btn");
+  function updateStanceBtn() {
+    stanceBtn.textContent = stance === "bow" ? "🏹 Bow" : "🔱 Lance";
+    stanceBtn.classList.toggle("lance", stance === "lance");
+  }
+  function toggleStance() {
+    stance = stance === "bow" ? "lance" : "bow";
+    updateStanceBtn();
+    audio(); tone(stance === "bow" ? 520 : 300, 0.06, "sine", 0.05);
+  }
+  stanceBtn.addEventListener("click", function (e) { e.preventDefault(); if (!over) toggleStance(); });
+
   document.addEventListener("keydown", function (e) {
     if (over) return;
     var step = 26;
@@ -735,6 +850,7 @@
     else if (e.key === "ArrowRight") { player.tx = player.x + step; player.ty = player.y; e.preventDefault(); }
     else if (e.key === "ArrowUp") { player.ty = player.y - step; player.tx = player.x; e.preventDefault(); }
     else if (e.key === "ArrowDown") { player.ty = player.y + step; player.tx = player.x; e.preventDefault(); }
+    else if (e.key === "q" || e.key === "Q" || e.key === " " || e.key === "Tab") { toggleStance(); e.preventDefault(); }
   });
 
   // ---- Sizing ----
@@ -785,9 +901,11 @@
     wave = 1; kills = 0;
     breatherT = 0; cleared = false; paused = false;
     stat = { range: BASE.range, speed: BASE.speed, fireCd: BASE.fireCd, volley: BASE.volley, pierce: BASE.pierce, dmg: BASE.dmg };
+    stance = "bow"; bowScore = 0; lanceScore = 0;
     over = false; running = true;
     elapsed = 0;
     document.getElementById("draft-overlay").classList.remove("show");
+    updateStanceBtn();
     player.x = keepX; player.y = keepY + 86;
     player.tx = player.x; player.ty = player.y;
     player.cd = 0.4;
@@ -799,8 +917,10 @@
   window.__wd = {
     go: function (x, y) { player.tx = x; player.ty = y; },
     pick: function (i) { if (paused) chooseBoon(i); },
+    setStance: function (s) { if ((s === "bow" || s === "lance") && s !== stance) toggleStance(); },
     state: function () {
       return { wave: wave, kills: kills, hearts: hearts, over: over, paused: paused,
+        stance: stance, bowScore: Math.round(bowScore * 10) / 10, lanceScore: Math.round(lanceScore * 10) / 10,
         boons: currentBoons.map(function (b) { return b.id; }),
         stat: { range: stat.range, speed: stat.speed, fireCd: stat.fireCd, volley: stat.volley, pierce: stat.pierce, dmg: stat.dmg },
         raiders: raiders.filter(function (r) { return r.state === "march"; })
