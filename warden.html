@@ -35,24 +35,31 @@
   }
   .stance-btn:active { transform: translateX(-50%) translateY(1px) scale(0.97); }
   .stance-btn.lance { background: #d7a35a; }
-  .draft-sub { text-align: center; color: var(--muted); font-size: 12.5px; margin: -4px 0 12px; }
-  #boon-list { display: flex; flex-direction: column; gap: 10px; }
-  #boon-list .boon {
-    display: flex; align-items: center; gap: 12px; width: 100%; margin: 0;
+  .draft-sub { text-align: center; color: var(--muted); font-size: 12.5px; margin: -4px 0 10px; }
+  .modal.shop { max-height: 88vh; display: flex; flex-direction: column; }
+  .shop-head { display: flex; align-items: center; justify-content: space-between; }
+  .shop-gold { font-family: var(--font-display); font-weight: 800; font-size: 17px; color: #f2c94c; }
+  #shop-list { display: flex; flex-direction: column; gap: 7px; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 2px; }
+  .shop-cat { font-size: 11px; letter-spacing: 0.5px; text-transform: uppercase; color: var(--muted); font-weight: 700; margin: 8px 0 1px; }
+  #shop-list .shop-item {
+    display: flex; align-items: center; gap: 11px; width: 100%; margin: 0;
     background: var(--grid); color: var(--ink); border: 1px solid rgba(255,255,255,0.06);
-    border-radius: 14px; padding: 12px 14px; cursor: pointer; text-align: left;
-    transition: transform 100ms ease, border-color 140ms ease, background 140ms ease;
+    border-radius: 12px; padding: 9px 12px; cursor: pointer; text-align: left;
+    transition: transform 100ms ease, border-color 140ms ease, opacity 140ms ease;
   }
-  #boon-list .boon:hover { border-color: color-mix(in srgb, var(--accent) 50%, transparent); background: var(--grid); }
-  #boon-list .boon:active { transform: scale(0.98); }
-  .boon-icon {
-    font-size: 24px; flex: none; width: 40px; height: 40px; border-radius: 10px;
+  #shop-list .shop-item:hover:not([disabled]) { border-color: color-mix(in srgb, var(--accent) 50%, transparent); }
+  #shop-list .shop-item:active:not([disabled]) { transform: scale(0.98); }
+  #shop-list .shop-item.poor { opacity: 0.5; cursor: default; }
+  .si-icon {
+    font-size: 21px; flex: none; width: 36px; height: 36px; border-radius: 9px;
     display: flex; align-items: center; justify-content: center;
     background: color-mix(in srgb, var(--accent) 16%, var(--panel));
   }
-  .boon-text { display: flex; flex-direction: column; gap: 2px; }
-  .boon-text b { font-family: var(--font-display); font-size: 15px; }
-  .boon-text small { color: var(--muted); font-size: 12px; }
+  .si-text { display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0; }
+  .si-text b { font-family: var(--font-display); font-size: 14.5px; }
+  .si-text small { color: var(--muted); font-size: 11.5px; }
+  .si-cost { flex: none; font-family: var(--font-display); font-weight: 800; font-size: 13px; color: #f2c94c; }
+  #march-btn { margin-top: 10px; }
 </style>
 </head>
 <body>
@@ -71,7 +78,7 @@
 
   <div class="scores">
     <div class="score-box"><div class="score-label">Band</div><div class="score-val" id="wave">1</div></div>
-    <div class="score-box"><div class="score-label">Repelled</div><div class="score-val" id="kills">0</div></div>
+    <div class="score-box"><div class="score-label">Gold</div><div class="score-val" id="gold">0</div></div>
     <div class="score-box best"><div class="score-label">Best</div><div class="score-val" id="best">—</div></div>
   </div>
 
@@ -82,11 +89,12 @@
   <div class="tap-hint">Drag to ride · tap the button to switch bow / lance</div>
 </div>
 
-<div id="draft-overlay" class="modal-overlay">
-  <div class="modal">
-    <h2>Choose a boon</h2>
-    <p class="draft-sub">Band <span id="draft-band"></span> repelled — ready your defences.</p>
-    <div id="boon-list"></div>
+<div id="shop-overlay" class="modal-overlay">
+  <div class="modal shop">
+    <div class="shop-head"><h2>Muster</h2><span class="shop-gold" id="shop-gold">🪙 0</span></div>
+    <p class="draft-sub">Band <span id="shop-band"></span> repelled — spend your gold, then march.</p>
+    <div id="shop-list"></div>
+    <button id="march-btn" class="share">March ›</button>
   </div>
 </div>
 
@@ -99,7 +107,7 @@
     </div>
     <div class="how">
       <p class="how-title">How to play</p>
-      <p class="body">You are the keep's mounted warden. Drag to ride; charging raiders that reach the gate steal a heart, so meet them in the field. Tap the stance button to switch weapon: <b>Bow</b> shoots at range on its own, while the <b>Lance</b> cuts down anyone you ride through (no arrows — you must dive in). The enemy adapts to whatever you favour: lean on the bow and they send <b>skirmishers</b>, who dodge most arrows but fall to the lance; lean on the lance and they send <b>pikemen</b>, who brace against a charge but are soft to arrows. <b>Shieldbearers</b> block both weapons from the front — flank them. <b>Brutes</b> just soak hits. Draft a boon after every band and survive as long as you can.</p>
+      <p class="body">You are the keep's mounted warden. Drag to ride; charging raiders that reach the gate steal a heart, so meet them in the field. Tap the stance button to switch weapon: <b>Bow</b> shoots at range on its own, while the <b>Lance</b> cuts down anyone you ride through (no arrows — you must dive in). The enemy adapts to whatever you favour: lean on the bow and they send <b>skirmishers</b>, who dodge most arrows but fall to the lance; lean on the lance and they send <b>pikemen</b>, who brace against a charge but are soft to arrows. <b>Shieldbearers</b> block both weapons from the front — flank them. <b>Brutes</b> just soak hits. Every repelled raider drops <b>gold</b>. Between bands, spend it in the Muster: raise <b>Footmen</b> who roam and fight, build <b>Watchtowers</b> that guard the keep, invest in a <b>Granary</b> for more gold each band, or sharpen the warden — then march. Survive as long as you can.</p>
     </div>
     <button id="settings-share" class="share">Share the game</button>
     <button id="settings-close" class="ghost-btn">Done</button>
@@ -107,7 +115,7 @@
   </div>
 </div>
 
-<script src="leaderboard.js?v=29"></script>
+<script src="leaderboard.js?v=30"></script>
 <script>
 (function () {
   "use strict";
@@ -144,16 +152,40 @@
   var stance = "bow";              // "bow" (ranged) | "lance" (melee ride-through)
   var bowScore = 0, lanceScore = 0; // decaying tally of how you've been killing
 
-  // Boon pool for the draft. Each has avail() (can still be offered) and
-  // apply(). Caps keep any one stat from running away.
-  var BOONS = [
-    { id: "range",  icon: "🎯", name: "Longer draw",    desc: "+28 arrow range",              avail: function () { return stat.range < 300; },  apply: function () { stat.range += 28; } },
-    { id: "speed",  icon: "🐎", name: "Swift steed",    desc: "+26 riding speed",             avail: function () { return stat.speed < 320; },  apply: function () { stat.speed += 26; } },
-    { id: "volley", icon: "🏹", name: "Split shot",     desc: "+1 arrow each volley",         avail: function () { return stat.volley < 6; },   apply: function () { stat.volley += 1; } },
-    { id: "cd",     icon: "⚡", name: "Quick nock",     desc: "Nock arrows faster",           avail: function () { return stat.fireCd > 0.31; }, apply: function () { stat.fireCd = Math.max(0.3, stat.fireCd - 0.06); } },
-    { id: "pierce", icon: "✶", name: "Piercing shafts", desc: "Arrows pass through 1 more foe", avail: function () { return stat.pierce < 3; },  apply: function () { stat.pierce += 1; } },
-    { id: "trueshot", icon: "🗡️", name: "Trueshot",     desc: "+1 arrow damage",               avail: function () { return stat.dmg < 3; },       apply: function () { stat.dmg += 1; } },
-    { id: "mend",   icon: "❤️", name: "Mend the keep",  desc: "Restore a lost heart",         avail: function () { return hearts < HEARTS_MAX; }, apply: function () { hearts = Math.min(HEARTS_MAX, hearts + 1); } }
+  // ---- Economy ----
+  // Gold is harvested from every repelled raider (tougher = richer) plus a
+  // small estate income each band. Between bands you spend it in the Muster
+  // shop on the classic triangle: army (Retinue), defence (Watchtowers), or
+  // economy (Granary) — plus personal Warden upgrades and mending the keep.
+  var gold = 0, income = 2;
+  var nFoot = 0, nTower = 0, nGranary = 0;
+  var allies = [];  // {kind:"foot"|"tower", x, y, ...}
+  function goldFor(type) { return type === "brute" ? 4 : (type === "shield" || type === "pikeman") ? 2 : 1; }
+
+  // The Muster shop. Each item: category, dynamic cost/desc, avail(), buy().
+  // Costs climb with how many you already own so no single line runs away.
+  var SHOP = [
+    { id: "foot",   cat: "Retinue",  icon: "⚔️", name: "Footman",
+      desc: function () { return "A roaming soldier who hunts raiders"; },
+      cost: function () { return 5 + nFoot * 3; },
+      avail: function () { return nFoot < 8; },
+      buy: function () { nFoot++; spawnAlly("foot"); } },
+    { id: "tower",  cat: "Defenses", icon: "🗼", name: "Watchtower",
+      desc: function () { return "A fixed tower that shoots nearby raiders"; },
+      cost: function () { return 7 + nTower * 4; },
+      avail: function () { return nTower < 8; },
+      buy: function () { nTower++; spawnAlly("tower"); } },
+    { id: "granary", cat: "Estate", icon: "🌾", name: "Granary",
+      desc: function () { return "+2 gold income every band (now +" + income + ")"; },
+      cost: function () { return 6 + nGranary * 3; },
+      avail: function () { return nGranary < 8; },
+      buy: function () { nGranary++; income += 2; } },
+    { id: "range",  cat: "Warden", icon: "🎯", name: "Longer draw",  desc: function () { return "+28 arrow range"; },       cost: function () { return 5; }, avail: function () { return stat.range < 300; },  buy: function () { stat.range += 28; } },
+    { id: "speed",  cat: "Warden", icon: "🐎", name: "Swift steed",  desc: function () { return "+26 riding speed"; },      cost: function () { return 5; }, avail: function () { return stat.speed < 320; },  buy: function () { stat.speed += 26; } },
+    { id: "volley", cat: "Warden", icon: "🏹", name: "Split shot",   desc: function () { return "+1 arrow each volley"; },  cost: function () { return 7; }, avail: function () { return stat.volley < 6; },   buy: function () { stat.volley += 1; } },
+    { id: "cd",     cat: "Warden", icon: "⚡", name: "Quick nock",   desc: function () { return "Nock arrows faster"; },    cost: function () { return 6; }, avail: function () { return stat.fireCd > 0.31; }, buy: function () { stat.fireCd = Math.max(0.3, stat.fireCd - 0.06); } },
+    { id: "trueshot", cat: "Warden", icon: "🗡️", name: "Trueshot",  desc: function () { return "+1 arrow damage"; },       cost: function () { return 8; }, avail: function () { return stat.dmg < 3; },       buy: function () { stat.dmg += 1; } },
+    { id: "mend",   cat: "Warden", icon: "❤️", name: "Mend the keep", desc: function () { return "Restore a lost heart"; }, cost: function () { return 6; }, avail: function () { return hearts < HEARTS_MAX; }, buy: function () { hearts = Math.min(HEARTS_MAX, hearts + 1); } }
   ];
 
   var W = 300, H = 460, dpr = window.devicePixelRatio || 1;
@@ -166,7 +198,7 @@
   var hearts = HEARTS_MAX;
   var wave = 1, kills = 0;
   var breatherT = 0, cleared = false, paused = false;
-  var raiderSeq = 1, currentBoons = [];
+  var raiderSeq = 1;
   var over = false, running = false, announced = "", announceT = 0;
   var elapsed = 0;
   var best = Number(localStorage.getItem("tranquil_warden_best") || 0) || 0;
@@ -186,7 +218,7 @@
     };
   }
   var waveEl = document.getElementById("wave");
-  var killsEl = document.getElementById("kills");
+  var goldEl = document.getElementById("gold");
   var bestEl = document.getElementById("best");
   var settingsOverlay = document.getElementById("settings-overlay");
   var soundToggle = document.getElementById("sound-toggle");
@@ -283,49 +315,64 @@
     return true;
   }
 
-  // ---- Between-band boon draft ----
-  function pickBoons() {
-    var elig = BOONS.filter(function (b) {
-      return b.avail();
-    });
-    for (var i = elig.length - 1; i > 0; i--) {
-      var j = (Math.random() * (i + 1)) | 0, t = elig[i]; elig[i] = elig[j]; elig[j] = t;
+  // ---- Allies (bought in the Muster shop) ----
+  function spawnAlly(kind) {
+    if (kind === "tower") {
+      // ring the keep; towers spread evenly around it
+      var ang = (nTower - 1) * 2.399963; // golden-angle spread
+      var rr = KEEP_R + 34;
+      allies.push({ kind: "tower", x: keepX + Math.cos(ang) * rr, y: keepY + Math.sin(ang) * rr,
+        cd: Math.random() * 0.5, phase: Math.random() * 6 });
+    } else {
+      allies.push({ kind: "foot", x: keepX + (Math.random() - 0.5) * 30, y: keepY + KEEP_R + 20,
+        cd: 0, phase: Math.random() * 6, face: 1 });
     }
-    var out = [];
-    if (hearts <= 2) { // guarantee a way to recover when badly hurt
-      for (var m = 0; m < BOONS.length; m++) if (BOONS[m].id === "mend" && BOONS[m].avail()) { out.push(BOONS[m]); break; }
-    }
-    for (var k = 0; k < elig.length && out.length < 3; k++) if (out.indexOf(elig[k]) < 0) out.push(elig[k]);
-    return out;
   }
-  function buildDraftUI(pool) {
-    document.getElementById("draft-band").textContent = String(wave);
-    var list = document.getElementById("boon-list");
+
+  // ---- Between-band Muster shop ----
+  function buildShopUI() {
+    document.getElementById("shop-band").textContent = String(wave);
+    document.getElementById("shop-gold").textContent = "🪙 " + gold;
+    var list = document.getElementById("shop-list");
     list.innerHTML = "";
-    currentBoons = pool;
-    pool.forEach(function (b, i) {
-      var btn = document.createElement("button");
-      btn.className = "boon";
-      btn.innerHTML = '<span class="boon-icon">' + b.icon + '</span><span class="boon-text"><b>' + b.name + '</b><small>' + b.desc + '</small></span>';
-      btn.addEventListener("click", function () { chooseBoon(i); });
-      list.appendChild(btn);
+    var cats = ["Retinue", "Defenses", "Estate", "Warden"];
+    cats.forEach(function (cat) {
+      var items = SHOP.filter(function (s) { return s.cat === cat && s.avail(); });
+      if (!items.length) return;
+      var h = document.createElement("div");
+      h.className = "shop-cat"; h.textContent = cat;
+      list.appendChild(h);
+      items.forEach(function (s) {
+        var c = s.cost();
+        var btn = document.createElement("button");
+        btn.className = "shop-item" + (gold < c ? " poor" : "");
+        btn.innerHTML = '<span class="si-icon">' + s.icon + '</span>' +
+          '<span class="si-text"><b>' + s.name + '</b><small>' + s.desc() + '</small></span>' +
+          '<span class="si-cost">🪙 ' + c + '</span>';
+        btn.disabled = gold < c;
+        btn.addEventListener("click", function () { buyItem(s); });
+        list.appendChild(btn);
+      });
     });
   }
-  function openDraft() {
-    var pool = pickBoons();
-    if (!pool.length) { wave++; startWave(); return; } // nothing left to offer
-    paused = true;
-    buildDraftUI(pool);
-    document.getElementById("draft-overlay").classList.add("show");
-  }
-  function chooseBoon(i) {
-    var b = currentBoons[i];
-    if (!b) return;
-    b.apply();
+  function buyItem(s) {
+    var c = s.cost();
+    if (gold < c || !s.avail()) return;
+    gold -= c;
+    s.buy();
     sfxBoon();
-    document.getElementById("draft-overlay").classList.remove("show");
+    buildShopUI(); // refresh costs/affordability
+  }
+  function openShop() {
+    paused = true;
+    buildShopUI();
+    document.getElementById("shop-overlay").classList.add("show");
+  }
+  function march() {
+    document.getElementById("shop-overlay").classList.remove("show");
     paused = false;
     wave++;
+    gold += income; // estate income at the start of each band
     startWave();
   }
 
@@ -345,7 +392,7 @@
     var ay = r.y + ry2 / rd2 * esp * tt - player.y;
     var ad = Math.sqrt(ax * ax + ay * ay) || 1;
     arrows.push({ x: player.x, y: player.y - 10, vx: ax / ad * ARROW_SPEED, vy: ay / ad * ARROW_SPEED,
-      life: stat.range / ARROW_SPEED + 0.3, pierce: stat.pierce, hit: [] });
+      life: stat.range / ARROW_SPEED + 0.3, pierce: stat.pierce, hit: [], dmg: stat.dmg, src: "bow" });
   }
 
   // ---- Update ----
@@ -465,8 +512,55 @@
             puffs.push({ x: e2.x, y: e2.y, t: 0 });
             sfxThock(e2.type);
             e2.lanceT = LANCE_CD;
-            if (e2.hp <= 0) { e2.state = "down"; e2.t = 0; kills++; lanceScore += 1; }
+            if (e2.hp <= 0) { e2.state = "down"; e2.t = 0; kills++; lanceScore += 1; gold += goldFor(e2.type); }
           }
+        }
+      }
+    }
+
+    // ---- Allies: footmen roam and cut down raiders; towers shoot ----
+    function nearestMarcher(ax, ay, maxR) {
+      var best = null, bd = maxR * maxR;
+      for (var q = 0; q < raiders.length; q++) {
+        var rq = raiders[q];
+        if (rq.state !== "march") continue;
+        var qx = rq.x - ax, qy = rq.y - ay, q2 = qx * qx + qy * qy;
+        if (q2 < bd) { bd = q2; best = rq; }
+      }
+      return best;
+    }
+    for (var ai = 0; ai < allies.length; ai++) {
+      var al = allies[ai];
+      al.cd -= dt;
+      if (al.kind === "tower") {
+        if (al.cd <= 0) {
+          var tt2 = nearestMarcher(al.x, al.y, 120);
+          if (tt2) {
+            var tx = tt2.x - al.x, ty = tt2.y - al.y, td = Math.sqrt(tx * tx + ty * ty) || 1;
+            arrows.push({ x: al.x, y: al.y - 6, vx: tx / td * ARROW_SPEED, vy: ty / td * ARROW_SPEED,
+              life: 120 / ARROW_SPEED + 0.3, pierce: 0, hit: [], dmg: 1, src: "tower" });
+            al.cd = 0.9;
+          }
+        }
+      } else { // footman
+        var tgt = nearestMarcher(al.x, al.y, 260);
+        if (tgt) {
+          var fx = tgt.x - al.x, fy = tgt.y - al.y, fd = Math.sqrt(fx * fx + fy * fy) || 1;
+          al.face = fx > 0 ? 1 : -1;
+          if (fd > TYPES[tgt.type].r + 9) {
+            al.x += fx / fd * 96 * dt; al.y += fy / fd * 96 * dt;
+            al.phase += dt * 8;
+          } else if (al.cd <= 0) {
+            tgt.hp -= 1;
+            puffs.push({ x: (al.x + tgt.x) / 2, y: (al.y + tgt.y) / 2, t: 0 });
+            sfxThock(tgt.type);
+            al.cd = 0.5;
+            if (tgt.hp <= 0) { tgt.state = "down"; tgt.t = 0; kills++; gold += goldFor(tgt.type); }
+          }
+        } else {
+          // no target: drift back toward the keep
+          var hx = keepX - al.x, hy = (keepY + KEEP_R + 20) - al.y, hd = Math.sqrt(hx * hx + hy * hy) || 1;
+          if (hd > 6) { al.x += hx / hd * 55 * dt; al.y += hy / hd * 55 * dt; al.phase += dt * 5; }
         }
       }
     }
@@ -497,11 +591,11 @@
               remove = true; break;
             }
           }
-          e.hp -= stat.dmg;
+          e.hp -= ar.dmg;
           sfxThock(e.type);
           puffs.push({ x: ar.x, y: ar.y, t: 0 });
           ar.hit.push(e.id);
-          if (e.hp <= 0) { e.state = "down"; e.t = 0; kills++; bowScore += 1; }
+          if (e.hp <= 0) { e.state = "down"; e.t = 0; kills++; gold += goldFor(e.type); if (ar.src === "bow") bowScore += 1; }
           if (ar.pierce > 0) ar.pierce--; else remove = true;
           break;
         }
@@ -515,12 +609,12 @@
     if (running && waveDone()) {
       if (breatherT <= 0 && !cleared) { breatherT = BREATHER; announced = "Band " + wave + " repelled"; announceT = BREATHER; cleared = true; }
       breatherT -= dt;
-      if (breatherT <= 0 && cleared) { cleared = false; openDraft(); }
+      if (breatherT <= 0 && cleared) { cleared = false; openShop(); }
     }
     if (announceT > 0) announceT -= dt;
 
     waveEl.textContent = String(wave);
-    killsEl.textContent = String(kills);
+    goldEl.textContent = String(gold);
   }
 
   function doGameOver() {
@@ -670,6 +764,42 @@
     ctx.restore();
   }
 
+  function drawAlly(al) {
+    ctx.save();
+    ctx.translate(al.x, al.y);
+    ctx.fillStyle = "rgba(0,0,0,0.22)";
+    ctx.beginPath(); ctx.ellipse(0, al.kind === "tower" ? 12 : 9, al.kind === "tower" ? 9 : 6, 3, 0, 0, Math.PI * 2); ctx.fill();
+    if (al.kind === "tower") {
+      // stout stone watchtower with a teal banner
+      ctx.fillStyle = "#6a7182";
+      ctx.beginPath(); ctx.roundRect(-7, -14, 14, 26, 3); ctx.fill();
+      ctx.fillStyle = "#7a8294";
+      ctx.beginPath(); ctx.roundRect(-8, -18, 16, 6, 2); ctx.fill();
+      for (var m = -1; m <= 1; m++) ctx.fillRect(m * 6 - 2, -22, 4, 5);
+      ctx.fillStyle = "#2a3140";
+      ctx.beginPath(); ctx.roundRect(-3, -6, 6, 8, 2); ctx.fill();
+      ctx.strokeStyle = "#2c3038"; ctx.lineWidth = 1.4;
+      ctx.beginPath(); ctx.moveTo(0, -22); ctx.lineTo(0, -30); ctx.stroke();
+      ctx.fillStyle = "#5dd6c0";
+      ctx.beginPath(); ctx.moveTo(0, -30); ctx.lineTo(7, -28); ctx.lineTo(0, -25.5); ctx.closePath(); ctx.fill();
+    } else {
+      // footman: teal tabard, spear
+      var bob = Math.sin(al.phase * 2) * 1.2;
+      ctx.scale(al.face || 1, 1);
+      ctx.strokeStyle = "#c9b28a"; ctx.lineWidth = 1.6; ctx.lineCap = "round";
+      ctx.beginPath(); ctx.moveTo(4, -12 - bob); ctx.lineTo(9, 6); ctx.stroke();
+      ctx.fillStyle = "#d7dbe4";
+      ctx.beginPath(); ctx.moveTo(4, -12 - bob); ctx.lineTo(2.5, -15 - bob); ctx.lineTo(6, -13.5 - bob); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = "#357068";
+      ctx.beginPath(); ctx.roundRect(-4, -8 - bob, 8, 13, 3); ctx.fill();
+      ctx.fillStyle = "#e8d4b8";
+      ctx.beginPath(); ctx.arc(0, -11 - bob, 3.4, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#5b6472";
+      ctx.beginPath(); ctx.arc(0, -12.4 - bob, 3.4, Math.PI, 0); ctx.fill();
+    }
+    ctx.restore();
+  }
+
   function drawRaider(r) {
     var T = TYPES[r.type], s = T.r / 6;
     ctx.save();
@@ -764,6 +894,7 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     drawGround();
     drawKeep();
+    for (var ci = 0; ci < allies.length; ci++) drawAlly(allies[ci]);
     // draw order: downed first, then marching/fleeing by y, arrows, horse
     var byY = raiders.slice().sort(function (a, b) { return (a.state === "down" ? -1e6 : a.y) - (b.state === "down" ? -1e6 : b.y); });
     for (var i = 0; i < byY.length; i++) drawRaider(byY[i]);
@@ -886,6 +1017,7 @@
   document.getElementById("settings-share").addEventListener("click", shareGame);
   document.getElementById("lb-btn").addEventListener("click", function () { LB.open("warden"); });
   document.getElementById("restart").addEventListener("click", newGame);
+  document.getElementById("march-btn").addEventListener("click", function () { if (paused) march(); });
 
   window.addEventListener("pointerdown", function () { audio(); }, { once: false });
 
@@ -896,15 +1028,16 @@
 
   // ---- Lifecycle ----
   function newGame() {
-    raiders = []; arrows = []; puffs = [];
+    raiders = []; arrows = []; puffs = []; allies = [];
     hearts = HEARTS_MAX;
     wave = 1; kills = 0;
+    gold = 0; income = 2; nFoot = 0; nTower = 0; nGranary = 0;
     breatherT = 0; cleared = false; paused = false;
     stat = { range: BASE.range, speed: BASE.speed, fireCd: BASE.fireCd, volley: BASE.volley, pierce: BASE.pierce, dmg: BASE.dmg };
     stance = "bow"; bowScore = 0; lanceScore = 0;
     over = false; running = true;
     elapsed = 0;
-    document.getElementById("draft-overlay").classList.remove("show");
+    document.getElementById("shop-overlay").classList.remove("show");
     updateStanceBtn();
     player.x = keepX; player.y = keepY + 86;
     player.tx = player.x; player.ty = player.y;
@@ -916,12 +1049,13 @@
   // test hook for scripted play (harmless in production)
   window.__wd = {
     go: function (x, y) { player.tx = x; player.ty = y; },
-    pick: function (i) { if (paused) chooseBoon(i); },
     setStance: function (s) { if ((s === "bow" || s === "lance") && s !== stance) toggleStance(); },
+    buy: function (id) { for (var i = 0; i < SHOP.length; i++) if (SHOP[i].id === id) { buyItem(SHOP[i]); return; } },
+    march: function () { if (paused) march(); },
     state: function () {
-      return { wave: wave, kills: kills, hearts: hearts, over: over, paused: paused,
+      return { wave: wave, kills: kills, hearts: hearts, over: over, paused: paused, gold: gold, income: income,
         stance: stance, bowScore: Math.round(bowScore * 10) / 10, lanceScore: Math.round(lanceScore * 10) / 10,
-        boons: currentBoons.map(function (b) { return b.id; }),
+        allies: { foot: nFoot, tower: nTower, granary: nGranary },
         stat: { range: stat.range, speed: stat.speed, fireCd: stat.fireCd, volley: stat.volley, pierce: stat.pierce, dmg: stat.dmg },
         raiders: raiders.filter(function (r) { return r.state === "march"; })
           .map(function (r) { return { x: Math.round(r.x), y: Math.round(r.y), type: r.type }; }),
