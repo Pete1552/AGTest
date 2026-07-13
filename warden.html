@@ -93,7 +93,7 @@
   </div>
 </div>
 
-<script src="leaderboard.js?v=27"></script>
+<script src="leaderboard.js?v=28"></script>
 <script>
 (function () {
   "use strict";
@@ -108,8 +108,8 @@
 
   // Combat stats start gentle and grow only through the between-band boon
   // draft, so a run is a series of build choices rather than a fixed loadout.
-  var BASE = { range: 185, speed: 208, fireCd: 0.5, volley: 2, pierce: 0, bodkin: false };
-  var stat = { range: 185, speed: 208, fireCd: 0.5, volley: 2, pierce: 0, bodkin: false };
+  var BASE = { range: 185, speed: 208, fireCd: 0.5, volley: 2, pierce: 0, dmg: 1 };
+  var stat = { range: 185, speed: 208, fireCd: 0.5, volley: 2, pierce: 0, dmg: 1 };
 
   // Raider archetypes — each wants a different answer. Runners must be caught
   // early, shieldbearers must be flanked (their shield stops arrows coming
@@ -129,7 +129,7 @@
     { id: "volley", icon: "🏹", name: "Split shot",     desc: "+1 arrow each volley",         avail: function () { return stat.volley < 6; },   apply: function () { stat.volley += 1; } },
     { id: "cd",     icon: "⚡", name: "Quick nock",     desc: "Nock arrows faster",           avail: function () { return stat.fireCd > 0.31; }, apply: function () { stat.fireCd = Math.max(0.3, stat.fireCd - 0.06); } },
     { id: "pierce", icon: "✶", name: "Piercing shafts", desc: "Arrows pass through 1 more foe", avail: function () { return stat.pierce < 3; },  apply: function () { stat.pierce += 1; } },
-    { id: "bodkin", icon: "🗡️", name: "Bodkin points",  desc: "Arrows punch through shields",  avail: function () { return !stat.bodkin; },      apply: function () { stat.bodkin = true; } },
+    { id: "trueshot", icon: "🗡️", name: "Trueshot",     desc: "+1 arrow damage",               avail: function () { return stat.dmg < 3; },       apply: function () { stat.dmg += 1; } },
     { id: "mend",   icon: "❤️", name: "Mend the keep",  desc: "Restore a lost heart",         avail: function () { return hearts < HEARTS_MAX; }, apply: function () { hearts = Math.min(HEARTS_MAX, hearts + 1); } }
   ];
 
@@ -253,7 +253,6 @@
   // ---- Between-band boon draft ----
   function pickBoons() {
     var elig = BOONS.filter(function (b) {
-      if (b.id === "bodkin" && wave < 4) return false; // no shields to punch yet
       return b.avail();
     });
     for (var i = elig.length - 1; i > 0; i--) {
@@ -300,7 +299,7 @@
   // Can the archer, from where it stands, damage this raider? Shielded fronts
   // can't be hit from the keep-side — you must ride around to the flank/rear.
   function canDamage(r) {
-    if (r.type !== "shield" || stat.bodkin) return true;
+    if (r.type !== "shield") return true;
     var nx = keepX - r.x, ny = keepY - r.y, nd = Math.sqrt(nx * nx + ny * ny) || 1;
     var ax = r.x - player.x, ay = r.y - player.y, ad = Math.sqrt(ax * ax + ay * ay) || 1;
     return (ax * nx + ay * ny) / (ad * nd) >= -0.5; // only a narrow frontal cone is shielded
@@ -419,7 +418,7 @@
         var hx = e.x - ar.x, hy = e.y - ar.y, rad = TYPES[e.type].r + 7;
         if (hx * hx + hy * hy < rad * rad) {
           // a shieldbearer stops arrows striking its keep-facing front
-          if (e.type === "shield" && !stat.bodkin) {
+          if (e.type === "shield") {
             var nx = keepX - e.x, ny = keepY - e.y, nd = Math.sqrt(nx * nx + ny * ny) || 1;
             if ((ar.vx * nx + ar.vy * ny) / (ARROW_SPEED * nd) < -0.5) {
               puffs.push({ x: ar.x, y: ar.y, t: 0, clink: true });
@@ -427,7 +426,7 @@
               remove = true; break;
             }
           }
-          e.hp--;
+          e.hp -= stat.dmg;
           sfxThock(e.type);
           puffs.push({ x: ar.x, y: ar.y, t: 0 });
           ar.hit.push(e.id);
@@ -785,7 +784,7 @@
     hearts = HEARTS_MAX;
     wave = 1; kills = 0;
     breatherT = 0; cleared = false; paused = false;
-    stat = { range: BASE.range, speed: BASE.speed, fireCd: BASE.fireCd, volley: BASE.volley, pierce: BASE.pierce, bodkin: BASE.bodkin };
+    stat = { range: BASE.range, speed: BASE.speed, fireCd: BASE.fireCd, volley: BASE.volley, pierce: BASE.pierce, dmg: BASE.dmg };
     over = false; running = true;
     elapsed = 0;
     document.getElementById("draft-overlay").classList.remove("show");
@@ -803,7 +802,7 @@
     state: function () {
       return { wave: wave, kills: kills, hearts: hearts, over: over, paused: paused,
         boons: currentBoons.map(function (b) { return b.id; }),
-        stat: { range: stat.range, speed: stat.speed, fireCd: stat.fireCd, volley: stat.volley, pierce: stat.pierce, bodkin: stat.bodkin },
+        stat: { range: stat.range, speed: stat.speed, fireCd: stat.fireCd, volley: stat.volley, pierce: stat.pierce, dmg: stat.dmg },
         raiders: raiders.filter(function (r) { return r.state === "march"; })
           .map(function (r) { return { x: Math.round(r.x), y: Math.round(r.y), type: r.type }; }),
         px: Math.round(player.x), py: Math.round(player.y), W: W, H: H };
