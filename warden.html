@@ -93,7 +93,7 @@
   </div>
 </div>
 
-<script src="leaderboard.js?v=26"></script>
+<script src="leaderboard.js?v=27"></script>
 <script>
 (function () {
   "use strict";
@@ -108,8 +108,8 @@
 
   // Combat stats start gentle and grow only through the between-band boon
   // draft, so a run is a series of build choices rather than a fixed loadout.
-  var BASE = { range: 185, speed: 180, fireCd: 0.5, volley: 2, pierce: 0, bodkin: false };
-  var stat = { range: 185, speed: 180, fireCd: 0.5, volley: 2, pierce: 0, bodkin: false };
+  var BASE = { range: 185, speed: 208, fireCd: 0.5, volley: 2, pierce: 0, bodkin: false };
+  var stat = { range: 185, speed: 208, fireCd: 0.5, volley: 2, pierce: 0, bodkin: false };
 
   // Raider archetypes — each wants a different answer. Runners must be caught
   // early, shieldbearers must be flanked (their shield stops arrows coming
@@ -202,11 +202,13 @@
     return "basic";
   }
 
-  // Raiders arrive in clustered groups from rotating sides, so parking by the
-  // gate can't keep up with simultaneous approaches — riding out to meet each
-  // group early is the winning play.
+  // Raiders arrive in clustered groups so parking by the gate can't keep up.
+  // Consecutive groups come from a *perpendicular* side (never the opposite
+  // side back-to-back) and are spaced out in time, so you're never asked to
+  // sprint 180° across the map before the next group lands.
   var spawnQueue = [];  // {t, x, y} in wave-time
   var waveT = 0, lastSide = -1;
+  var PERP = { 0: [2, 3], 1: [2, 3], 2: [0, 1], 3: [0, 1] }; // 0 top 1 bottom 2 left 3 right
   function startWave() {
     spawnQueue = [];
     waveT = 0;
@@ -215,7 +217,8 @@
     while (remaining > 0) {
       var g = Math.min(remaining, 3 + Math.floor(Math.random() * 3)); // groups of 3-5
       remaining -= g;
-      var side = (lastSide + 1 + Math.floor(Math.random() * 3)) % 4; // never the same side twice
+      var choices = lastSide < 0 ? [0, 1, 2, 3] : PERP[lastSide];
+      var side = choices[(Math.random() * choices.length) | 0];
       lastSide = side;
       var base = 0.15 + Math.random() * 0.7;
       for (var i = 0; i < g; i++) {
@@ -226,7 +229,7 @@
         else { x = W + 16 + Math.random() * 18; y = base * H + off; }
         spawnQueue.push({ t: t + Math.random() * 0.6, x: x, y: y });
       }
-      t += 1.6 + Math.random();
+      t += 2.4 + Math.random() * 1.2;
     }
     announced = "Band " + wave + " approaches";
     announceT = 2.4;
@@ -300,7 +303,7 @@
     if (r.type !== "shield" || stat.bodkin) return true;
     var nx = keepX - r.x, ny = keepY - r.y, nd = Math.sqrt(nx * nx + ny * ny) || 1;
     var ax = r.x - player.x, ay = r.y - player.y, ad = Math.sqrt(ax * ax + ay * ay) || 1;
-    return (ax * nx + ay * ny) / (ad * nd) >= -0.25;
+    return (ax * nx + ay * ny) / (ad * nd) >= -0.5; // only a narrow frontal cone is shielded
   }
   function fireAt(r, dist) {
     var tt = dist / ARROW_SPEED;
@@ -418,7 +421,7 @@
           // a shieldbearer stops arrows striking its keep-facing front
           if (e.type === "shield" && !stat.bodkin) {
             var nx = keepX - e.x, ny = keepY - e.y, nd = Math.sqrt(nx * nx + ny * ny) || 1;
-            if ((ar.vx * nx + ar.vy * ny) / (ARROW_SPEED * nd) < -0.25) {
+            if ((ar.vx * nx + ar.vy * ny) / (ARROW_SPEED * nd) < -0.5) {
               puffs.push({ x: ar.x, y: ar.y, t: 0, clink: true });
               sfxClink();
               remove = true; break;
