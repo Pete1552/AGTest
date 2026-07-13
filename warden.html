@@ -115,7 +115,7 @@
   </div>
 </div>
 
-<script src="leaderboard.js?v=34"></script>
+<script src="leaderboard.js?v=35"></script>
 <script>
 (function () {
   "use strict";
@@ -1066,20 +1066,20 @@
     return dx * dx + dy * dy < 20 * 20;
   }
   // ---- RTS-style selection: tap any unit (horse or footman) to select it —
-  // only the selected unit answers to the drag. Tap that same unit again to
-  // deselect it outright (nothing selected, same as clicking empty ground in
-  // any RTS — it does NOT fall back to the horse for you). Tap the field to
-  // give a selected footman a new post; tap empty ground with nothing that
-  // can be posted there clears the selection. This is the same vocabulary
+  // only the selected unit answers to the drag. Tap a different unit to
+  // switch to it; tap the field to give a selected footman a new post (a
+  // command that lands near the unit's own current spot is just a no-op,
+  // not a deselect — otherwise nudging it a short distance would keep
+  // kicking you back out mid-order). Tap empty ground with nothing that can
+  // be posted there clears the selection. This is the same vocabulary
   // future selectables (the castle for repair, a tower for upgrades) will use. ----
   function selectUnit(u) { selectedUnit = u; updateTapHint(); }
   function handleTap(p) {
     var underFoot = footmanNear(p.x, p.y, 18);
     var target = underFoot ? underFoot.id : (isOnHorse(p) ? "horse" : null);
     if (target != null) {
-      if (selectedUnit === target) { selectUnit(null); sfxDeselect(); }
-      else { selectUnit(target); sfxSelect(); }
-      player.tx = player.x; player.ty = player.y; // cancel any nudge from this selection tap
+      if (selectedUnit !== target) { selectUnit(target); sfxSelect(); player.tx = player.x; player.ty = player.y; }
+      // tapping the already-selected unit's own sprite is a harmless no-op
       return;
     }
     // empty field — no unit here
