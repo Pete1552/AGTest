@@ -9,7 +9,7 @@
   // bottom of every settings popup so you can tell at a glance whether a
   // device has picked up the latest deploy. Bump alongside the ?v= query on
   // the <script> tags so caches refetch this file. ====
-  var VERSION = "2026-07-13.7";
+  var VERSION = "2026-07-13.8";
 
   // ==== Daily Set mode ====
   // daily.html launches games as game.html?daily=YYYY-MM-DD&seed=N. Because
@@ -73,6 +73,7 @@
     orbit:  { name: "Orbit",   dir: "desc", fmt: function (v) { return String(v); } },
     hamlet: { name: "Hamlet",  dir: "desc", fmt: function (v) { return v + " pts"; } },
     warden: { name: "Warden",  dir: "desc", fmt: function (v) { return "Band " + v; } },
+    wardenii: { name: "Warden II", dir: "desc", fmt: function (v) { return Math.floor(v / 60) + ":" + String(v % 60).padStart(2, "0"); } },
     keystone: { name: "Keystone", dir: "desc", fmt: function (v) { return (v / 10).toFixed(1) + " m"; } },
     daily:  { name: "Daily Set", dir: "desc", fmt: function (v) { return v + " pts"; } }
   };

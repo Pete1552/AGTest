@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="shared.css" />
-<title>Warden — Tranquil</title>
+<title>Warden II — Tranquil</title>
 <style>
   .play-area { touch-action: none; margin: 6px 0; }
   #stage {
@@ -25,16 +25,24 @@
   }
   .tap-hint { text-align: center; color: var(--muted); font-size: 12px; min-height: 16px; margin-top: 6px; }
   .play-area { position: relative; }
-  .stance-btn {
-    position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%);
-    border: none; cursor: pointer; font-weight: 800; font-size: 14px;
-    border-radius: 999px; padding: 10px 20px; color: #06231e; background: var(--accent);
-    box-shadow: 0 4px 14px rgba(0,0,0,0.4); font-family: var(--font-display);
-    transition: transform 100ms ease, background 140ms ease;
+  .build-tray {
+    position: absolute; left: 0; right: 0; bottom: 12px;
+    display: flex; justify-content: center; gap: 6px;
+  }
+  .build-btn {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+    width: 40px; height: 40px; border: none; cursor: pointer; border-radius: 50%;
+    background: var(--panel); box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    transition: transform 100ms ease, opacity 140ms ease, background 140ms ease;
     -webkit-user-select: none; user-select: none; touch-action: manipulation;
   }
-  .stance-btn:active { transform: translateX(-50%) translateY(1px) scale(0.97); }
-  .stance-btn.lance { background: #d7a35a; }
+  .build-btn:active { transform: scale(0.94); }
+  .build-btn.poor { opacity: 0.4; }
+  .build-btn.stance { background: var(--accent); }
+  .build-btn.stance.lance { background: #d7a35a; }
+  .build-btn .bb-icon { font-size: 15px; line-height: 1; }
+  .build-btn .bb-cost { font-size: 8.5px; font-weight: 800; color: #f2c94c; line-height: 1; }
+  .build-btn.stance .bb-cost { color: #06231e; font-size: 8px; }
   .place-bar {
     position: absolute; left: 0; right: 0; bottom: 12px;
     display: flex; justify-content: center; gap: 10px;
@@ -69,31 +77,7 @@
     background: var(--panel); padding: 8px 12px; border-radius: 999px;
     box-shadow: 0 4px 12px rgba(0,0,0,0.4); white-space: nowrap;
   }
-  .draft-sub { text-align: center; color: var(--muted); font-size: 12.5px; margin: -4px 0 10px; }
-  .modal.shop { max-height: 88vh; display: flex; flex-direction: column; }
-  .shop-head { display: flex; align-items: center; justify-content: space-between; }
-  .shop-gold { font-family: var(--font-display); font-weight: 800; font-size: 17px; color: #f2c94c; }
-  #shop-list { display: flex; flex-direction: column; gap: 7px; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 2px; }
-  .shop-cat { font-size: 11px; letter-spacing: 0.5px; text-transform: uppercase; color: var(--muted); font-weight: 700; margin: 8px 0 1px; }
-  #shop-list .shop-item {
-    display: flex; align-items: center; gap: 11px; width: 100%; margin: 0;
-    background: var(--grid); color: var(--ink); border: 1px solid rgba(255,255,255,0.06);
-    border-radius: 12px; padding: 9px 12px; cursor: pointer; text-align: left;
-    transition: transform 100ms ease, border-color 140ms ease, opacity 140ms ease;
-  }
-  #shop-list .shop-item:hover:not([disabled]) { border-color: color-mix(in srgb, var(--accent) 50%, transparent); }
-  #shop-list .shop-item:active:not([disabled]) { transform: scale(0.98); }
-  #shop-list .shop-item.poor { opacity: 0.5; cursor: default; }
-  .si-icon {
-    font-size: 21px; flex: none; width: 36px; height: 36px; border-radius: 9px;
-    display: flex; align-items: center; justify-content: center;
-    background: color-mix(in srgb, var(--accent) 16%, var(--panel));
-  }
-  .si-text { display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0; }
-  .si-text b { font-family: var(--font-display); font-size: 14.5px; }
-  .si-text small { color: var(--muted); font-size: 11.5px; }
-  .si-cost { flex: none; font-family: var(--font-display); font-weight: 800; font-size: 13px; color: #f2c94c; }
-  #march-btn { margin-top: 10px; }
+  .score-box.provisions.short .score-val { color: #e8a23c; }
 </style>
 </head>
 <body>
@@ -101,7 +85,7 @@
   <header class="topbar">
     <div class="brand">
       <a href="index.html" class="icon-btn" aria-label="Back to games">‹</a>
-      <span class="title">Warden</span>
+      <span class="title">Warden II</span>
     </div>
     <div class="bar-actions">
       <button id="lb-btn" class="icon-btn" aria-label="High scores">🏆</button>
@@ -111,47 +95,47 @@
   </header>
 
   <div class="scores">
-    <div class="score-box"><div class="score-label">Band</div><div class="score-val" id="wave">1</div></div>
+    <div class="score-box"><div class="score-label">Time</div><div class="score-val" id="wave">0:00</div></div>
     <div class="score-box"><div class="score-label">Gold</div><div class="score-val" id="gold">0</div></div>
+    <div class="score-box provisions"><div class="score-label">Supply</div><div class="score-val" id="provisions">0/0</div></div>
     <div class="score-box best"><div class="score-label">Best</div><div class="score-val" id="best">—</div></div>
   </div>
 
   <div class="play-area">
     <canvas id="stage"></canvas>
-    <button id="stance-btn" class="stance-btn" aria-label="Switch stance">🏹 Bow</button>
+    <div id="build-tray" class="build-tray">
+      <button id="stance-btn" class="build-btn stance" aria-label="Switch stance"><span class="bb-icon">🏹</span><span class="bb-cost">Bow</span></button>
+      <button class="build-btn" data-build="farm" aria-label="Build Farm"><span class="bb-icon">🌾</span><span class="bb-cost"></span></button>
+      <button class="build-btn" data-build="storehouse" aria-label="Build Storehouse"><span class="bb-icon">🏦</span><span class="bb-cost"></span></button>
+      <button class="build-btn" data-build="barracks" aria-label="Build Barracks"><span class="bb-icon">🏚️</span><span class="bb-cost"></span></button>
+      <button class="build-btn" data-build="tower" aria-label="Build Watchtower"><span class="bb-icon">🗼</span><span class="bb-cost"></span></button>
+    </div>
     <div id="place-bar" class="place-bar" style="display:none">
-      <button id="place-confirm-btn" class="place-btn confirm" aria-label="Place tower">🗼 Place</button>
+      <button id="place-confirm-btn" class="place-btn confirm" aria-label="Place building">🏚️ Place</button>
       <button id="place-cancel-btn" class="place-btn cancel" aria-label="Cancel">✕ Cancel</button>
     </div>
     <div id="train-panel" class="train-panel" style="display:none">
+      <button class="train-btn" data-troop="footman" aria-label="Train Footman"><span class="tb-icon">⚔️</span><span class="tb-cost"></span></button>
       <button class="train-btn" data-troop="archer" aria-label="Train Archer"><span class="tb-icon">🏹</span><span class="tb-cost"></span></button>
       <button class="train-btn" data-troop="spearman" aria-label="Train Spearman"><span class="tb-icon">🔱</span><span class="tb-cost"></span></button>
       <button class="train-btn" data-troop="catapult" aria-label="Train Catapult"><span class="tb-icon">💥</span><span class="tb-cost"></span></button>
+      <button class="train-btn" data-troop="miner" aria-label="Train Miner"><span class="tb-icon">⛏️</span><span class="tb-cost"></span></button>
       <span class="train-queue" id="train-queue-badge">Empty queue</span>
     </div>
   </div>
   <div class="tap-hint" id="tap-hint">Drag to ride · tap the button to switch bow / lance</div>
 </div>
 
-<div id="shop-overlay" class="modal-overlay">
-  <div class="modal shop">
-    <div class="shop-head"><h2>Muster</h2><span class="shop-gold" id="shop-gold">🪙 0</span></div>
-    <p class="draft-sub">Band <span id="shop-band"></span> repelled — spend your gold, then march.</p>
-    <div id="shop-list"></div>
-    <button id="march-btn" class="share">March ›</button>
-  </div>
-</div>
-
 <div id="settings-overlay" class="modal-overlay">
   <div class="modal settings">
-    <h2>Warden</h2>
+    <h2>Warden II</h2>
     <div class="setting-row">
       <span class="label">Sound</span>
       <button id="sound-toggle" class="toggle on">On</button>
     </div>
     <div class="how">
       <p class="how-title">How to play</p>
-      <p class="body">You are the keep's mounted warden. Drag to ride; charging raiders that reach the gate steal a heart, so meet them in the field. Tap the stance button to switch weapon: <b>Bow</b> shoots at range on its own, while the <b>Lance</b> cuts down anyone you ride through (no arrows — you must dive in). The enemy adapts to whatever you favour: lean on the bow and they send <b>skirmishers</b>, who dodge most arrows but fall to the lance; lean on the lance and they send <b>pikemen</b>, who brace against a charge but are soft to arrows. <b>Shieldbearers</b> block both weapons from the front — flank them. <b>Brutes</b> just soak hits. Every repelled raider drops <b>gold</b>. Between bands, spend it in the Muster: raise instant <b>Footmen</b>, invest in a <b>Granary</b> for more gold each band, or sharpen the warden — or drag a <b>Watchtower</b> or <b>Barracks</b> into place yourself before confirming. Tap a placed Barracks any time during a band to train a proper roster: <b>Archers</b> shoot from range without closing in, <b>Spearmen</b> hit harder but move slower, and <b>Catapults</b> lob a blast that hits everyone nearby — each takes a few seconds to train, so queue ahead. Only your selection answers your touch: tap a footman to select it, or drag a box over several to select them as a group, then tap the field to post them somewhere new — but while any are selected the horse holds her ground. Tap empty ground to deselect, or tap the horse to take the reins back before you can ride again. Every other band, a raider <b>camp</b> appears at the field's edge — ride out and hold your ground there a moment to raid it for bonus gold, but the keep goes undefended while you're away. Survive as long as you can.</p>
+      <p class="body">You are the keep's mounted warden, but the keep now runs its own economy. Tap a build icon (<b>Farm</b>, <b>Storehouse</b>, <b>Barracks</b>, <b>Watchtower</b>) then drag the ghost into place and confirm — building costs come out of your <b>Gold</b>. Gold isn't just looted from raiders any more: train a <b>Miner</b> at a Storehouse and it will haul <b>ore</b> from the gold veins scattered around the field back home, turning it into spendable gold on every trip — veins run thin the more you draw from one, so it pays to work more than one. <b>Farms</b> produce <b>Provisions</b>, the upkeep every building and soldier draws on; if you run short, training slows down, so keep a Farm or two ahead of your garrison. Tap a placed <b>Barracks</b> to train <b>Footmen</b>, <b>Archers</b> (range, never close in), <b>Spearmen</b> (harder hits, slower afoot) or <b>Catapults</b> (splash damage) — tap a <b>Storehouse</b> to train more <b>Miners</b>. Tap the stance button to switch your own weapon: <b>Bow</b> shoots at range on its own, while the <b>Lance</b> cuts down anyone you ride through. The enemy has a real <b>Warcamp</b> at the field's edge that musters raiding parties on its own over time instead of scripted waves — ride out and hold your ground beside it to raid it for bonus gold and set its production back, but the keep goes undefended while you're away. Tap a footman to select it, or drag a box over several to command them as a group; tap empty ground to deselect. Survive as long as you can — your score is how long you last.</p>
     </div>
     <button id="settings-share" class="share">Share the game</button>
     <button id="settings-close" class="ghost-btn">Done</button>
@@ -170,12 +154,19 @@
   var ARROW_SPEED = 430;
   var KEEP_R = 44;            // raiders raid inside this radius
   var HEARTS_MAX = 5;
-  var BREATHER = 2.2;         // s to savour the cleared band before the draft
-  var CAMP_R = 22;             // how close the warden must stand to raid the camp
-  var CAMP_CHANNEL = 2.2;      // seconds of holding ground to complete the raid
+  var WARCAMP_R = 26;          // how close the warden must stand to raid the Warcamp
+  var WARCAMP_CHANNEL = 2.4;   // seconds of holding ground to complete a raid
+  var WARCAMP_RAID_CD = 10;    // seconds before the Warcamp can be raided again
+  var MINE_TIME = 2;           // seconds a Miner spends filling up at a vein
+  var MINE_LOAD = 10;          // gold banked per completed haul
+  var VEIN_REGEN = 1.5;        // ore/second a vein recovers while not being drawn down
+  var MINER_SPEED = 74;
+  var BASE_PROVISIONS = 4;     // the keep's own baseline supply, before any Farm
+  var PROVISIONS_PER_FARM = 4;
+  var UPKEEP = { foot: 1, tower: 1, barracks: 1, storehouse: 1, miner: 1, farm: 0 };
 
-  // Combat stats start gentle and grow only through the between-band boon
-  // draft, so a run is a series of build choices rather than a fixed loadout.
+  // Combat stats are fixed — there's no more personal Warden upgrade shop in
+  // this version; all your build choices go into the base economy instead.
   var BASE = { range: 185, speed: 208, fireCd: 0.5, volley: 2, pierce: 0, dmg: 1 };
   var stat = { range: 185, speed: 208, fireCd: 0.5, volley: 2, pierce: 0, dmg: 1 };
 
@@ -199,65 +190,40 @@
   var bowScore = 0, lanceScore = 0; // decaying tally of how you've been killing
 
   // ---- Economy ----
-  // Gold is harvested from every repelled raider (tougher = richer) plus a
-  // small estate income each band. Between bands you spend it in the Muster
-  // shop on the classic triangle: army (Retinue), defence (Watchtowers), or
-  // economy (Granary) — plus personal Warden upgrades and mending the keep.
-  var gold = 0, income = 2;
-  var nFoot = 0, nTower = 0, nGranary = 0, nBarracks = 0;
-  var allies = [];  // {kind:"foot"|"tower"|"barracks", x, y, ...}
-  var placing = null; // { kind:"tower"|"barracks", x, y, cost } while dragging a bought building into place
+  // Gold comes from two places now: raiders still drop a little on the spot,
+  // but the real engine is Miners hauling ore from field veins back to a
+  // Storehouse. Farms produce Provisions, the upkeep every building and
+  // soldier draws against — run short and training throttles down. Every
+  // building is always placeable from the build tray below the field; there
+  // is no more pause-only shop.
+  var gold = 20;
+  var provisions = { used: 0, cap: 0, ratio: 1 };
+  var counts = { farm: 0, storehouse: 0, barracks: 0, tower: 0, miner: 0 };
+  var nFoot = 0; // just spacing math for footman-style rally posts, not a cap
+  var allies = [];  // {kind:"foot"|"tower"|"barracks"|"storehouse"|"farm"|"miner", x, y, ...}
+  var placing = null; // { kind, x, y, cost } while dragging a bought building into place
   var TOWER_RANGE = 120;
-  var selectedBuilding = null; // barracks id whose training panel is open
+  var selectedBuilding = null; // barracks/storehouse id whose training panel is open
 
-  // Troops trained at a Barracks (Footman is still the instant Retinue buy;
-  // these three add real variety to the roster). Each has its own combat
-  // role in the allies update loop, keyed off al.troop.
+  // Troops trained at a Barracks (Footman/Archer/Spearman/Catapult) or a
+  // Storehouse (Miner). Each has its own combat/work role, keyed off al.troop.
   var TROOPS = {
-    archer:    { icon: "🏹", name: "Archer",    cost: 6, time: 5,  desc: "Shoots from range, never closes in" },
-    spearman:  { icon: "🔱", name: "Spearman",  cost: 7, time: 6,  desc: "Hits harder in melee, but slower afoot" },
-    catapult:  { icon: "💥", name: "Catapult",  cost: 12, time: 9, desc: "Lobs a blast that hits everyone nearby" }
+    footman:   { icon: "⚔️", name: "Footman",  cost: 5,  time: 4, desc: "A roaming soldier who hunts raiders", trains: "barracks" },
+    archer:    { icon: "🏹", name: "Archer",    cost: 6,  time: 5, desc: "Shoots from range, never closes in", trains: "barracks" },
+    spearman:  { icon: "🔱", name: "Spearman",  cost: 7,  time: 6, desc: "Hits harder in melee, but slower afoot", trains: "barracks" },
+    catapult:  { icon: "💥", name: "Catapult",  cost: 12, time: 9, desc: "Lobs a blast that hits everyone nearby", trains: "barracks" },
+    miner:     { icon: "⛏️", name: "Miner",     cost: 8,  time: 6, desc: "Hauls gold ore from a vein to a Storehouse", trains: "storehouse", cap: 6 }
   };
   function goldFor(type) { return type === "brute" ? 4 : (type === "shield" || type === "pikeman") ? 2 : 1; }
 
-  // The Muster shop. Each item: category, dynamic cost/desc, avail(), buy().
-  // Costs climb with how many you already own so no single line runs away.
-  var SHOP = [
-    { id: "foot",   cat: "Retinue",  icon: "⚔️", name: "Footman",
-      desc: function () { return "A roaming soldier who hunts raiders"; },
-      cost: function () { return 5 + nFoot * 3; },
-      avail: function () { return nFoot < 8; },
-      buy: function () { nFoot++; spawnAlly("foot"); } },
-    { id: "barracks", cat: "Retinue", icon: "🏚️", name: "Barracks",
-      desc: function () { return "Trains archers, spearmen & catapults — you place it"; },
-      cost: function () { return 10 + nBarracks * 8; },
-      avail: function () { return nBarracks < 3; },
-      buy: function (paid) {
-        nBarracks++;
-        var ang = (nBarracks - 1) * 2.399963 + 3.0, rr = KEEP_R + 40;
-        startPlacingBuilding("barracks", paid, keepX + Math.cos(ang) * rr, keepY + Math.sin(ang) * rr);
-      } },
-    { id: "tower",  cat: "Defenses", icon: "🗼", name: "Watchtower",
-      desc: function () { return "A fixed tower that shoots nearby raiders — you place it"; },
-      cost: function () { return 7 + nTower * 4; },
-      avail: function () { return nTower < 8; },
-      buy: function (paid) {
-        nTower++;
-        var ang = (nTower - 1) * 2.399963, rr = KEEP_R + 34; // sensible starting spot, drag it anywhere
-        startPlacingBuilding("tower", paid, keepX + Math.cos(ang) * rr, keepY + Math.sin(ang) * rr);
-      } },
-    { id: "granary", cat: "Estate", icon: "🌾", name: "Granary",
-      desc: function () { return "+2 gold income every band (now +" + income + ")"; },
-      cost: function () { return 6 + nGranary * 3; },
-      avail: function () { return nGranary < 8; },
-      buy: function () { nGranary++; income += 2; } },
-    { id: "range",  cat: "Warden", icon: "🎯", name: "Longer draw",  desc: function () { return "+28 arrow range"; },       cost: function () { return 5; }, avail: function () { return stat.range < 300; },  buy: function () { stat.range += 28; } },
-    { id: "speed",  cat: "Warden", icon: "🐎", name: "Swift steed",  desc: function () { return "+26 riding speed"; },      cost: function () { return 5; }, avail: function () { return stat.speed < 320; },  buy: function () { stat.speed += 26; } },
-    { id: "volley", cat: "Warden", icon: "🏹", name: "Split shot",   desc: function () { return "+1 arrow each volley"; },  cost: function () { return 7; }, avail: function () { return stat.volley < 6; },   buy: function () { stat.volley += 1; } },
-    { id: "cd",     cat: "Warden", icon: "⚡", name: "Quick nock",   desc: function () { return "Nock arrows faster"; },    cost: function () { return 6; }, avail: function () { return stat.fireCd > 0.31; }, buy: function () { stat.fireCd = Math.max(0.3, stat.fireCd - 0.06); } },
-    { id: "trueshot", cat: "Warden", icon: "🗡️", name: "Trueshot",  desc: function () { return "+1 arrow damage"; },       cost: function () { return 8; }, avail: function () { return stat.dmg < 3; },       buy: function () { stat.dmg += 1; } },
-    { id: "mend",   cat: "Warden", icon: "❤️", name: "Mend the keep", desc: function () { return "Restore a lost heart"; }, cost: function () { return 6; }, avail: function () { return hearts < HEARTS_MAX; }, buy: function () { hearts = Math.min(HEARTS_MAX, hearts + 1); } }
-  ];
+  // The four always-placeable buildings. Costs climb with how many you
+  // already own so no single line runs away.
+  var BUILDINGS = {
+    farm:       { icon: "🌾", label: "farm",       cost: function () { return 8 + counts.farm * 4; },        cap: 6, phase: 5.4 },
+    storehouse: { icon: "🏦", label: "storehouse", cost: function () { return 12 + counts.storehouse * 6; }, cap: 4, phase: 4.2 },
+    barracks:   { icon: "🏚️", label: "barracks",   cost: function () { return 10 + counts.barracks * 8; },  cap: 3, phase: 3.0 },
+    tower:      { icon: "🗼", label: "tower",      cost: function () { return 7 + counts.tower * 4; },       cap: 8, phase: 0 }
+  };
 
   var W = 300, H = 460, dpr = window.devicePixelRatio || 1;
   var keepX = 150, keepY = 230;
@@ -274,8 +240,7 @@
     catapult: { speed: 55, range: 130, fireCd: 1.8, splash: 40, dmg: 2 }
   };
   var hearts = HEARTS_MAX;
-  var wave = 1, kills = 0;
-  var breatherT = 0, cleared = false, paused = false;
+  var kills = 0;
   var raiderSeq = 1, allySeq = 1;
   // RTS-style single selection: "horse" (the warden herself) or a footman's
   // id. Only the selected unit answers to your touch — selecting a footman
@@ -292,7 +257,7 @@
   }
   var over = false, running = false, announced = "", announceT = 0;
   var elapsed = 0;
-  var best = Number(localStorage.getItem("tranquil_warden_best") || 0) || 0;
+  var best = Number(localStorage.getItem("tranquil_wardenii_best") || 0) || 0;
 
   var playArea = document.querySelector(".play-area");
   var canvas = document.getElementById("stage");
@@ -348,12 +313,16 @@
   function sfxWave() { tone(392, 0.15, "sine", 0.07); setTimeout(function () { tone(523.25, 0.2, "sine", 0.07); }, 110); }
   function sfxOver() { [330, 247, 175].forEach(function (f, i) { setTimeout(function () { tone(f, 0.3, "sine", 0.09); }, i * 130); }); }
 
-  // ---- Waves ----
-  function bandSize(w) { return 4 + 2 * w; }
-  function raiderSpeed(w) { return 24 + Math.min(30, w * 1.6); }
+  // ---- The Warcamp: a persistent enemy base instead of scripted waves ----
+  // There's no more "band" counter — time itself is the difficulty dial. A
+  // continuous stand-in for the old wave number feeds the same tuned
+  // composition/speed curves so the feel carries over.
+  function timeLevel() { return 1 + elapsed / 25; }
+  function raiderSpeed() { var w = timeLevel(); return 24 + Math.min(30, w * 1.6); }
   // Adaptive composition: the more lopsided your recent kills (bow vs lance),
   // the more the enemy fields the counter to your favoured weapon.
-  function pickType(w) {
+  function pickType() {
+    var w = timeLevel();
     var tot = bowScore + lanceScore + 0.001;
     var bowFrac = bowScore / tot, lanceFrac = lanceScore / tot;
     var wt = [["basic", 1.0]];
@@ -367,93 +336,72 @@
     for (i = 0; i < wt.length; i++) { roll -= wt[i][1]; if (roll <= 0) return wt[i][0]; }
     return "basic";
   }
-
-  // Raiders arrive in clustered groups so parking by the gate can't keep up.
-  // Consecutive groups come from a *perpendicular* side (never the opposite
-  // side back-to-back) and are spaced out in time, so you're never asked to
-  // sprint 180° across the map before the next group lands.
-  var spawnQueue = [];  // {t, x, y} in wave-time
-  var waveT = 0, lastSide = -1;
-  // a raidable enemy camp, offered every other band — ride the warden out to
-  // it and hold your ground for bonus gold, but she isn't guarding the keep
-  // while she's away. null when no camp is on offer this band.
-  var camp = null;
-  var PERP = { 0: [2, 3], 1: [2, 3], 2: [0, 1], 3: [0, 1] }; // 0 top 1 bottom 2 left 3 right
-  function startWave() {
-    spawnQueue = [];
-    waveT = 0;
-    bowScore *= 0.55; lanceScore *= 0.55; // recent bands weigh most in the enemy's read
-    var remaining = bandSize(wave);
-    var t = 1.2;
-    while (remaining > 0) {
-      var g = Math.min(remaining, 3 + Math.floor(Math.random() * 3)); // groups of 3-5
-      remaining -= g;
-      var choices = lastSide < 0 ? [0, 1, 2, 3] : PERP[lastSide];
-      var side = choices[(Math.random() * choices.length) | 0];
-      lastSide = side;
-      var base = 0.15 + Math.random() * 0.7;
-      for (var i = 0; i < g; i++) {
-        var off = (Math.random() - 0.5) * 90, x, y;
-        if (side === 0) { x = base * W + off; y = -16 - Math.random() * 18; }
-        else if (side === 1) { x = base * W + off; y = H + 16 + Math.random() * 18; }
-        else if (side === 2) { x = -16 - Math.random() * 18; y = base * H + off; }
-        else { x = W + 16 + Math.random() * 18; y = base * H + off; }
-        spawnQueue.push({ t: t + Math.random() * 0.6, x: x, y: y });
-      }
-      t += 2.4 + Math.random() * 1.2;
-    }
-    announced = "Band " + wave + " approaches";
-    announceT = 2.4;
-    sfxWave();
-    maybeSpawnCamp();
-  }
-  function maybeSpawnCamp() {
-    camp = null;
-    if (wave < 2 || wave % 2 !== 0) return; // every other band, from band 2 on
-    // placed near an edge but inside the field — the horse is clamped to the
-    // playable area (unlike raiders, who march in from off-screen), so the
-    // camp must sit somewhere she can actually stand
-    var side = Math.floor(Math.random() * 4), x, y;
-    if (side === 0) { x = W / 2; y = 24; }
-    else if (side === 1) { x = W / 2; y = H - 24; }
-    else if (side === 2) { x = 24; y = H / 2; }
-    else { x = W - 24; y = H / 2; }
-    camp = { x: x, y: y, t: 0, raided: false, reward: 6 + Math.floor(wave * 1.2) };
-  }
   function spawnRaider(x, y) {
-    var type = pickType(wave);
+    var type = pickType();
     var T = TYPES[type];
     raiders.push({
       id: raiderSeq++, x: x, y: y, type: type, hp: T.hp, maxhp: T.hp,
-      speed: raiderSpeed(wave) * T.spd * (0.9 + Math.random() * 0.2),
+      speed: raiderSpeed() * T.spd * (0.9 + Math.random() * 0.2),
       state: "march", t: 0, face: 1, phase: Math.random() * 6, charging: false, shieldAng: 0, lanceT: 0
     });
   }
-  function waveDone() {
-    if (spawnQueue.length) return false;
-    for (var i = 0; i < raiders.length; i++) if (raiders[i].state === "march") return false;
-    return true;
+
+  // The Warcamp mans itself: its own "strength" fills over time (faster the
+  // longer you survive) and, once full, musters a raiding party of its own
+  // and resets — no scripted spawn timeline at all. Ride out and hold your
+  // ground beside it to raid it: bonus gold, and a real setback to its
+  // production (not just a one-off reward), then it's on cooldown a while.
+  var warcamp = null;
+  function warcampGrowRate() { return Math.min(10, 4 + elapsed / 60); }
+  function warcampSquadSize() { return Math.min(8, 3 + Math.floor(elapsed / 90)); }
+  function warcampReward() { return 8 + Math.floor(elapsed / 30); }
+  function initWarcamp() {
+    warcamp = { x: W / 2, y: H - 22, strength: 15, cap: 100, rcd: 0, t: 0 };
+  }
+  function spawnWarcampSquad() {
+    var n = warcampSquadSize();
+    for (var i = 0; i < n; i++) {
+      var ang = Math.random() * Math.PI * 2, r = 10 + Math.random() * 22;
+      spawnRaider(warcamp.x + Math.cos(ang) * r, warcamp.y + Math.sin(ang) * r);
+    }
+    announced = "A raiding party marches from the Warcamp!";
+    announceT = 2.4;
+    sfxWave();
   }
 
-  // ---- Allies (bought in the Muster shop) ----
-  function spawnAlly(kind) {
-    if (kind === "tower") {
-      // ring the keep; towers spread evenly around it
-      var ang = (nTower - 1) * 2.399963; // golden-angle spread
-      var rr = KEEP_R + 34;
-      allies.push({ id: allySeq++, kind: "tower", x: keepX + Math.cos(ang) * rr, y: keepY + Math.sin(ang) * rr,
-        cd: Math.random() * 0.5, phase: Math.random() * 6 });
-    } else {
-      // spread footmen around the keep so they don't start in one stack.
-      // rallyX/rallyY is where this unit returns to when it has no raider to
-      // fight — auto-assigned here, but the player can tap-select a footman
-      // and tap the field to move its post anywhere they like.
-      var fa = (nFoot - 1) * 2.399963 + 1.2;
-      var fr = KEEP_R + 24;
-      var rx = keepX + Math.cos(fa) * fr, ry = keepY + Math.sin(fa) * fr;
-      allies.push({ id: allySeq++, kind: "foot", x: rx, y: ry, rallyX: rx, rallyY: ry,
-        cd: 0, phase: Math.random() * 6, face: 1, targetId: null });
+  // ---- Gold Ore veins: what Miners actually harvest ----
+  var veins = [];
+  function initVeins() {
+    veins = [
+      { x: W * 0.15, y: H * 0.18, amount: 400, max: 400 },
+      { x: W * 0.85, y: H * 0.18, amount: 400, max: 400 },
+      { x: W * 0.15, y: H * 0.82, amount: 400, max: 400 }
+    ];
+  }
+  function pickVein() {
+    var best = null;
+    for (var i = 0; i < veins.length; i++) if (veins[i].amount > 0 && (!best || veins[i].amount > best.amount)) best = veins[i];
+    return best;
+  }
+  function nearestStorehouse(x, y) {
+    var best = null, bd = Infinity;
+    for (var i = 0; i < allies.length; i++) {
+      var a = allies[i];
+      if (a.kind !== "storehouse") continue;
+      var dx = a.x - x, dy = a.y - y, d2 = dx * dx + dy * dy;
+      if (d2 < bd) { bd = d2; best = a; }
     }
+    return best;
+  }
+
+  // ---- Provisions: soft upkeep gate. Running short doesn't halt anything —
+  // it just throttles training speed, so an undersupplied garrison trains
+  // slower until you build another Farm. ----
+  function computeSupply() {
+    var used = 0;
+    for (var i = 0; i < allies.length; i++) used += UPKEEP[allies[i].kind] || 0;
+    var cap = BASE_PROVISIONS + counts.farm * PROVISIONS_PER_FARM;
+    return { used: used, cap: cap, ratio: used <= 0 ? 1 : Math.min(1, cap / used) };
   }
   function clampToField(x, y) {
     x = Math.max(10, Math.min(W - 10, x));
@@ -479,43 +427,67 @@
     }
     return clampToField(x, y);
   }
-  // ---- Building placement: drag the ghost, then Place or Cancel (refunds) ----
-  var BUILDING_LABEL = { tower: "tower", barracks: "barracks" };
+  // ---- Building placement: tap a build-tray icon, drag the ghost, then
+  // Place or Cancel (refunds). No pause, no shop — always available. ----
+  function onBuildTap(kind) {
+    var b = BUILDINGS[kind];
+    if (!b || placing || selectedBuilding != null) return;
+    if (counts[kind] >= b.cap) return;
+    var c = b.cost();
+    if (gold < c) return;
+    gold -= c;
+    counts[kind]++;
+    var ang = (counts[kind] - 1) * 2.399963 + b.phase, rr = KEEP_R + 34 + (kind === "barracks" ? 6 : 0);
+    startPlacingBuilding(kind, c, keepX + Math.cos(ang) * rr, keepY + Math.sin(ang) * rr);
+    sfxBoon();
+    updateHud();
+  }
   function startPlacingBuilding(kind, cost, x, y) {
     var c = clampForBuilding(kind, x, y);
     placing = { kind: kind, x: c.x, y: c.y, cost: cost };
-    document.getElementById("shop-overlay").classList.remove("show");
-    document.getElementById("stance-btn").style.display = "none";
+    document.getElementById("build-tray").style.display = "none";
     document.getElementById("place-bar").style.display = "flex";
-    document.getElementById("place-confirm-btn").textContent =
-      (kind === "tower" ? "🗼" : "🏚️") + " Place";
-    tapHintEl.textContent = "Drag to place the " + BUILDING_LABEL[kind] + ", then tap Place";
+    document.getElementById("place-confirm-btn").textContent = BUILDINGS[kind].icon + " Place";
+    tapHintEl.textContent = "Drag to place the " + BUILDINGS[kind].label + ", then tap Place";
   }
   function endPlacement() {
     placing = null;
     document.getElementById("place-bar").style.display = "none";
-    document.getElementById("stance-btn").style.display = "";
+    document.getElementById("build-tray").style.display = "flex";
   }
   function confirmPlacement() {
     if (!placing) return;
-    if (placing.kind === "barracks") {
-      allies.push({ id: allySeq++, kind: "barracks", x: placing.x, y: placing.y, queue: [] });
+    var kind = placing.kind;
+    if (kind === "barracks" || kind === "storehouse") {
+      allies.push({ id: allySeq++, kind: kind, x: placing.x, y: placing.y, queue: [] });
+    } else if (kind === "farm") {
+      allies.push({ id: allySeq++, kind: "farm", x: placing.x, y: placing.y });
     } else {
       allies.push({ id: allySeq++, kind: "tower", x: placing.x, y: placing.y,
         cd: Math.random() * 0.5, phase: Math.random() * 6 });
     }
     sfxBoon();
     endPlacement();
-    openShop();
+    updateBuildTray();
   }
   function cancelPlacement() {
     if (!placing) return;
     gold += placing.cost;
-    if (placing.kind === "barracks") nBarracks--; else nTower--;
+    counts[placing.kind]--;
     sfxDeselect();
     updateHud();
     endPlacement();
-    openShop();
+  }
+  function updateBuildTray() {
+    var keys = Object.keys(BUILDINGS);
+    for (var i = 0; i < keys.length; i++) {
+      var k = keys[i], b = BUILDINGS[k];
+      var btn = document.querySelector('.build-btn[data-build="' + k + '"]');
+      if (!btn) continue;
+      var atCap = counts[k] >= b.cap;
+      btn.querySelector(".bb-cost").textContent = atCap ? "Max" : String(b.cost());
+      btn.classList.toggle("poor", !atCap && gold < b.cost());
+    }
   }
   function footmanNear(px, py, r) {
     var best = null, bd = r * r;
@@ -527,23 +499,23 @@
     }
     return best;
   }
-  function barracksNear(px, py, r) {
+  function trainerNear(px, py, r) {
     var best = null, bd = r * r;
     for (var i = 0; i < allies.length; i++) {
       var a = allies[i];
-      if (a.kind !== "barracks") continue;
+      if (a.kind !== "barracks" && a.kind !== "storehouse") continue;
       var dx = a.x - px, dy = a.y - py, d2 = dx * dx + dy * dy;
       if (d2 < bd) { bd = d2; best = a; }
     }
     return best;
   }
 
-  // ---- Barracks training: tap a Barracks to open its panel, tap a troop to
-  // queue it (gold deducted immediately). Production ticks in updateProduction
-  // below, unconditional of pause, so a queue keeps cooking through the shop. ----
+  // ---- Barracks/Storehouse training: tap one to open its panel (only the
+  // buttons that building can train show), tap a troop to queue it (gold
+  // deducted immediately). Production ticks continuously below. ----
   function openTrainingPanel(id) {
     selectedBuilding = id;
-    document.getElementById("stance-btn").style.display = "none";
+    document.getElementById("build-tray").style.display = "none";
     document.getElementById("train-panel").style.display = "flex";
     buildTrainPanelUI();
     sfxSelect();
@@ -551,7 +523,7 @@
   function closeTrainingPanel() {
     selectedBuilding = null;
     document.getElementById("train-panel").style.display = "none";
-    document.getElementById("stance-btn").style.display = "";
+    document.getElementById("build-tray").style.display = "flex";
   }
   function buildTrainPanelUI() {
     var bk = findAllyById(selectedBuilding);
@@ -561,8 +533,12 @@
       var key = keys[i], t = TROOPS[key];
       var btn = document.querySelector('.train-btn[data-troop="' + key + '"]');
       if (!btn) continue;
-      btn.classList.toggle("poor", gold < t.cost);
-      btn.querySelector(".tb-cost").textContent = t.cost;
+      var applicable = t.trains === bk.kind;
+      btn.style.display = applicable ? "" : "none";
+      if (!applicable) continue;
+      var atCap = t.cap != null && (counts[key] || 0) >= t.cap;
+      btn.classList.toggle("poor", atCap || gold < t.cost);
+      btn.querySelector(".tb-cost").textContent = atCap ? "Max" : t.cost;
     }
     var badge = document.getElementById("train-queue-badge");
     if (!bk.queue.length) badge.textContent = "Empty queue";
@@ -575,7 +551,8 @@
   function queueTraining(barracksId, troopKey) {
     var bk = findAllyById(barracksId);
     var t = TROOPS[troopKey];
-    if (!bk || bk.kind !== "barracks" || !t) return;
+    if (!bk || !t || t.trains !== bk.kind) return;
+    if (t.cap != null && (counts[troopKey] || 0) >= t.cap) return;
     if (gold < t.cost || bk.queue.length >= 5) return;
     gold -= t.cost;
     bk.queue.push({ troop: troopKey, t: t.time });
@@ -584,8 +561,15 @@
     buildTrainPanelUI();
   }
   function spawnTroop(troopKey, bx, by) {
-    // trained troops share the same rally-spread pool as instant-buy footmen
-    // so returning-to-post units never stack, whatever type they are
+    if (troopKey === "miner") {
+      counts.miner = (counts.miner || 0) + 1;
+      allies.push({ id: allySeq++, kind: "miner", x: bx, y: by, state: "toVein", veinId: null,
+        carrying: 0, workT: 0, phase: Math.random() * 6, face: 1 });
+      sfxCommand();
+      return;
+    }
+    // trained troops share the same rally-spread pool as each other so
+    // returning-to-post units never stack, whatever type they are
     nFoot++;
     var fa = (nFoot - 1) * 2.399963 + 1.2, fr = KEEP_R + 24;
     var rx = keepX + Math.cos(fa) * fr, ry = keepY + Math.sin(fa) * fr;
@@ -594,66 +578,17 @@
     sfxCommand();
   }
   function updateProduction(dt) {
+    var supply = computeSupply();
     for (var i = 0; i < allies.length; i++) {
       var bk = allies[i];
-      if (bk.kind !== "barracks" || !bk.queue.length) continue;
-      bk.queue[0].t -= dt;
+      if ((bk.kind !== "barracks" && bk.kind !== "storehouse") || !bk.queue.length) continue;
+      bk.queue[0].t -= dt * supply.ratio;
       if (bk.queue[0].t <= 0) {
         var done = bk.queue.shift();
         spawnTroop(done.troop, bk.x, bk.y);
       }
     }
     if (selectedBuilding != null) buildTrainPanelUI(); // keep the countdown live
-  }
-
-  // ---- Between-band Muster shop ----
-  function buildShopUI() {
-    document.getElementById("shop-band").textContent = String(wave);
-    document.getElementById("shop-gold").textContent = "🪙 " + gold;
-    var list = document.getElementById("shop-list");
-    list.innerHTML = "";
-    var cats = ["Retinue", "Defenses", "Estate", "Warden"];
-    cats.forEach(function (cat) {
-      var items = SHOP.filter(function (s) { return s.cat === cat && s.avail(); });
-      if (!items.length) return;
-      var h = document.createElement("div");
-      h.className = "shop-cat"; h.textContent = cat;
-      list.appendChild(h);
-      items.forEach(function (s) {
-        var c = s.cost();
-        var btn = document.createElement("button");
-        btn.className = "shop-item" + (gold < c ? " poor" : "");
-        btn.innerHTML = '<span class="si-icon">' + s.icon + '</span>' +
-          '<span class="si-text"><b>' + s.name + '</b><small>' + s.desc() + '</small></span>' +
-          '<span class="si-cost">🪙 ' + c + '</span>';
-        btn.disabled = gold < c;
-        btn.addEventListener("click", function () { buyItem(s); });
-        list.appendChild(btn);
-      });
-    });
-  }
-  function buyItem(s) {
-    var c = s.cost();
-    if (gold < c || !s.avail()) return;
-    gold -= c;
-    s.buy(c);
-    sfxBoon();
-    updateHud();
-    buildShopUI(); // refresh costs/affordability
-  }
-  function openShop() {
-    paused = true;
-    selectedUnit = "horse"; updateTapHint();
-    buildShopUI();
-    document.getElementById("shop-overlay").classList.add("show");
-  }
-  function march() {
-    document.getElementById("shop-overlay").classList.remove("show");
-    paused = false;
-    wave++;
-    gold += income; // estate income at the start of each band
-    updateHud();
-    startWave();
   }
 
   // Can the archer, from where it stands, damage this raider? Shielded fronts
@@ -701,31 +636,39 @@
       player.y = keepY + kdy / kd * (KEEP_R + 14);
     }
 
-    // raider camp: hold the warden near it to raid it for bonus gold — she
-    // isn't guarding the gate while this channel runs
-    if (camp && !camp.raided) {
-      var cdx = player.x - camp.x, cdy = player.y - camp.y;
-      if (cdx * cdx + cdy * cdy < CAMP_R * CAMP_R) {
-        camp.t += dt;
-        if (camp.t >= CAMP_CHANNEL) {
-          camp.raided = true;
-          gold += camp.reward;
-          updateHud();
-          sfxBoon();
-          puffs.push({ x: camp.x, y: camp.y, t: 0, splash: true });
+    // the Warcamp mans itself: strength fills, and once full it musters a
+    // raiding party on its own — no scripted spawn timeline
+    if (warcamp) {
+      warcamp.strength += warcampGrowRate() * dt;
+      if (warcamp.strength >= warcamp.cap) { warcamp.strength = 0; spawnWarcampSquad(); }
+      if (warcamp.rcd > 0) warcamp.rcd -= dt;
+      // hold the warden beside it (off cooldown) to raid it: bonus gold, and
+      // a real setback to its production — but she isn't guarding the gate
+      // while this channel runs
+      if (warcamp.rcd <= 0) {
+        var cdx = player.x - warcamp.x, cdy = player.y - warcamp.y;
+        if (cdx * cdx + cdy * cdy < WARCAMP_R * WARCAMP_R) {
+          warcamp.t += dt;
+          if (warcamp.t >= WARCAMP_CHANNEL) {
+            gold += warcampReward();
+            warcamp.strength = Math.max(0, warcamp.strength - 55);
+            warcamp.rcd = WARCAMP_RAID_CD;
+            warcamp.t = 0;
+            updateHud();
+            sfxBoon();
+            puffs.push({ x: warcamp.x, y: warcamp.y, t: 0, splash: true });
+          }
+        } else {
+          warcamp.t = Math.max(0, warcamp.t - dt * 2);
         }
-      } else {
-        camp.t = Math.max(0, camp.t - dt * 2);
       }
     }
 
-    // spawn schedule (wave-time based, grouped arrivals)
-    waveT += dt;
-    for (var s = spawnQueue.length - 1; s >= 0; s--) {
-      if (spawnQueue[s].t <= waveT) {
-        spawnRaider(spawnQueue[s].x, spawnQueue[s].y);
-        spawnQueue.splice(s, 1);
-      }
+    // ore veins slowly recover while not being drawn down, so a heavily
+    // mined vein runs thin for a while rather than staying dry forever
+    for (var vi = 0; vi < veins.length; vi++) {
+      var v = veins[vi];
+      if (v.amount < v.max) v.amount = Math.min(v.max, v.amount + VEIN_REGEN * dt);
     }
 
     // raiders
@@ -843,7 +786,35 @@
     }
     for (var ai = 0; ai < allies.length; ai++) {
       var al = allies[ai];
-      if (al.kind === "barracks") continue; // production ticks separately, unconditional of pause
+      if (al.kind === "barracks" || al.kind === "storehouse" || al.kind === "farm") continue; // production ticks separately, below
+      if (al.kind === "miner") {
+        if (al.state === "toVein") {
+          var v = al.veinId != null ? veins[al.veinId] : null;
+          if (!v || v.amount <= 0) { v = pickVein(); al.veinId = v ? veins.indexOf(v) : null; }
+          if (v) {
+            var vx = v.x - al.x, vy = v.y - al.y, vd = Math.sqrt(vx * vx + vy * vy) || 1;
+            if (vd > 6) { al.x += vx / vd * MINER_SPEED * dt; al.y += vy / vd * MINER_SPEED * dt; al.phase += dt * 6; al.face = vx > 0 ? 1 : -1; }
+            else { al.state = "mining"; al.workT = 0; }
+          }
+        } else if (al.state === "mining") {
+          al.workT += dt;
+          if (al.workT >= MINE_TIME) {
+            var vv = al.veinId != null ? veins[al.veinId] : null;
+            var take = Math.min(MINE_LOAD, vv ? vv.amount : 0);
+            if (vv) vv.amount -= take;
+            al.carrying = take;
+            al.state = "toHome";
+          }
+        } else if (al.state === "toHome") {
+          var home = nearestStorehouse(al.x, al.y);
+          if (home) {
+            var hx = home.x - al.x, hy = home.y - al.y, hd = Math.sqrt(hx * hx + hy * hy) || 1;
+            if (hd > 8) { al.x += hx / hd * MINER_SPEED * dt; al.y += hy / hd * MINER_SPEED * dt; al.phase += dt * 6; al.face = hx > 0 ? 1 : -1; }
+            else { gold += al.carrying; al.carrying = 0; updateHud(); al.state = "toVein"; al.veinId = null; }
+          }
+        }
+        continue;
+      }
       al.cd -= dt;
       if (al.kind === "tower") {
         if (al.cd <= 0) {
@@ -974,34 +945,36 @@
       }
     }
 
-    for (var p = puffs.length - 1; p >= 0; p--) { puffs[p].t += dt; if (puffs[p].t > 0.4) puffs.splice(p, 1); }
-
-    // band cleared → short breather → boon draft → next band
-    if (running && waveDone()) {
-      if (breatherT <= 0 && !cleared) { breatherT = BREATHER; announced = "Band " + wave + " repelled"; announceT = BREATHER; cleared = true; }
-      breatherT -= dt;
-      if (breatherT <= 0 && cleared) { cleared = false; openShop(); }
-    }
     if (announceT > 0) announceT -= dt;
 
     updateHud();
   }
+  function fmtTime(s) {
+    s = Math.floor(s);
+    return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
+  }
   function updateHud() {
-    waveEl.textContent = String(wave);
+    waveEl.textContent = fmtTime(elapsed);
     goldEl.textContent = String(gold);
+    var supply = computeSupply();
+    var provEl = document.getElementById("provisions");
+    provEl.textContent = supply.used + "/" + supply.cap;
+    provEl.parentElement.classList.toggle("short", supply.used > supply.cap);
+    updateBuildTray();
   }
 
   function doGameOver() {
     over = true; running = false;
     sfxOver();
-    if (wave > best) { best = wave; localStorage.setItem("tranquil_warden_best", String(best)); }
-    bestEl.textContent = best ? "Band " + best : "—";
+    var t = Math.floor(elapsed);
+    if (t > best) { best = t; localStorage.setItem("tranquil_wardenii_best", String(best)); }
+    bestEl.textContent = best ? fmtTime(best) : "—";
     setTimeout(function () {
       LB.finish({
-        game: "warden",
-        value: wave,
+        game: "wardenii",
+        value: t,
         resultTitle: "The keep has fallen",
-        subtitle: "Held out to band " + wave + " · " + kills + " raiders repelled",
+        subtitle: "Held out " + fmtTime(t) + " · " + kills + " raiders repelled",
         onPlayAgain: newGame
       });
     }, 900);
@@ -1142,8 +1115,8 @@
     ctx.save();
     ctx.translate(al.x, al.y);
     ctx.fillStyle = "rgba(0,0,0,0.22)";
-    var shadowRy = (al.kind === "tower" || al.kind === "barracks") ? 12 : 9;
-    var shadowRx = al.kind === "barracks" ? 12 : (al.kind === "tower" ? 9 : 6);
+    var shadowRy = (al.kind === "tower" || al.kind === "barracks" || al.kind === "storehouse") ? 12 : (al.kind === "farm" ? 6 : 9);
+    var shadowRx = (al.kind === "barracks" || al.kind === "storehouse") ? 13 : (al.kind === "tower" ? 9 : (al.kind === "farm" ? 14 : 6));
     ctx.beginPath(); ctx.ellipse(0, shadowRy, shadowRx, 3, 0, 0, Math.PI * 2); ctx.fill();
     if (al.kind === "tower") {
       // stout stone watchtower with a teal banner
@@ -1170,6 +1143,45 @@
       ctx.beginPath(); ctx.moveTo(0, -21); ctx.lineTo(0, -29); ctx.stroke();
       ctx.fillStyle = "#5dd6c0";
       ctx.beginPath(); ctx.moveTo(0, -29); ctx.lineTo(7, -27); ctx.lineTo(0, -24.5); ctx.closePath(); ctx.fill();
+    } else if (al.kind === "storehouse") {
+      // stone warehouse with barrels stacked outside, same teal banner
+      ctx.fillStyle = "#5f5a52";
+      ctx.beginPath(); ctx.roundRect(-13, -9, 26, 19, 3); ctx.fill();
+      ctx.fillStyle = "#6f6a60";
+      ctx.beginPath(); ctx.roundRect(-13, -14, 26, 6, 2); ctx.fill();
+      ctx.fillStyle = "#7a5a3a";
+      ctx.beginPath(); ctx.arc(-9, 7, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(9, 7, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#2a2018";
+      ctx.beginPath(); ctx.roundRect(-3, -1, 6, 10, 2); ctx.fill();
+      ctx.strokeStyle = "#2c3038"; ctx.lineWidth = 1.4;
+      ctx.beginPath(); ctx.moveTo(0, -14); ctx.lineTo(0, -24); ctx.stroke();
+      ctx.fillStyle = "#5dd6c0";
+      ctx.beginPath(); ctx.moveTo(0, -24); ctx.lineTo(7, -22); ctx.lineTo(0, -19.5); ctx.closePath(); ctx.fill();
+    } else if (al.kind === "farm") {
+      // fenced plot with wheat sheaves — no banner, it's just a field
+      ctx.fillStyle = "#3a3324";
+      ctx.beginPath(); ctx.ellipse(0, 1, 13, 6, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = "#6b5540"; ctx.lineWidth = 1.6;
+      ctx.strokeRect(-12, -4, 24, 9);
+      ctx.fillStyle = "#c9a23c";
+      for (var fi = -1; fi <= 1; fi++) {
+        ctx.beginPath(); ctx.moveTo(fi * 7, 0); ctx.lineTo(fi * 7 - 2.2, -8); ctx.lineTo(fi * 7 + 2.2, -8); ctx.closePath(); ctx.fill();
+      }
+    } else if (al.kind === "miner") {
+      // small ore cart, hauled by hand — carries a visible gold sack when loaded
+      var mbob = Math.sin(al.phase * 2) * 1;
+      ctx.scale(al.face || 1, 1);
+      ctx.strokeStyle = "#3a3028"; ctx.lineWidth = 1.4;
+      ctx.beginPath(); ctx.arc(-4, 5, 2.8, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(4, 5, 2.8, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = "#6b5540";
+      ctx.beginPath(); ctx.roundRect(-6, -2, 12, 7, 2); ctx.fill();
+      if (al.carrying > 0) { ctx.fillStyle = "#e8c478"; ctx.beginPath(); ctx.arc(0, -5, 3, 0, Math.PI * 2); ctx.fill(); }
+      ctx.fillStyle = "#7a6a58";
+      ctx.beginPath(); ctx.roundRect(-3, -10 - mbob, 6, 10, 3); ctx.fill();
+      ctx.fillStyle = "#e8d4b8";
+      ctx.beginPath(); ctx.arc(0, -12 - mbob, 3, 0, Math.PI * 2); ctx.fill();
     } else {
       // foot troop: footman (default), spearman, archer, or catapult
       var troop = al.troop || "footman";
@@ -1381,38 +1393,64 @@
     ctx.strokeStyle = "rgba(0,0,0,0.3)"; ctx.lineWidth = 1; ctx.stroke();
   }
 
-  function drawCamp() {
-    if (!camp || camp.raided) return;
+  function drawVein(v) {
+    if (v.amount <= 0) return; // depleted for now — reappears as it regenerates
     ctx.save();
-    ctx.translate(camp.x, camp.y);
-    // little tent + fire, marking a raidable enemy camp
-    ctx.fillStyle = "#6b5644";
-    ctx.beginPath(); ctx.moveTo(-9, 7); ctx.lineTo(0, -9); ctx.lineTo(9, 7); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = "#3a2e24";
-    ctx.beginPath(); ctx.moveTo(-3, 7); ctx.lineTo(0, 1); ctx.lineTo(3, 7); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = "#e8a23c";
-    ctx.beginPath(); ctx.arc(13, 6, 2.6, 0, Math.PI * 2); ctx.fill();
-    // range ring + channel progress arc
-    var pulse = 0.5 + 0.5 * Math.sin(elapsed * 4);
-    ctx.strokeStyle = "rgba(232,196,120," + (0.35 + 0.2 * pulse).toFixed(2) + ")";
-    ctx.lineWidth = 1.2;
-    ctx.beginPath(); ctx.arc(0, 0, CAMP_R, 0, Math.PI * 2); ctx.stroke();
-    if (camp.t > 0) {
-      ctx.strokeStyle = "rgba(232,196,120,0.9)";
-      ctx.lineWidth = 2.4;
-      ctx.beginPath(); ctx.arc(0, 0, CAMP_R, -Math.PI / 2, -Math.PI / 2 + (camp.t / CAMP_CHANNEL) * Math.PI * 2); ctx.stroke();
+    ctx.translate(v.x, v.y);
+    var pct = v.amount / v.max;
+    ctx.fillStyle = "rgba(80,70,50,0.4)";
+    ctx.beginPath(); ctx.ellipse(0, 4, 12, 5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#8a7a52";
+    for (var i = 0; i < 5; i++) {
+      var ang = i * 1.2566;
+      ctx.beginPath(); ctx.arc(Math.cos(ang) * 6, Math.sin(ang) * 3, 3.6, 0, Math.PI * 2); ctx.fill();
     }
+    ctx.fillStyle = "rgba(232,196,120," + (0.5 + 0.4 * pct).toFixed(2) + ")";
+    ctx.beginPath(); ctx.arc(0, 0, 3, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
-    ctx.fillStyle = "#e8c478";
-    ctx.font = "600 10px " + (document.body.style.fontFamily || "sans-serif");
-    ctx.textAlign = "center";
-    ctx.fillText("+" + camp.reward, camp.x, camp.y - 16);
+  }
+
+  function drawWarcamp() {
+    if (!warcamp) return;
+    ctx.save();
+    ctx.translate(warcamp.x, warcamp.y);
+    // two dark tents + a fire — the enemy's own base, not a scripted timer
+    ctx.fillStyle = "#5a3838";
+    ctx.beginPath(); ctx.moveTo(-16, 10); ctx.lineTo(-6, -8); ctx.lineTo(4, 10); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "#4a2e2e";
+    ctx.beginPath(); ctx.moveTo(2, 10); ctx.lineTo(10, -4); ctx.lineTo(18, 10); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "#e8a23c";
+    ctx.beginPath(); ctx.arc(-16, 9, 2.4, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "#2c2020"; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(-6, -8); ctx.lineTo(-6, -20); ctx.stroke();
+    ctx.fillStyle = "#9a3b3b";
+    ctx.beginPath(); ctx.moveTo(-6, -20); ctx.lineTo(2, -18); ctx.lineTo(-6, -15); ctx.closePath(); ctx.fill();
+    ctx.restore();
+    // strength meter — fills as it musters its next raiding party
+    var pct = Math.min(1, warcamp.strength / warcamp.cap);
+    ctx.fillStyle = "rgba(0,0,0,0.35)";
+    ctx.fillRect(warcamp.x - 18, warcamp.y - 30, 36, 4);
+    ctx.fillStyle = warcamp.rcd > 0 ? "rgba(150,150,150,0.6)" : "rgba(220,90,90,0.85)";
+    ctx.fillRect(warcamp.x - 18, warcamp.y - 30, 36 * pct, 4);
+    // raid-channel ring (only meaningful off cooldown)
+    if (warcamp.rcd <= 0) {
+      var pulse = 0.5 + 0.5 * Math.sin(elapsed * 4);
+      ctx.strokeStyle = "rgba(93,214,192," + (0.3 + 0.2 * pulse).toFixed(2) + ")";
+      ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.arc(warcamp.x, warcamp.y, WARCAMP_R, 0, Math.PI * 2); ctx.stroke();
+      if (warcamp.t > 0) {
+        ctx.strokeStyle = "rgba(93,214,192,0.9)";
+        ctx.lineWidth = 2.4;
+        ctx.beginPath(); ctx.arc(warcamp.x, warcamp.y, WARCAMP_R, -Math.PI / 2, -Math.PI / 2 + (warcamp.t / WARCAMP_CHANNEL) * Math.PI * 2); ctx.stroke();
+      }
+    }
   }
 
   function render() {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     drawGround();
-    drawCamp();
+    for (var vi2 = 0; vi2 < veins.length; vi2++) drawVein(veins[vi2]);
+    drawWarcamp();
     drawKeep();
     for (var ci = 0; ci < allies.length; ci++) drawAlly(allies[ci]);
     if (placing) { drawPlacementGhost(); } else { drawSelection(); drawBuildingSelection(); drawSelectionBox(); }
@@ -1462,8 +1500,8 @@
     if (!lastT) lastT = t;
     var dt = Math.min(0.05, (t - lastT) / 1000);
     lastT = t;
-    if (!over) updateProduction(dt); // barracks queues keep cooking even through the shop
-    if (!over && !paused) update(dt);
+    if (!over) updateProduction(dt);
+    if (!over) update(dt);
     render();
     rafId = requestAnimationFrame(loop);
   }
@@ -1502,12 +1540,12 @@
     sfxCommand();
   }
   function handleTap(p) {
-    // a Barracks is stationary — tapping it just opens/closes its training
-    // panel, it's never a move-order target for anything else
-    var underBarracks = barracksNear(p.x, p.y, 20);
-    if (underBarracks) {
-      if (selectedBuilding === underBarracks.id) closeTrainingPanel();
-      else openTrainingPanel(underBarracks.id);
+    // a Barracks/Storehouse is stationary — tapping it just opens/closes its
+    // training panel, it's never a move-order target for anything else
+    var underTrainer = trainerNear(p.x, p.y, 20);
+    if (underTrainer) {
+      if (selectedBuilding === underTrainer.id) closeTrainingPanel();
+      else openTrainingPanel(underTrainer.id);
       player.tx = player.x; player.ty = player.y; // cancel any nudge from this tap
       return;
     }
@@ -1586,7 +1624,8 @@
   // ---- Stance toggle ----
   var stanceBtn = document.getElementById("stance-btn");
   function updateStanceBtn() {
-    stanceBtn.textContent = stance === "bow" ? "🏹 Bow" : "🔱 Lance";
+    stanceBtn.querySelector(".bb-icon").textContent = stance === "bow" ? "🏹" : "🔱";
+    stanceBtn.querySelector(".bb-cost").textContent = stance === "bow" ? "Bow" : "Lance";
     stanceBtn.classList.toggle("lance", stance === "lance");
   }
   function toggleStance() {
@@ -1602,6 +1641,13 @@
     trainBtns[tbi].addEventListener("click", function (e) {
       e.preventDefault();
       if (selectedBuilding != null) queueTraining(selectedBuilding, this.dataset.troop);
+    });
+  }
+  var buildBtns = document.querySelectorAll(".build-btn[data-build]");
+  for (var bbi = 0; bbi < buildBtns.length; bbi++) {
+    buildBtns[bbi].addEventListener("click", function (e) {
+      e.preventDefault();
+      if (!over) onBuildTap(this.dataset.build);
     });
   }
 
@@ -1629,9 +1675,9 @@
   // ---- Settings / sound ----
   function updateSoundToggle() { soundToggle.textContent = muted ? "Off" : "On"; soundToggle.classList.toggle("on", !muted); }
   async function shareGame() {
-    var text = "Warden — a calm keep-defence ride with no ads. Play it:";
+    var text = "Warden II — build a keep economy and hold the line, no ads. Play it:";
     var url = "https://pete1552.github.io/AGTest/";
-    try { if (navigator.share) { await navigator.share({ title: "Warden — Tranquil", text: text, url: url }); return; } } catch (e) { return; }
+    try { if (navigator.share) { await navigator.share({ title: "Warden II — Tranquil", text: text, url: url }); return; } } catch (e) { return; }
     try {
       await navigator.clipboard.writeText(text + " " + url);
       var b = document.getElementById("settings-share"), old = b.textContent; b.textContent = "Link copied!";
@@ -1646,9 +1692,8 @@
   document.getElementById("settings-close").addEventListener("click", function () { settingsOverlay.classList.remove("show"); });
   settingsOverlay.addEventListener("click", function (e) { if (e.target === settingsOverlay) settingsOverlay.classList.remove("show"); });
   document.getElementById("settings-share").addEventListener("click", shareGame);
-  document.getElementById("lb-btn").addEventListener("click", function () { LB.open("warden"); });
+  document.getElementById("lb-btn").addEventListener("click", function () { LB.open("wardenii"); });
   document.getElementById("restart").addEventListener("click", newGame);
-  document.getElementById("march-btn").addEventListener("click", function () { if (paused) march(); });
 
   window.addEventListener("pointerdown", function () { audio(); }, { once: false });
 
@@ -1660,55 +1705,65 @@
   // ---- Lifecycle ----
   function newGame() {
     raiders = []; arrows = []; bombs = []; puffs = []; allies = [];
-    camp = null;
     hearts = HEARTS_MAX;
-    wave = 1; kills = 0;
-    gold = 0; income = 2; nFoot = 0; nTower = 0; nGranary = 0; nBarracks = 0;
+    kills = 0;
+    gold = 20; nFoot = 0;
+    counts = { farm: 0, storehouse: 0, barracks: 0, tower: 0, miner: 0 };
     selectedUnit = "horse"; selectedGroup = []; boxSel = null; updateTapHint();
     if (selectedBuilding != null) closeTrainingPanel();
     if (placing) endPlacement();
-    breatherT = 0; cleared = false; paused = false;
     stat = { range: BASE.range, speed: BASE.speed, fireCd: BASE.fireCd, volley: BASE.volley, pierce: BASE.pierce, dmg: BASE.dmg };
     stance = "bow"; bowScore = 0; lanceScore = 0;
     over = false; running = true;
     elapsed = 0;
-    document.getElementById("shop-overlay").classList.remove("show");
     updateStanceBtn();
     player.x = keepX; player.y = keepY + 86;
     player.tx = player.x; player.ty = player.y;
     player.cd = 0.4;
-    bestEl.textContent = best ? "Band " + best : "—";
-    startWave();
+    bestEl.textContent = best ? fmtTime(best) : "—";
+    initVeins();
+    initWarcamp();
+    updateBuildTray();
+    updateHud();
   }
 
   // test hook for scripted play (harmless in production)
   window.__wd = {
     go: function (x, y) { player.tx = x; player.ty = y; },
     setStance: function (s) { if ((s === "bow" || s === "lance") && s !== stance) toggleStance(); },
-    buy: function (id) { for (var i = 0; i < SHOP.length; i++) if (SHOP[i].id === id) { buyItem(SHOP[i]); return; } },
-    march: function () { if (paused) march(); },
+    build: function (kind) { onBuildTap(kind); },
     tap: function (x, y) { handleTap({ x: x, y: y }); },
     dragGhost: function (x, y) { if (placing) { var c = clampForBuilding(placing.kind, x, y); placing.x = c.x; placing.y = c.y; } },
-    tapBarracks: function (id) { if (selectedBuilding === id) closeTrainingPanel(); else openTrainingPanel(id); },
-    trainAt: function (barracksId, troop) { queueTraining(barracksId, troop); },
+    tapTrainer: function (id) { if (selectedBuilding === id) closeTrainingPanel(); else openTrainingPanel(id); },
+    trainAt: function (id, troop) { queueTraining(id, troop); },
     confirmPlace: function () { confirmPlacement(); },
     cancelPlace: function () { cancelPlacement(); },
     state: function () {
-      return { wave: wave, kills: kills, hearts: hearts, over: over, paused: paused, gold: gold, income: income,
+      var supply = computeSupply();
+      return { elapsed: Math.round(elapsed * 10) / 10, kills: kills, hearts: hearts, over: over, gold: gold,
         stance: stance, bowScore: Math.round(bowScore * 10) / 10, lanceScore: Math.round(lanceScore * 10) / 10,
-        allies: { foot: nFoot, tower: nTower, granary: nGranary, barracks: nBarracks },
+        provisions: { used: supply.used, cap: supply.cap },
+        allies: { foot: nFoot, tower: counts.tower, farm: counts.farm, storehouse: counts.storehouse, barracks: counts.barracks, miner: counts.miner },
         selected: selectedUnit, selectedGroup: selectedGroup.slice(), selectedBuilding: selectedBuilding,
-        camp: camp ? { x: Math.round(camp.x), y: Math.round(camp.y), t: Math.round(camp.t * 10) / 10, raided: camp.raided, reward: camp.reward } : null,
+        warcamp: warcamp ? { x: Math.round(warcamp.x), y: Math.round(warcamp.y), strength: Math.round(warcamp.strength),
+          cap: warcamp.cap, rcd: Math.round(warcamp.rcd * 10) / 10, t: Math.round(warcamp.t * 10) / 10 } : null,
+        veins: veins.map(function (v) { return { x: Math.round(v.x), y: Math.round(v.y), amount: Math.round(v.amount), max: v.max }; }),
         placing: placing ? { kind: placing.kind, x: Math.round(placing.x), y: Math.round(placing.y), cost: placing.cost } : null,
         tower: allies.filter(function (a) { return a.kind === "tower"; })
           .map(function (a) { return { id: a.id, x: Math.round(a.x), y: Math.round(a.y) }; }),
         barracks: allies.filter(function (a) { return a.kind === "barracks"; })
           .map(function (a) { return { id: a.id, x: Math.round(a.x), y: Math.round(a.y), queue: a.queue.map(function (q) { return { troop: q.troop, t: Math.round(q.t * 10) / 10 }; }) }; }),
+        storehouse: allies.filter(function (a) { return a.kind === "storehouse"; })
+          .map(function (a) { return { id: a.id, x: Math.round(a.x), y: Math.round(a.y), queue: a.queue.map(function (q) { return { troop: q.troop, t: Math.round(q.t * 10) / 10 }; }) }; }),
+        farm: allies.filter(function (a) { return a.kind === "farm"; })
+          .map(function (a) { return { id: a.id, x: Math.round(a.x), y: Math.round(a.y) }; }),
+        miner: allies.filter(function (a) { return a.kind === "miner"; })
+          .map(function (a) { return { id: a.id, x: Math.round(a.x), y: Math.round(a.y), state: a.state, carrying: a.carrying }; }),
         foot: allies.filter(function (a) { return a.kind === "foot"; })
           .map(function (a) { return { id: a.id, troop: a.troop || "footman", x: Math.round(a.x), y: Math.round(a.y), t: a.targetId, rx: Math.round(a.rallyX), ry: Math.round(a.rallyY) }; }),
         stat: { range: stat.range, speed: stat.speed, fireCd: stat.fireCd, volley: stat.volley, pierce: stat.pierce, dmg: stat.dmg },
         raiders: raiders.filter(function (r) { return r.state === "march"; })
-          .map(function (r) { return { x: Math.round(r.x), y: Math.round(r.y), type: r.type }; }),
+          .map(function (r) { return { id: r.id, x: Math.round(r.x), y: Math.round(r.y), type: r.type }; }),
         px: Math.round(player.x), py: Math.round(player.y), W: W, H: H };
     }
   };
