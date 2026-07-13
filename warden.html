@@ -86,7 +86,7 @@
     <canvas id="stage"></canvas>
     <button id="stance-btn" class="stance-btn" aria-label="Switch stance">🏹 Bow</button>
   </div>
-  <div class="tap-hint">Drag to ride · tap the button to switch bow / lance</div>
+  <div class="tap-hint" id="tap-hint">Drag to ride · tap the button to switch bow / lance</div>
 </div>
 
 <div id="shop-overlay" class="modal-overlay">
@@ -107,7 +107,7 @@
     </div>
     <div class="how">
       <p class="how-title">How to play</p>
-      <p class="body">You are the keep's mounted warden. Drag to ride; charging raiders that reach the gate steal a heart, so meet them in the field. Tap the stance button to switch weapon: <b>Bow</b> shoots at range on its own, while the <b>Lance</b> cuts down anyone you ride through (no arrows — you must dive in). The enemy adapts to whatever you favour: lean on the bow and they send <b>skirmishers</b>, who dodge most arrows but fall to the lance; lean on the lance and they send <b>pikemen</b>, who brace against a charge but are soft to arrows. <b>Shieldbearers</b> block both weapons from the front — flank them. <b>Brutes</b> just soak hits. Every repelled raider drops <b>gold</b>. Between bands, spend it in the Muster: raise <b>Footmen</b> who roam and fight, build <b>Watchtowers</b> that guard the keep, invest in a <b>Granary</b> for more gold each band, or sharpen the warden — then march. Survive as long as you can.</p>
+      <p class="body">You are the keep's mounted warden. Drag to ride; charging raiders that reach the gate steal a heart, so meet them in the field. Tap the stance button to switch weapon: <b>Bow</b> shoots at range on its own, while the <b>Lance</b> cuts down anyone you ride through (no arrows — you must dive in). The enemy adapts to whatever you favour: lean on the bow and they send <b>skirmishers</b>, who dodge most arrows but fall to the lance; lean on the lance and they send <b>pikemen</b>, who brace against a charge but are soft to arrows. <b>Shieldbearers</b> block both weapons from the front — flank them. <b>Brutes</b> just soak hits. Every repelled raider drops <b>gold</b>. Between bands, spend it in the Muster: raise <b>Footmen</b> who roam and fight, build <b>Watchtowers</b> that guard the keep, invest in a <b>Granary</b> for more gold each band, or sharpen the warden — then march. Tap a footman to select it (tap again to deselect), then tap the field to post them somewhere new — handy for covering a second approach. Survive as long as you can.</p>
     </div>
     <button id="settings-share" class="share">Share the game</button>
     <button id="settings-close" class="ghost-btn">Done</button>
@@ -115,7 +115,7 @@
   </div>
 </div>
 
-<script src="leaderboard.js?v=31"></script>
+<script src="leaderboard.js?v=32"></script>
 <script>
 (function () {
   "use strict";
@@ -198,7 +198,8 @@
   var hearts = HEARTS_MAX;
   var wave = 1, kills = 0;
   var breatherT = 0, cleared = false, paused = false;
-  var raiderSeq = 1;
+  var raiderSeq = 1, allySeq = 1;
+  var selectedFootId = null;   // id of the footman currently selected for a move order
   var over = false, running = false, announced = "", announceT = 0;
   var elapsed = 0;
   var best = Number(localStorage.getItem("tranquil_warden_best") || 0) || 0;
@@ -216,6 +217,11 @@
       this.arcTo(x, y, x + w, y, r);
       this.closePath();
     };
+  }
+  var tapHintEl = document.getElementById("tap-hint");
+  var DEFAULT_HINT = tapHintEl.textContent;
+  function updateTapHint() {
+    tapHintEl.textContent = selectedFootId != null ? "Footman selected — tap the field to post them" : DEFAULT_HINT;
   }
   var waveEl = document.getElementById("wave");
   var goldEl = document.getElementById("gold");
@@ -242,6 +248,9 @@
   function sfxThock(type) { tone(type === "brute" ? 120 : type === "shield" ? 150 : 200, 0.07, "triangle", 0.08); }
   function sfxClink() { tone(920, 0.05, "square", 0.03); setTimeout(function () { tone(1240, 0.04, "square", 0.02); }, 22); }
   function sfxBoon() { [523.25, 659.25, 880].forEach(function (f, i) { setTimeout(function () { tone(f, 0.18, "sine", 0.06); }, i * 70); }); }
+  function sfxSelect() { tone(660, 0.05, "sine", 0.05); }
+  function sfxDeselect() { tone(392, 0.05, "sine", 0.04); }
+  function sfxCommand() { tone(523.25, 0.06, "triangle", 0.06); setTimeout(function () { tone(659.25, 0.08, "triangle", 0.05); }, 60); }
   function sfxRaid() { tone(220, 0.2, "sine", 0.1); setTimeout(function () { tone(165, 0.25, "sine", 0.08); }, 120); }
   function sfxWave() { tone(392, 0.15, "sine", 0.07); setTimeout(function () { tone(523.25, 0.2, "sine", 0.07); }, 110); }
   function sfxOver() { [330, 247, 175].forEach(function (f, i) { setTimeout(function () { tone(f, 0.3, "sine", 0.09); }, i * 130); }); }
@@ -321,15 +330,40 @@
       // ring the keep; towers spread evenly around it
       var ang = (nTower - 1) * 2.399963; // golden-angle spread
       var rr = KEEP_R + 34;
-      allies.push({ kind: "tower", x: keepX + Math.cos(ang) * rr, y: keepY + Math.sin(ang) * rr,
+      allies.push({ id: allySeq++, kind: "tower", x: keepX + Math.cos(ang) * rr, y: keepY + Math.sin(ang) * rr,
         cd: Math.random() * 0.5, phase: Math.random() * 6 });
     } else {
-      // spread footmen around the keep so they don't start in one stack
+      // spread footmen around the keep so they don't start in one stack.
+      // rallyX/rallyY is where this unit returns to when it has no raider to
+      // fight — auto-assigned here, but the player can tap-select a footman
+      // and tap the field to move its post anywhere they like.
       var fa = (nFoot - 1) * 2.399963 + 1.2;
       var fr = KEEP_R + 24;
-      allies.push({ kind: "foot", x: keepX + Math.cos(fa) * fr, y: keepY + Math.sin(fa) * fr,
-        cd: 0, phase: Math.random() * 6, face: 1, rallyA: fa, targetId: null });
+      var rx = keepX + Math.cos(fa) * fr, ry = keepY + Math.sin(fa) * fr;
+      allies.push({ id: allySeq++, kind: "foot", x: rx, y: ry, rallyX: rx, rallyY: ry,
+        cd: 0, phase: Math.random() * 6, face: 1, targetId: null });
     }
+  }
+  function clampToField(x, y) {
+    x = Math.max(10, Math.min(W - 10, x));
+    y = Math.max(10, Math.min(H - 10, y));
+    var dx = x - keepX, dy = y - keepY, d = Math.sqrt(dx * dx + dy * dy);
+    if (d < KEEP_R + 16) { // keep the post off the castle itself
+      d = d || 1;
+      x = keepX + dx / d * (KEEP_R + 16);
+      y = keepY + dy / d * (KEEP_R + 16);
+    }
+    return { x: x, y: y };
+  }
+  function footmanNear(px, py, r) {
+    var best = null, bd = r * r;
+    for (var i = 0; i < allies.length; i++) {
+      var a = allies[i];
+      if (a.kind !== "foot") continue;
+      var dx = a.x - px, dy = a.y - py, d2 = dx * dx + dy * dy;
+      if (d2 < bd) { bd = d2; best = a; }
+    }
+    return best;
   }
 
   // ---- Between-band Muster shop ----
@@ -368,6 +402,7 @@
   }
   function openShop() {
     paused = true;
+    selectedFootId = null; updateTapHint();
     buildShopUI();
     document.getElementById("shop-overlay").classList.add("show");
   }
@@ -600,9 +635,8 @@
           if (tgt.hp <= 0) { tgt.state = "down"; tgt.t = 0; kills++; gold += goldFor(tgt.type); al.targetId = null; }
         }
       } else {
-        // no target: rally to a spread-out post around the keep
-        var rx = keepX + Math.cos(al.rallyA) * (KEEP_R + 24), ry = keepY + Math.sin(al.rallyA) * (KEEP_R + 24);
-        var hx = rx - al.x, hy = ry - al.y, hd = Math.sqrt(hx * hx + hy * hy) || 1;
+        // no target: return to this unit's post (auto-assigned, or player-chosen)
+        var hx = al.rallyX - al.x, hy = al.rallyY - al.y, hd = Math.sqrt(hx * hx + hy * hy) || 1;
         if (hd > 6) { al.x += hx / hd * 55 * dt; al.y += hy / hd * 55 * dt; al.phase += dt * 5; }
       }
     }
@@ -842,6 +876,29 @@
     ctx.restore();
   }
 
+  function drawSelection() {
+    if (selectedFootId == null) return;
+    var al = null;
+    for (var i = 0; i < allies.length; i++) if (allies[i].id === selectedFootId) { al = allies[i]; break; }
+    if (!al) return;
+    var pulse = 0.5 + 0.5 * Math.sin(elapsed * 5);
+    // ring under the selected footman
+    ctx.strokeStyle = "rgba(93,214,192," + (0.55 + 0.35 * pulse).toFixed(2) + ")";
+    ctx.lineWidth = 1.8;
+    ctx.beginPath(); ctx.ellipse(al.x, al.y + 9, 10, 4, 0, 0, Math.PI * 2); ctx.stroke();
+    // dashed line + flag at its post, so you can see where a tap will send it
+    var dx = al.rallyX - al.x, dy = al.rallyY - al.y;
+    if (dx * dx + dy * dy > 8 * 8) {
+      ctx.strokeStyle = "rgba(93,214,192,0.4)";
+      ctx.setLineDash([4, 5]);
+      ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.moveTo(al.x, al.y); ctx.lineTo(al.rallyX, al.rallyY); ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    ctx.fillStyle = "rgba(93,214,192,0.85)";
+    ctx.beginPath(); ctx.arc(al.rallyX, al.rallyY, 3, 0, Math.PI * 2); ctx.fill();
+  }
+
   function drawRaider(r) {
     var T = TYPES[r.type], s = T.r / 6;
     ctx.save();
@@ -937,6 +994,7 @@
     drawGround();
     drawKeep();
     for (var ci = 0; ci < allies.length; ci++) drawAlly(allies[ci]);
+    drawSelection();
     // draw order: downed first, then marching/fleeing by y, arrows, horse
     var byY = raiders.slice().sort(function (a, b) { return (a.state === "down" ? -1e6 : a.y) - (b.state === "down" ? -1e6 : b.y); });
     for (var i = 0; i < byY.length; i++) drawRaider(byY[i]);
@@ -986,12 +1044,37 @@
     return { x: (e.clientX - r.left) * (W / r.width), y: (e.clientY - r.top) * (H / r.height) };
   }
   var steering = false;
+  var downX = 0, downY = 0, downMoved = false;
+  // ---- Footman select/post: tap a footman to select it (tap it again, or
+  // tap a different one, to switch); tap the field to send the selected unit
+  // to post there instead of its auto-assigned ring spot. ----
+  function handleTap(p) {
+    var underFoot = footmanNear(p.x, p.y, 18);
+    var consumed = false;
+    if (underFoot) {
+      if (selectedFootId === underFoot.id) { selectedFootId = null; sfxDeselect(); }
+      else { selectedFootId = underFoot.id; sfxSelect(); }
+      consumed = true;
+    } else if (selectedFootId != null) {
+      var al = null;
+      for (var i = 0; i < allies.length; i++) if (allies[i].id === selectedFootId) { al = allies[i]; break; }
+      if (al) {
+        var c = clampToField(p.x, p.y);
+        al.rallyX = c.x; al.rallyY = c.y;
+        sfxCommand();
+      }
+      selectedFootId = null;
+      consumed = true;
+    }
+    if (consumed) { player.tx = player.x; player.ty = player.y; updateTapHint(); } // cancel the tiny nudge
+  }
   canvas.addEventListener("pointerdown", function (e) {
     e.preventDefault();
     if (over) return;
     audio();
     steering = true;
     var p = posFromEvent(e);
+    downX = p.x; downY = p.y; downMoved = false;
     player.tx = p.x; player.ty = p.y;
     try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
   });
@@ -999,9 +1082,13 @@
     if (!steering || over) return;
     e.preventDefault();
     var p = posFromEvent(e);
+    if (Math.abs(p.x - downX) > 8 || Math.abs(p.y - downY) > 8) downMoved = true;
     player.tx = p.x; player.ty = p.y;
   });
-  canvas.addEventListener("pointerup", function () { steering = false; });
+  canvas.addEventListener("pointerup", function () {
+    if (!over && !downMoved) handleTap({ x: downX, y: downY });
+    steering = false;
+  });
   canvas.addEventListener("pointercancel", function () { steering = false; });
   // ---- Stance toggle ----
   var stanceBtn = document.getElementById("stance-btn");
@@ -1074,6 +1161,7 @@
     hearts = HEARTS_MAX;
     wave = 1; kills = 0;
     gold = 0; income = 2; nFoot = 0; nTower = 0; nGranary = 0;
+    selectedFootId = null; updateTapHint();
     breatherT = 0; cleared = false; paused = false;
     stat = { range: BASE.range, speed: BASE.speed, fireCd: BASE.fireCd, volley: BASE.volley, pierce: BASE.pierce, dmg: BASE.dmg };
     stance = "bow"; bowScore = 0; lanceScore = 0;
@@ -1094,11 +1182,14 @@
     setStance: function (s) { if ((s === "bow" || s === "lance") && s !== stance) toggleStance(); },
     buy: function (id) { for (var i = 0; i < SHOP.length; i++) if (SHOP[i].id === id) { buyItem(SHOP[i]); return; } },
     march: function () { if (paused) march(); },
+    tap: function (x, y) { handleTap({ x: x, y: y }); },
     state: function () {
       return { wave: wave, kills: kills, hearts: hearts, over: over, paused: paused, gold: gold, income: income,
         stance: stance, bowScore: Math.round(bowScore * 10) / 10, lanceScore: Math.round(lanceScore * 10) / 10,
         allies: { foot: nFoot, tower: nTower, granary: nGranary },
-        foot: allies.filter(function (a) { return a.kind === "foot"; }).map(function (a) { return { x: Math.round(a.x), y: Math.round(a.y), t: a.targetId }; }),
+        selected: selectedFootId,
+        foot: allies.filter(function (a) { return a.kind === "foot"; })
+          .map(function (a) { return { id: a.id, x: Math.round(a.x), y: Math.round(a.y), t: a.targetId, rx: Math.round(a.rallyX), ry: Math.round(a.rallyY) }; }),
         stat: { range: stat.range, speed: stat.speed, fireCd: stat.fireCd, volley: stat.volley, pierce: stat.pierce, dmg: stat.dmg },
         raiders: raiders.filter(function (r) { return r.state === "march"; })
           .map(function (r) { return { x: Math.round(r.x), y: Math.round(r.y), type: r.type }; }),
