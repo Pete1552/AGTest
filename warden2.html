@@ -122,6 +122,12 @@
   }
   .train-queue svg { width: 12px; height: 12px; flex: none; display: block; }
   .score-box.provisions.short .score-val { color: #e8a23c; }
+  /* five score boxes now (Time/Gold/Stone/Supply/Best) — trim padding and
+     font size a touch so the row still fits comfortably on narrow phones */
+  .scores { gap: 5px; }
+  .scores .score-box { padding: 6px 3px 7px; }
+  .scores .score-label { font-size: 8.5px; letter-spacing: 0.6px; }
+  .scores .score-val { font-size: 17px; }
 </style>
 </head>
 <body>
@@ -140,6 +146,7 @@
   <div class="scores">
     <div class="score-box"><div class="score-label">Time</div><div class="score-val" id="wave">0:00</div></div>
     <div class="score-box"><div class="score-label">Gold</div><div class="score-val" id="gold">0</div></div>
+    <div class="score-box"><div class="score-label">Stone</div><div class="score-val" id="stone">0</div></div>
     <div class="score-box provisions"><div class="score-label">Supply</div><div class="score-val" id="provisions">0/0</div></div>
     <div class="score-box best"><div class="score-label">Best</div><div class="score-val" id="best">—</div></div>
   </div>
@@ -159,6 +166,8 @@
         <button class="build-btn" data-build="storehouse" aria-label="Build Storehouse"><span class="bb-icon"></span><span class="bb-cost"></span></button>
         <button class="build-btn" data-build="barracks" aria-label="Build Barracks"><span class="bb-icon"></span><span class="bb-cost"></span></button>
         <button class="build-btn" data-build="tower" aria-label="Build Watchtower"><span class="bb-icon"></span><span class="bb-cost"></span></button>
+        <button class="build-btn" data-build="wall" aria-label="Build Wall"><span class="bb-icon"></span><span class="bb-cost"></span></button>
+        <button class="build-btn" data-build="gate" aria-label="Build Gate"><span class="bb-icon"></span><span class="bb-cost"></span></button>
       </div>
       <div id="place-bar" class="place-bar" style="display:none">
         <button id="place-confirm-btn" class="place-btn confirm" aria-label="Place building">Place</button>
@@ -187,7 +196,7 @@
     </div>
     <div class="how">
       <p class="how-title">How to play</p>
-      <p class="body">You command the keep from above now — there's no rider on the field, just your garrison and your economy. The keep sits in a much wider land, so drag with two fingers to look around, and use the minimap and the ⌖ button (which snaps the view back to the keep) to stay oriented. Unscouted ground is hidden; once a unit of yours has seen it it stays dimly remembered, but raiders vanish from sight again the moment nothing of yours can currently see them, so scouting matters. Tap a build icon (<b>Farm</b>, <b>Storehouse</b>, <b>Barracks</b>, <b>Watchtower</b>) then drag the ghost into place and confirm — it snaps to a grid, glowing red if that plot's already taken. Building costs come out of your <b>Gold</b>. Gold isn't just looted from raiders: train a <b>Miner</b> at a Storehouse and it will haul <b>ore</b> from the gold veins scattered around the land back home, turning it into spendable gold on every trip — veins run thin the more you draw from one, so it pays to work more than one, and a scout's report always marks the nearest one for you at the start. <b>Farms</b> produce <b>Provisions</b>, the upkeep every building and soldier draws on; if you run short, training slows down, so keep a Farm or two ahead of your garrison. Tap a placed <b>Barracks</b> to train <b>Footmen</b>, <b>Archers</b> (range, never close in), <b>Spearmen</b> (harder hits, slower afoot) or <b>Catapults</b> (splash damage) — tap a <b>Storehouse</b> to train more <b>Miners</b>. You start with one Footman garrisoned at the keep. Tap a footman to select it, or drag a box over several to command them as a group, then tap the field to post them somewhere new — they'll fight anything that wanders into range on their own. The enemy has a real <b>Warcamp</b> far off that musters raiding parties on its own over time instead of scripted waves — post some of your troops beside it and hold the ground to raid it for bonus gold and set its production back, but they aren't guarding the keep while they're there. Survive as long as you can — your score is how long you last.</p>
+      <p class="body">You command the keep from above now — there's no rider on the field, just your garrison and your economy. The keep sits in a much wider land, so drag with two fingers to look around, and use the minimap and the ⌖ button (which snaps the view back to the keep) to stay oriented. Unscouted ground is hidden; once a unit of yours has seen it it stays dimly remembered, but raiders vanish from sight again the moment nothing of yours can currently see them, so scouting matters. Tap a build icon (<b>Farm</b>, <b>Storehouse</b>, <b>Barracks</b>, <b>Watchtower</b>, <b>Wall</b>, <b>Gate</b>) then drag the ghost into place and confirm — it snaps to a grid, glowing red if that plot's already taken. Most buildings cost <b>Gold</b>; Walls and Gates cost <b>Stone</b> instead. Train a <b>Miner</b> at a Storehouse and it will haul from whichever gold vein or stone quarry has the most left, banking Gold or Stone on every trip — a node runs thin the more you draw from it, so it pays to work more than one, and a scout's report always marks the nearest vein for you at the start. <b>Farms</b> produce <b>Provisions</b>, the upkeep every building and soldier draws on; if you run short, training slows down, so keep a Farm or two ahead of your garrison. Tap a placed <b>Barracks</b> to train <b>Footmen</b>, <b>Archers</b> (range, never close in), <b>Spearmen</b> (harder hits, slower afoot) or <b>Catapults</b> (splash damage) — tap a <b>Storehouse</b> to train more <b>Miners</b>. You start with one Footman garrisoned at the keep. Tap a footman to select it, or drag a box over several to command them as a group, then tap the field to post them somewhere new — they'll fight anything that wanders into range on their own. Raiders can't cross a <b>Wall</b>, and a shut <b>Gate</b> blocks them just the same — tap a Gate to swing it open or closed. Wall off the keep with a gate or two left open and raiders are forced to funnel through wherever you left the way in, so stack your archers and towers there; leave every gate shut and they'll just force their way through the nearest wall instead of stalling forever. The enemy has a real <b>Warcamp</b> far off that musters raiding parties on its own over time instead of scripted waves — post some of your troops beside it and hold the ground to raid it for bonus gold and set its production back, but they aren't guarding the keep while they're there. Survive as long as you can — your score is how long you last.</p>
     </div>
     <button id="settings-share" class="share">Share the game</button>
     <button id="settings-close" class="ghost-btn">Done</button>
@@ -207,7 +216,7 @@
   </div>
 </div>
 
-<script src="leaderboard.js?v=47"></script>
+<script src="leaderboard.js?v=48"></script>
 <script>
 (function () {
   "use strict";
@@ -260,10 +269,11 @@
   // building is always placeable from the build tray below the field; there
   // is no more pause-only shop.
   var gold = 20;
+  var stone = 8; // hauled from Quarries the same way Miners haul gold from veins — spent on Walls/Gates
   var provisions = { used: 0, cap: 0, ratio: 1 };
-  var counts = { farm: 0, storehouse: 0, barracks: 0, tower: 0, miner: 0 };
+  var counts = { farm: 0, storehouse: 0, barracks: 0, tower: 0, miner: 0, wall: 0, gate: 0 };
   var nFoot = 0; // just spacing math for footman-style rally posts, not a cap
-  var allies = [];  // {kind:"foot"|"tower"|"barracks"|"storehouse"|"farm"|"miner", x, y, ...}
+  var allies = [];  // {kind:"foot"|"tower"|"barracks"|"storehouse"|"farm"|"miner"|"wall"|"gate", x, y, ...}
   var placing = null; // { kind, x, y, cost } while dragging a bought building into place
   var TOWER_RANGE = 120;
   var selectedBuilding = null; // barracks/storehouse id whose training panel is open
@@ -275,7 +285,7 @@
     archer:    { name: "Archer",    cost: 6,  time: 5, desc: "Shoots from range, never closes in", trains: "barracks" },
     spearman:  { name: "Spearman",  cost: 7,  time: 6, desc: "Hits harder in melee, but slower afoot", trains: "barracks" },
     catapult:  { name: "Catapult",  cost: 12, time: 9, desc: "Lobs a blast that hits everyone nearby", trains: "barracks" },
-    miner:     { name: "Miner",     cost: 8,  time: 6, desc: "Hauls gold ore from a vein to a Storehouse", trains: "storehouse", cap: 6 }
+    miner:     { name: "Miner",     cost: 8,  time: 6, desc: "Hauls gold or stone from the richest node to a Storehouse", trains: "storehouse", cap: 6 }
   };
   function goldFor(type) { return type === "brute" ? 4 : (type === "shield" || type === "pikeman") ? 2 : 1; }
 
@@ -290,7 +300,13 @@
     farm:       { label: "farm",       cost: function () { return 8 + counts.farm * 4; },        cap: 6, phase: 5.4, size: { w: 2, h: 2 } },
     storehouse: { label: "storehouse", cost: function () { return 12 + counts.storehouse * 6; }, cap: 4, phase: 4.2, size: { w: 2, h: 2 } },
     barracks:   { label: "barracks",   cost: function () { return 10 + counts.barracks * 8; },  cap: 3, phase: 3.0, size: { w: 2, h: 2 } },
-    tower:      { label: "tower",      cost: function () { return 7 + counts.tower * 4; },       cap: 8, phase: 0,   size: { w: 1, h: 1 } }
+    tower:      { label: "tower",      cost: function () { return 7 + counts.tower * 4; },       cap: 8, phase: 0,   size: { w: 1, h: 1 } },
+    // walls/gates cost Stone, not Gold — a real perimeter takes a lot of
+    // segments, so the per-count climb is much gentler than the other
+    // buildings; gates are the rarer, pricier piece since one or two is
+    // usually all a base needs
+    wall:       { label: "wall", resource: "stone", cost: function () { return 3 + Math.floor(counts.wall / 4); }, cap: 24, phase: 0, size: { w: 1, h: 1 } },
+    gate:       { label: "gate", resource: "stone", cost: function () { return 6 + counts.gate * 2; },             cap: 6,  phase: 0, size: { w: 1, h: 1 } }
   };
   // Small flat-shape SVG glyphs, in the same geometric style as the canvas
   // art, so build/troop icons render identically everywhere instead of
@@ -304,7 +320,9 @@
     archer: '<svg viewBox="-10 -10 20 20"><path d="M-5 -8 Q 3 0 -5 8" stroke="#c9b28a" stroke-width="1.6" fill="none"/><line x1="-5" y1="-8" x2="-5" y2="8" stroke="#e8edf4" stroke-width="1"/><line x1="-6" y1="0" x2="8" y2="0" stroke="#d9c9a8" stroke-width="1.6"/><polygon points="9,0 5,-2 5,2" fill="#e8edf4" stroke="rgba(0,0,0,0.35)" stroke-width="0.5"/></svg>',
     spearman: '<svg viewBox="-10 -10 20 20"><line x1="-7" y1="8" x2="7" y2="-8" stroke="#c9b28a" stroke-width="2.1" stroke-linecap="round"/><polygon points="7,-8 3,-7 5,-11" fill="#e8edf4" stroke="rgba(0,0,0,0.35)" stroke-width="0.5"/></svg>',
     catapult: '<svg viewBox="-10 -18 20 26"><rect x="-8" y="-2" width="16" height="6" rx="2" fill="#8a6a4a" stroke="rgba(0,0,0,0.4)" stroke-width="0.6"/><circle cx="-5" cy="6" r="3.2" fill="none" stroke="#aab0bd" stroke-width="1.4"/><circle cx="5" cy="6" r="3.2" fill="none" stroke="#aab0bd" stroke-width="1.4"/><line x1="-2" y1="-2" x2="5" y2="-14" stroke="#c9b28a" stroke-width="2" stroke-linecap="round"/><circle cx="5" cy="-14" r="2.6" fill="#8a6a4a" stroke="rgba(0,0,0,0.4)" stroke-width="0.6"/></svg>',
-    miner: '<svg viewBox="-10 -10 20 20"><line x1="-6" y1="7" x2="4" y2="-7" stroke="#a5825c" stroke-width="1.8" stroke-linecap="round"/><g stroke="rgba(0,0,0,0.4)" stroke-width="0.5"><path d="M4 -7 Q 9 -10 8 -4 Q 5 -6 4 -7" fill="#aab0bd"/><path d="M4 -7 Q -1 -10 0 -4 Q 3 -6 4 -7" fill="#aab0bd"/></g></svg>'
+    miner: '<svg viewBox="-10 -10 20 20"><line x1="-6" y1="7" x2="4" y2="-7" stroke="#a5825c" stroke-width="1.8" stroke-linecap="round"/><g stroke="rgba(0,0,0,0.4)" stroke-width="0.5"><path d="M4 -7 Q 9 -10 8 -4 Q 5 -6 4 -7" fill="#aab0bd"/><path d="M4 -7 Q -1 -10 0 -4 Q 3 -6 4 -7" fill="#aab0bd"/></g></svg>',
+    wall: '<svg viewBox="-12 -6 24 12"><g stroke="rgba(0,0,0,0.4)" stroke-width="0.6"><rect x="-11" y="-5" width="22" height="10" rx="1.5" fill="#8a8f86"/><line x1="-4" y1="-5" x2="-4" y2="5" stroke="rgba(0,0,0,0.25)" stroke-width="0.8"/><line x1="4" y1="-5" x2="4" y2="5" stroke="rgba(0,0,0,0.25)" stroke-width="0.8"/></g></svg>',
+    gate: '<svg viewBox="-12 -10 24 20"><g stroke="rgba(0,0,0,0.4)" stroke-width="0.6"><rect x="-11" y="-9" width="6" height="18" rx="1.5" fill="#787d74"/><rect x="5" y="-9" width="6" height="18" rx="1.5" fill="#787d74"/><rect x="-4" y="-7" width="8" height="15" rx="1" fill="#6b5540"/></g><line x1="0" y1="-6" x2="0" y2="7" stroke="rgba(0,0,0,0.3)" stroke-width="0.8"/></svg>'
   };
 
   // W/H are now the WORLD size — fixed, independent of the device screen.
@@ -387,6 +405,7 @@
   }
   var waveEl = document.getElementById("wave");
   var goldEl = document.getElementById("gold");
+  var stoneEl = document.getElementById("stone");
   var bestEl = document.getElementById("best");
   var settingsOverlay = document.getElementById("settings-overlay");
   var soundToggle = document.getElementById("sound-toggle");
@@ -445,7 +464,8 @@
     raiders.push({
       id: raiderSeq++, x: x, y: y, type: type, hp: T.hp, maxhp: T.hp,
       speed: raiderSpeed() * T.spd * (0.9 + Math.random() * 0.2),
-      state: "march", t: 0, face: 1, phase: Math.random() * 6, charging: false, shieldAng: 0
+      state: "march", t: 0, face: 1, phase: Math.random() * 6, charging: false, shieldAng: 0,
+      waypoint: null // set when a wall/closed gate forces a detour to the nearest open gate
     });
   }
 
@@ -460,6 +480,37 @@
   function warcampReward() { return 8 + Math.floor(elapsed / 30); }
   function initWarcamp() {
     warcamp = { x: W / 2, y: H - 22, strength: 15, cap: 100, rcd: 0, t: 0 };
+  }
+  // ---- Wall/Gate routing: not real pathfinding, just a "is my direct line
+  // to the keep blocked?" check. If it is, detour to the nearest open gate
+  // as a single waypoint, then resume beelining once past it. If no gate is
+  // open anywhere, don't stall the raider — an unbroken wall you never left
+  // an opening in just isn't a real obstacle for these purposes. ----
+  var WALL_R = 15;
+  function segPointDist2(x1, y1, x2, y2, px, py) {
+    var dx = x2 - x1, dy = y2 - y1;
+    var len2 = dx * dx + dy * dy;
+    var t = len2 > 0 ? Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / len2)) : 0;
+    var cx = x1 + t * dx, cy = y1 + t * dy, ex = px - cx, ey = py - cy;
+    return ex * ex + ey * ey;
+  }
+  function wallBlocking(fromX, fromY, toX, toY) {
+    for (var i = 0; i < allies.length; i++) {
+      var a = allies[i];
+      if (a.kind !== "wall" && !(a.kind === "gate" && !a.open)) continue;
+      if (segPointDist2(fromX, fromY, toX, toY, a.x, a.y) < WALL_R * WALL_R) return a;
+    }
+    return null;
+  }
+  function nearestOpenGate(fromX, fromY) {
+    var best = null, bd = Infinity;
+    for (var i = 0; i < allies.length; i++) {
+      var a = allies[i];
+      if (a.kind !== "gate" || !a.open) continue;
+      var dx = a.x - fromX, dy = a.y - fromY, d2 = dx * dx + dy * dy;
+      if (d2 < bd) { bd = d2; best = a; }
+    }
+    return best;
   }
   function spawnWarcampSquad() {
     var n = warcampSquadSize();
@@ -539,10 +590,36 @@
       { x: W * 0.5, y: H * 0.06, amount: 400, max: 400 }
     ];
   }
-  function pickVein() {
-    var best = null;
-    for (var i = 0; i < veins.length; i++) if (veins[i].amount > 0 && (!best || veins[i].amount > best.amount)) best = veins[i];
-    return best;
+  // ---- Stone Quarries: the same idea as gold veins, spent on Walls/Gates
+  // instead of buildings/troops. Fewer of them than veins — stone is the
+  // secondary resource — spread through the middle band of the map rather
+  // than the corners, so they don't just double up on vein territory.
+  var quarries = [];
+  function initQuarries() {
+    quarries = [
+      { x: W * 0.5, y: H * 0.38, amount: 300, max: 300 },
+      { x: W * 0.22, y: H * 0.62, amount: 300, max: 300 },
+      { x: W * 0.78, y: H * 0.62, amount: 300, max: 300 }
+    ];
+  }
+  // picks whichever node — gold vein or stone quarry — is nearest to the
+  // caller (in practice, the Storehouse a Miner just left), so both
+  // resources are actually reachable: veins have a bigger max capacity
+  // than quarries, so "pick the fullest one" would starve Stone out
+  // entirely. Nearest means where you build a Storehouse decides your mix.
+  function pickResourceNode(fromX, fromY) {
+    var best = null, kind = null, bd = Infinity;
+    for (var i = 0; i < veins.length; i++) {
+      if (veins[i].amount <= 0) continue;
+      var dx = veins[i].x - fromX, dy = veins[i].y - fromY, d2 = dx * dx + dy * dy;
+      if (d2 < bd) { bd = d2; best = veins[i]; kind = "gold"; }
+    }
+    for (var j = 0; j < quarries.length; j++) {
+      if (quarries[j].amount <= 0) continue;
+      var dx2 = quarries[j].x - fromX, dy2 = quarries[j].y - fromY, d2b = dx2 * dx2 + dy2 * dy2;
+      if (d2b < bd) { bd = d2b; best = quarries[j]; kind = "stone"; }
+    }
+    return best ? { node: best, kind: kind } : null;
   }
   function nearestStorehouse(x, y) {
     var best = null, bd = Infinity;
@@ -613,13 +690,14 @@
   }
   // ---- Building placement: tap a build-tray icon, drag the ghost, then
   // Place or Cancel (refunds). No pause, no shop — always available. ----
+  function resourceOf(kind) { return BUILDINGS[kind].resource === "stone" ? "stone" : "gold"; }
   function onBuildTap(kind) {
     var b = BUILDINGS[kind];
     if (!b || placing || selectedBuilding != null) return;
     if (counts[kind] >= b.cap) return;
-    var c = b.cost();
-    if (gold < c) return;
-    gold -= c;
+    var c = b.cost(), res = resourceOf(kind);
+    if ((res === "stone" ? stone : gold) < c) return;
+    if (res === "stone") stone -= c; else gold -= c;
     counts[kind]++;
     var ang = (counts[kind] - 1) * 2.399963 + b.phase, rr = KEEP_R + 34 + (kind === "barracks" ? 6 : 0);
     startPlacingBuilding(kind, c, keepX + Math.cos(ang) * rr, keepY + Math.sin(ang) * rr);
@@ -628,7 +706,7 @@
   }
   function startPlacingBuilding(kind, cost, x, y) {
     var c = snapBuilding(kind, x, y);
-    placing = { kind: kind, x: c.x, y: c.y, valid: c.valid, cost: cost };
+    placing = { kind: kind, x: c.x, y: c.y, valid: c.valid, cost: cost, resource: resourceOf(kind) };
     document.getElementById("build-tray").style.display = "none";
     document.getElementById("place-bar").style.display = "flex";
     document.getElementById("place-confirm-btn").innerHTML = ICONS[kind] + " Place";
@@ -649,6 +727,10 @@
       allies.push({ id: allySeq++, kind: kind, x: placing.x, y: placing.y, size: size, queue: [] });
     } else if (kind === "farm") {
       allies.push({ id: allySeq++, kind: "farm", x: placing.x, y: placing.y, size: size });
+    } else if (kind === "wall") {
+      allies.push({ id: allySeq++, kind: "wall", x: placing.x, y: placing.y, size: size });
+    } else if (kind === "gate") {
+      allies.push({ id: allySeq++, kind: "gate", x: placing.x, y: placing.y, size: size, open: false });
     } else {
       allies.push({ id: allySeq++, kind: "tower", x: placing.x, y: placing.y, size: size,
         cd: Math.random() * 0.5, phase: Math.random() * 6 });
@@ -659,7 +741,7 @@
   }
   function cancelPlacement() {
     if (!placing) return;
-    gold += placing.cost;
+    if (placing.resource === "stone") stone += placing.cost; else gold += placing.cost;
     counts[placing.kind]--;
     sfxDeselect();
     updateHud();
@@ -672,8 +754,9 @@
       var btn = document.querySelector('.build-btn[data-build="' + k + '"]');
       if (!btn) continue;
       var atCap = counts[k] >= b.cap;
+      var have = resourceOf(k) === "stone" ? stone : gold;
       btn.querySelector(".bb-cost").textContent = atCap ? "Max" : String(b.cost());
-      btn.classList.toggle("poor", !atCap && gold < b.cost());
+      btn.classList.toggle("poor", !atCap && have < b.cost());
     }
   }
   function footmanNear(px, py, r) {
@@ -691,6 +774,16 @@
     for (var i = 0; i < allies.length; i++) {
       var a = allies[i];
       if (a.kind !== "barracks" && a.kind !== "storehouse") continue;
+      var dx = a.x - px, dy = a.y - py, d2 = dx * dx + dy * dy;
+      if (d2 < bd) { bd = d2; best = a; }
+    }
+    return best;
+  }
+  function gateNear(px, py, r) {
+    var best = null, bd = r * r;
+    for (var i = 0; i < allies.length; i++) {
+      var a = allies[i];
+      if (a.kind !== "gate") continue;
       var dx = a.x - px, dy = a.y - py, d2 = dx * dx + dy * dy;
       if (d2 < bd) { bd = d2; best = a; }
     }
@@ -824,11 +917,16 @@
       }
     }
 
-    // ore veins slowly recover while not being drawn down, so a heavily
-    // mined vein runs thin for a while rather than staying dry forever
+    // ore veins and stone quarries both slowly recover while not being
+    // drawn down, so a heavily worked node runs thin for a while rather
+    // than staying dry forever
     for (var vi = 0; vi < veins.length; vi++) {
       var v = veins[vi];
       if (v.amount < v.max) v.amount = Math.min(v.max, v.amount + VEIN_REGEN * dt);
+    }
+    for (var qi = 0; qi < quarries.length; qi++) {
+      var q = quarries[qi];
+      if (q.amount < q.max) q.amount = Math.min(q.max, q.amount + VEIN_REGEN * dt);
     }
 
     // raiders
@@ -836,17 +934,32 @@
       var r = raiders[i];
       r.phase += dt * 6;
       if (r.state === "march") {
+        // drop a reached waypoint (an open gate we detoured to) and resume
+        // beelining for the keep, which will re-run the block check below
+        if (r.waypoint) {
+          var wdx = r.waypoint.x - r.x, wdy = r.waypoint.y - r.y;
+          if (wdx * wdx + wdy * wdy < 14 * 14) r.waypoint = null;
+        }
+        if (!r.waypoint) {
+          var block = wallBlocking(r.x, r.y, keepX, keepY);
+          if (block) {
+            var gate = nearestOpenGate(r.x, r.y);
+            if (gate) r.waypoint = { x: gate.x, y: gate.y };
+          }
+        }
+        var moveX = r.waypoint ? r.waypoint.x : keepX, moveY = r.waypoint ? r.waypoint.y : keepY;
+        var mx = moveX - r.x, my = moveY - r.y, md = Math.sqrt(mx * mx + my * my) || 1;
         var rx = keepX - r.x, ry = keepY - r.y;
         var rd = Math.sqrt(rx * rx + ry * ry) || 1;
-        r.shieldAng = Math.atan2(ry, rx); // shield faces the keep
+        r.shieldAng = Math.atan2(ry, rx); // shield always faces the keep, not the current waypoint
         // final charge: raiders sprint the last stretch to the gate, so a
         // parked archer barely gets a shot — meet them in the field instead
         if (!r.charging && rd < 130) r.charging = true;
         var sp2 = r.charging ? r.speed * 1.75 : r.speed;
-        r.x += rx / rd * sp2 * dt;
-        r.y += ry / rd * sp2 * dt;
+        r.x += mx / md * sp2 * dt;
+        r.y += my / md * sp2 * dt;
         if (r.charging) r.phase += dt * 7;
-        r.face = rx > 0 ? 1 : -1;
+        r.face = mx > 0 ? 1 : -1;
         if (rd < KEEP_R) {
           hearts--;
           r.state = "flee"; r.t = 0;
@@ -897,9 +1010,17 @@
       var al = allies[ai];
       if (al.kind === "barracks" || al.kind === "storehouse" || al.kind === "farm") continue; // production ticks separately, below
       if (al.kind === "miner") {
+        // "toVein" also covers heading to a Quarry now — al.nodeKind says
+        // which resource array al.veinId indexes into (gold veins by
+        // default, stone quarries when nodeKind === "stone")
         if (al.state === "toVein") {
-          var v = al.veinId != null ? veins[al.veinId] : null;
-          if (!v || v.amount <= 0) { v = pickVein(); al.veinId = v ? veins.indexOf(v) : null; }
+          var arr = al.nodeKind === "stone" ? quarries : veins;
+          var v = al.veinId != null ? arr[al.veinId] : null;
+          if (!v || v.amount <= 0) {
+            var picked = pickResourceNode(al.x, al.y);
+            if (picked) { al.nodeKind = picked.kind; v = picked.node; al.veinId = (picked.kind === "stone" ? quarries : veins).indexOf(v); }
+            else { v = null; al.veinId = null; }
+          }
           if (v) {
             var vx = v.x - al.x, vy = v.y - al.y, vd = Math.sqrt(vx * vx + vy * vy) || 1;
             if (vd > 6) { al.x += vx / vd * MINER_SPEED * dt; al.y += vy / vd * MINER_SPEED * dt; al.phase += dt * 6; al.face = vx > 0 ? 1 : -1; }
@@ -908,7 +1029,8 @@
         } else if (al.state === "mining") {
           al.workT += dt;
           if (al.workT >= MINE_TIME) {
-            var vv = al.veinId != null ? veins[al.veinId] : null;
+            var arr2 = al.nodeKind === "stone" ? quarries : veins;
+            var vv = al.veinId != null ? arr2[al.veinId] : null;
             var take = Math.min(MINE_LOAD, vv ? vv.amount : 0);
             if (vv) vv.amount -= take;
             al.carrying = take;
@@ -919,7 +1041,10 @@
           if (home) {
             var hx = home.x - al.x, hy = home.y - al.y, hd = Math.sqrt(hx * hx + hy * hy) || 1;
             if (hd > 8) { al.x += hx / hd * MINER_SPEED * dt; al.y += hy / hd * MINER_SPEED * dt; al.phase += dt * 6; al.face = hx > 0 ? 1 : -1; }
-            else { gold += al.carrying; al.carrying = 0; updateHud(); al.state = "toVein"; al.veinId = null; }
+            else {
+              if (al.nodeKind === "stone") stone += al.carrying; else gold += al.carrying;
+              al.carrying = 0; updateHud(); al.state = "toVein"; al.veinId = null;
+            }
           }
         }
         continue;
@@ -1065,6 +1190,7 @@
   function updateHud() {
     waveEl.textContent = fmtTime(elapsed);
     goldEl.textContent = String(gold);
+    stoneEl.textContent = String(stone);
     var supply = computeSupply();
     var provEl = document.getElementById("provisions");
     provEl.textContent = supply.used + "/" + supply.cap;
@@ -1283,8 +1409,8 @@
     ctx.save();
     ctx.translate(al.x, al.y);
     ctx.fillStyle = "rgba(0,0,0,0.22)";
-    var shadowRy = (al.kind === "tower" || al.kind === "barracks" || al.kind === "storehouse") ? 12 : (al.kind === "farm" ? 6 : 9);
-    var shadowRx = (al.kind === "barracks" || al.kind === "storehouse") ? 13 : (al.kind === "tower" ? 9 : (al.kind === "farm" ? 14 : 6));
+    var shadowRy = (al.kind === "tower" || al.kind === "barracks" || al.kind === "storehouse") ? 12 : (al.kind === "farm" ? 6 : (al.kind === "wall" || al.kind === "gate") ? 5 : 9);
+    var shadowRx = (al.kind === "barracks" || al.kind === "storehouse") ? 13 : (al.kind === "tower" ? 9 : (al.kind === "farm" ? 14 : (al.kind === "wall" || al.kind === "gate") ? 11 : 6));
     ctx.beginPath(); ctx.ellipse(0, shadowRy, shadowRx, 3, 0, 0, Math.PI * 2); ctx.fill();
     if (al.kind === "tower") {
       // stout stone watchtower with a teal banner
@@ -1354,6 +1480,31 @@
         ctx.fillStyle = grad2(fi * 7 - 2.2, -8, fi * 7 + 2.2, 0, "#e0bb5c", "#b8893a");
         ctx.beginPath(); ctx.moveTo(fi * 7, 0); ctx.lineTo(fi * 7 - 2.2, -8); ctx.lineTo(fi * 7 + 2.2, -8); ctx.closePath();
         ctx.fill(); outline("rgba(0,0,0,0.25)", 0.7);
+      }
+    } else if (al.kind === "wall") {
+      // a stone rampart segment — raiders can't cross it, only route around
+      ctx.fillStyle = grad2(-11, -6, 11, 7, "#8a8f86", "#5a5f57");
+      ctx.beginPath(); ctx.roundRect(-11, -6, 22, 13, 2); ctx.fill(); outline("rgba(0,0,0,0.35)", 1.1);
+      ctx.strokeStyle = "rgba(0,0,0,0.15)"; ctx.lineWidth = 0.8;
+      for (var wj = -7; wj <= 7; wj += 7) { ctx.beginPath(); ctx.moveTo(wj, -6); ctx.lineTo(wj, 7); ctx.stroke(); }
+      ctx.beginPath(); ctx.moveTo(-11, 0); ctx.lineTo(11, 0); ctx.stroke();
+    } else if (al.kind === "gate") {
+      // two stone posts flanking a wooden gate — tap to toggle it open or
+      // shut; open lets everything through, shut blocks raiders like a wall
+      ctx.fillStyle = grad2(-11, -8, -11, 8, "#8a8f86", "#5a5f57");
+      ctx.beginPath(); ctx.roundRect(-11, -8, 6, 16, 2); ctx.fill(); outline("rgba(0,0,0,0.35)", 1);
+      ctx.fillStyle = grad2(5, -8, 5, 8, "#8a8f86", "#5a5f57");
+      ctx.beginPath(); ctx.roundRect(5, -8, 6, 16, 2); ctx.fill(); outline("rgba(0,0,0,0.35)", 1);
+      if (al.open) {
+        ctx.fillStyle = grad2(-6.5, -6, -6.5, 6, "#7a624a", "#5a4636");
+        ctx.beginPath(); ctx.roundRect(-6.5, -6, 2.5, 12, 1); ctx.fill(); outline("rgba(0,0,0,0.3)", 0.7);
+        ctx.fillStyle = grad2(4, -6, 4, 6, "#7a624a", "#5a4636");
+        ctx.beginPath(); ctx.roundRect(4, -6, 2.5, 12, 1); ctx.fill(); outline("rgba(0,0,0,0.3)", 0.7);
+      } else {
+        ctx.fillStyle = grad2(-5, -7, 5, 7, "#7a624a", "#5a4636");
+        ctx.beginPath(); ctx.roundRect(-5, -7, 10, 14, 1.5); ctx.fill(); outline("rgba(0,0,0,0.3)", 0.9);
+        ctx.strokeStyle = "rgba(0,0,0,0.25)"; ctx.lineWidth = 0.8;
+        ctx.beginPath(); ctx.moveTo(0, -7); ctx.lineTo(0, 7); ctx.stroke();
       }
     } else if (al.kind === "miner") {
       // small ore cart, hauled by hand — carries a visible gold sack when loaded
@@ -1627,6 +1778,25 @@
     ctx.restore();
   }
 
+  function drawQuarry(q) {
+    if (q.amount <= 0) return; // depleted for now — reappears as it regenerates
+    ctx.save();
+    ctx.translate(q.x, q.y);
+    var pct = q.amount / q.max;
+    ctx.fillStyle = "rgba(60,60,58,0.4)";
+    ctx.beginPath(); ctx.ellipse(0, 4, 12, 5, 0, 0, Math.PI * 2); ctx.fill();
+    // a small rubble pile of grey stone chunks instead of ore nuggets
+    var chunks = [[-6, 1, 4.4], [1, -1, 5], [6, 2, 3.8], [-1, 3, 3.4]];
+    for (var i = 0; i < chunks.length; i++) {
+      var c = chunks[i];
+      ctx.fillStyle = grad2(c[0] - c[2], c[1] - c[2], c[0] + c[2], c[1] + c[2], "#8a8f86", "#5a5f57");
+      ctx.beginPath(); ctx.arc(c[0], c[1], c[2], 0, Math.PI * 2); ctx.fill(); outline("rgba(0,0,0,0.28)", 0.7);
+    }
+    ctx.fillStyle = "rgba(200,206,196," + (0.35 + 0.3 * pct).toFixed(2) + ")";
+    ctx.beginPath(); ctx.arc(1, -1, 2, 0, Math.PI * 2); ctx.fill(); outline("rgba(0,0,0,0.25)", 0.5);
+    ctx.restore();
+  }
+
   function drawWarcamp() {
     if (!warcamp) return;
     ctx.save();
@@ -1712,6 +1882,11 @@
       if (veins[i].amount <= 0 || !fogExplored[fogIndex(veins[i].x, veins[i].y)]) continue;
       mctx.beginPath(); mctx.arc(veins[i].x * sx, veins[i].y * sy, 1.6, 0, Math.PI * 2); mctx.fill();
     }
+    mctx.fillStyle = "rgba(180,186,176,0.8)";
+    for (var qm = 0; qm < quarries.length; qm++) {
+      if (quarries[qm].amount <= 0 || !fogExplored[fogIndex(quarries[qm].x, quarries[qm].y)]) continue;
+      mctx.beginPath(); mctx.arc(quarries[qm].x * sx, quarries[qm].y * sy, 1.6, 0, Math.PI * 2); mctx.fill();
+    }
     mctx.fillStyle = "#8b93a8";
     mctx.fillRect(keepX * sx - 2, keepY * sy - 2, 4, 4);
     for (var ai = 0; ai < allies.length; ai++) {
@@ -1733,6 +1908,7 @@
     drawGround();
     drawClutter();
     for (var vi2 = 0; vi2 < veins.length; vi2++) drawVein(veins[vi2]);
+    for (var qi2 = 0; qi2 < quarries.length; qi2++) drawQuarry(quarries[qi2]);
     drawWarcamp();
     drawKeep();
     for (var ci = 0; ci < allies.length; ci++) drawAlly(allies[ci]);
@@ -1836,6 +2012,14 @@
     if (underTrainer) {
       if (selectedBuilding === underTrainer.id) closeTrainingPanel();
       else openTrainingPanel(underTrainer.id);
+      return;
+    }
+    // a Gate toggles open/closed on tap — open lets raiders straight
+    // through, closed forces them to route to whichever gate is open
+    var underGate = gateNear(p.x, p.y, 18);
+    if (underGate) {
+      underGate.open = !underGate.open;
+      sfxSelect();
       return;
     }
     var underFoot = footmanNear(p.x, p.y, 18);
@@ -2023,8 +2207,8 @@
     raiders = []; arrows = []; bombs = []; puffs = []; allies = [];
     hearts = HEARTS_MAX;
     kills = 0;
-    gold = 26; nFoot = 0; // a bit more starting cushion now the world (and the walk to a vein) is bigger
-    counts = { farm: 0, storehouse: 0, barracks: 0, tower: 0, miner: 0 };
+    gold = 26; stone = 8; nFoot = 0; // a bit more starting cushion now the world (and the walk to a vein) is bigger
+    counts = { farm: 0, storehouse: 0, barracks: 0, tower: 0, miner: 0, wall: 0, gate: 0 };
     selectedUnit = null; selectedGroup = []; boxSel = null;
     if (selectedBuilding != null) closeTrainingPanel();
     if (placing) endPlacement();
@@ -2043,6 +2227,7 @@
     bestEl.textContent = best ? fmtTime(best) : "—";
     initFog();
     initVeins();
+    initQuarries();
     initWarcamp();
     initClutter();
     updateFog();
@@ -2068,6 +2253,10 @@
     build: function (kind) { onBuildTap(kind); },
     tap: function (x, y) { handleTap({ x: x, y: y }); },
     orderUnit: function (id, x, y) { var al = findAllyById(id); if (al) { var c = clampToField(x, y); al.rallyX = c.x; al.rallyY = c.y; } },
+    setGate: function (id, open) { var al = findAllyById(id); if (al && al.kind === "gate") al.open = open; },
+    spawnRaiderAt: function (x, y) { spawnRaider(x, y); return raiders[raiders.length - 1].id; },
+    addGold: function (n) { gold += n; updateHud(); },
+    addStone: function (n) { stone += n; updateHud(); },
     dragGhost: function (x, y) { if (placing) { var c = snapBuilding(placing.kind, x, y); placing.x = c.x; placing.y = c.y; placing.valid = c.valid; } },
     fogAt: function (x, y) { return { visible: !!fogVisible[fogIndex(x, y)], explored: !!fogExplored[fogIndex(x, y)] }; },
     tapTrainer: function (id) { if (selectedBuilding === id) closeTrainingPanel(); else openTrainingPanel(id); },
@@ -2076,14 +2265,15 @@
     cancelPlace: function () { cancelPlacement(); },
     state: function () {
       var supply = computeSupply();
-      return { elapsed: Math.round(elapsed * 10) / 10, kills: kills, hearts: hearts, over: over, gold: gold,
+      return { elapsed: Math.round(elapsed * 10) / 10, kills: kills, hearts: hearts, over: over, gold: gold, stone: stone,
         provisions: { used: supply.used, cap: supply.cap },
-        allies: { foot: nFoot, tower: counts.tower, farm: counts.farm, storehouse: counts.storehouse, barracks: counts.barracks, miner: counts.miner },
+        allies: { foot: nFoot, tower: counts.tower, farm: counts.farm, storehouse: counts.storehouse, barracks: counts.barracks, miner: counts.miner, wall: counts.wall, gate: counts.gate },
         selected: selectedUnit, selectedGroup: selectedGroup.slice(), selectedBuilding: selectedBuilding,
         warcamp: warcamp ? { x: Math.round(warcamp.x), y: Math.round(warcamp.y), strength: Math.round(warcamp.strength),
           cap: warcamp.cap, rcd: Math.round(warcamp.rcd * 10) / 10, t: Math.round(warcamp.t * 10) / 10 } : null,
         veins: veins.map(function (v) { return { x: Math.round(v.x), y: Math.round(v.y), amount: Math.round(v.amount), max: v.max }; }),
-        placing: placing ? { kind: placing.kind, x: Math.round(placing.x), y: Math.round(placing.y), cost: placing.cost, valid: placing.valid } : null,
+        quarries: quarries.map(function (q) { return { x: Math.round(q.x), y: Math.round(q.y), amount: Math.round(q.amount), max: q.max }; }),
+        placing: placing ? { kind: placing.kind, x: Math.round(placing.x), y: Math.round(placing.y), cost: placing.cost, valid: placing.valid, resource: placing.resource } : null,
         tower: allies.filter(function (a) { return a.kind === "tower"; })
           .map(function (a) { return { id: a.id, x: Math.round(a.x), y: Math.round(a.y) }; }),
         barracks: allies.filter(function (a) { return a.kind === "barracks"; })
@@ -2093,11 +2283,15 @@
         farm: allies.filter(function (a) { return a.kind === "farm"; })
           .map(function (a) { return { id: a.id, x: Math.round(a.x), y: Math.round(a.y) }; }),
         miner: allies.filter(function (a) { return a.kind === "miner"; })
-          .map(function (a) { return { id: a.id, x: Math.round(a.x), y: Math.round(a.y), state: a.state, carrying: a.carrying }; }),
+          .map(function (a) { return { id: a.id, x: Math.round(a.x), y: Math.round(a.y), state: a.state, carrying: a.carrying, nodeKind: a.nodeKind }; }),
+        wall: allies.filter(function (a) { return a.kind === "wall"; })
+          .map(function (a) { return { id: a.id, x: Math.round(a.x), y: Math.round(a.y) }; }),
+        gate: allies.filter(function (a) { return a.kind === "gate"; })
+          .map(function (a) { return { id: a.id, x: Math.round(a.x), y: Math.round(a.y), open: a.open }; }),
         foot: allies.filter(function (a) { return a.kind === "foot"; })
           .map(function (a) { return { id: a.id, troop: a.troop || "footman", x: Math.round(a.x), y: Math.round(a.y), t: a.targetId, rx: Math.round(a.rallyX), ry: Math.round(a.rallyY) }; }),
         raiders: raiders.filter(function (r) { return r.state === "march"; })
-          .map(function (r) { return { id: r.id, x: Math.round(r.x), y: Math.round(r.y), type: r.type }; }),
+          .map(function (r) { return { id: r.id, x: Math.round(r.x), y: Math.round(r.y), type: r.type, waypoint: r.waypoint }; }),
         W: W, H: H, VW: VW, VH: VH, camera: { x: Math.round(camera.x), y: Math.round(camera.y) } };
     }
   };
