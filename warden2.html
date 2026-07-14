@@ -88,7 +88,6 @@
       <span class="title">Warden II</span>
     </div>
     <div class="bar-actions">
-      <button id="lb-btn" class="icon-btn" aria-label="High scores">🏆</button>
       <button id="restart" class="icon-btn" aria-label="New game">↻</button>
       <button id="settings-btn" class="icon-btn" aria-label="Settings">⚙</button>
     </div>
@@ -143,7 +142,19 @@
   </div>
 </div>
 
-<script src="leaderboard.js?v=40"></script>
+<div id="gameover-overlay" class="modal-overlay">
+  <div class="modal">
+    <h2>The keep has fallen</h2>
+    <div class="final" id="go-time">0:00</div>
+    <div class="final-sub" id="go-sub"></div>
+    <p>Leaderboard coming soon for Warden II.</p>
+    <button id="go-again">Play again</button>
+    <button id="go-home" class="share">Home</button>
+    <button id="go-close" class="ghost-btn">Close</button>
+  </div>
+</div>
+
+<script src="leaderboard.js?v=41"></script>
 <script>
 (function () {
   "use strict";
@@ -963,6 +974,10 @@
     updateBuildTray();
   }
 
+  // The shared leaderboard is temporarily disabled for Warden II (its score
+  // — survival time — isn't the old "Band reached" the board expects, and
+  // this is still an early build). Best time still tracks locally so restarts
+  // have something to beat; it just isn't submitted or shown against others.
   function doGameOver() {
     over = true; running = false;
     sfxOver();
@@ -970,13 +985,9 @@
     if (t > best) { best = t; localStorage.setItem("tranquil_wardenii_best", String(best)); }
     bestEl.textContent = best ? fmtTime(best) : "—";
     setTimeout(function () {
-      LB.finish({
-        game: "wardenii",
-        value: t,
-        resultTitle: "The keep has fallen",
-        subtitle: "Held out " + fmtTime(t) + " · " + kills + " raiders repelled",
-        onPlayAgain: newGame
-      });
+      document.getElementById("go-time").textContent = fmtTime(t);
+      document.getElementById("go-sub").textContent = "Held out " + fmtTime(t) + " · " + kills + " raiders repelled";
+      document.getElementById("gameover-overlay").classList.add("show");
     }, 900);
   }
 
@@ -1692,8 +1703,11 @@
   document.getElementById("settings-close").addEventListener("click", function () { settingsOverlay.classList.remove("show"); });
   settingsOverlay.addEventListener("click", function (e) { if (e.target === settingsOverlay) settingsOverlay.classList.remove("show"); });
   document.getElementById("settings-share").addEventListener("click", shareGame);
-  document.getElementById("lb-btn").addEventListener("click", function () { LB.open("wardenii"); });
   document.getElementById("restart").addEventListener("click", newGame);
+  var gameoverOverlay = document.getElementById("gameover-overlay");
+  document.getElementById("go-again").addEventListener("click", function () { gameoverOverlay.classList.remove("show"); newGame(); });
+  document.getElementById("go-home").addEventListener("click", function () { location.href = "index.html"; });
+  document.getElementById("go-close").addEventListener("click", function () { gameoverOverlay.classList.remove("show"); });
 
   window.addEventListener("pointerdown", function () { audio(); }, { once: false });
 
@@ -1716,6 +1730,7 @@
     stance = "bow"; bowScore = 0; lanceScore = 0;
     over = false; running = true;
     elapsed = 0;
+    document.getElementById("gameover-overlay").classList.remove("show");
     updateStanceBtn();
     player.x = keepX; player.y = keepY + 86;
     player.tx = player.x; player.ty = player.y;
