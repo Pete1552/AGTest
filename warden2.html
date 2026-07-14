@@ -38,7 +38,6 @@
     -webkit-user-select: none; user-select: none; touch-action: manipulation;
   }
   .recenter-btn:active { transform: scale(0.92); }
-  .recenter-btn.following { opacity: 0.45; }
   .build-btn {
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
     width: 40px; height: 40px; border: none; cursor: pointer; border-radius: 50%;
@@ -48,11 +47,8 @@
   }
   .build-btn:active { transform: scale(0.94); }
   .build-btn.poor { opacity: 0.4; }
-  .build-btn.stance { background: var(--accent); }
-  .build-btn.stance.lance { background: #d7a35a; }
   .build-btn .bb-icon { font-size: 15px; line-height: 1; }
   .build-btn .bb-cost { font-size: 8.5px; font-weight: 800; color: #f2c94c; line-height: 1; }
-  .build-btn.stance .bb-cost { color: #06231e; font-size: 8px; }
   .place-bar {
     position: absolute; left: 0; right: 0; bottom: 12px;
     display: flex; justify-content: center; gap: 10px;
@@ -112,9 +108,8 @@
 
   <div class="play-area">
     <canvas id="stage"></canvas>
-    <button id="recenter-btn" class="recenter-btn" aria-label="Recenter on the Warden">⌖</button>
+    <button id="recenter-btn" class="recenter-btn" aria-label="Recenter on the keep">⌖</button>
     <div id="build-tray" class="build-tray">
-      <button id="stance-btn" class="build-btn stance" aria-label="Switch stance"><span class="bb-icon">🏹</span><span class="bb-cost">Bow</span></button>
       <button class="build-btn" data-build="farm" aria-label="Build Farm"><span class="bb-icon">🌾</span><span class="bb-cost"></span></button>
       <button class="build-btn" data-build="storehouse" aria-label="Build Storehouse"><span class="bb-icon">🏦</span><span class="bb-cost"></span></button>
       <button class="build-btn" data-build="barracks" aria-label="Build Barracks"><span class="bb-icon">🏚️</span><span class="bb-cost"></span></button>
@@ -133,7 +128,7 @@
       <span class="train-queue" id="train-queue-badge">Empty queue</span>
     </div>
   </div>
-  <div class="tap-hint" id="tap-hint">Drag to ride · tap the button to switch bow / lance</div>
+  <div class="tap-hint" id="tap-hint">Tap a footman to command them · drag with two fingers to look around</div>
 </div>
 
 <div id="settings-overlay" class="modal-overlay">
@@ -145,7 +140,7 @@
     </div>
     <div class="how">
       <p class="how-title">How to play</p>
-      <p class="body">The keep sits in a much wider land now — the view scrolls to follow your mounted warden, and a minimap in the corner keeps you oriented. Drag with two fingers to look around on your own without moving her — the little ⌖ button snaps the view back to the warden whenever you want it. Unscouted ground is hidden; once you've ridden through it it stays dimly remembered, but raiders vanish from sight again the moment nothing of yours can currently see them, so scouting matters. Tap a build icon (<b>Farm</b>, <b>Storehouse</b>, <b>Barracks</b>, <b>Watchtower</b>) then drag the ghost into place and confirm — it snaps to a grid, glowing red if that plot's already taken. Building costs come out of your <b>Gold</b>. Gold isn't just looted from raiders any more: train a <b>Miner</b> at a Storehouse and it will haul <b>ore</b> from the gold veins scattered around the land back home, turning it into spendable gold on every trip — veins run thin the more you draw from one, so it pays to work more than one, and a scout's report always marks the nearest one for you at the start. <b>Farms</b> produce <b>Provisions</b>, the upkeep every building and soldier draws on; if you run short, training slows down, so keep a Farm or two ahead of your garrison. Tap a placed <b>Barracks</b> to train <b>Footmen</b>, <b>Archers</b> (range, never close in), <b>Spearmen</b> (harder hits, slower afoot) or <b>Catapults</b> (splash damage) — tap a <b>Storehouse</b> to train more <b>Miners</b>. Tap the stance button to switch your own weapon: <b>Bow</b> shoots at range on its own, while the <b>Lance</b> cuts down anyone you ride through. The enemy has a real <b>Warcamp</b> far off that musters raiding parties on its own over time instead of scripted waves — ride out and hold your ground beside it to raid it for bonus gold and set its production back, but the keep goes undefended while you're away. Tap a footman to select it, or drag a box over several to command them as a group; tap empty ground to deselect. Survive as long as you can — your score is how long you last.</p>
+      <p class="body">You command the keep from above now — there's no rider on the field, just your garrison and your economy. The keep sits in a much wider land, so drag with two fingers to look around, and use the minimap and the ⌖ button (which snaps the view back to the keep) to stay oriented. Unscouted ground is hidden; once a unit of yours has seen it it stays dimly remembered, but raiders vanish from sight again the moment nothing of yours can currently see them, so scouting matters. Tap a build icon (<b>Farm</b>, <b>Storehouse</b>, <b>Barracks</b>, <b>Watchtower</b>) then drag the ghost into place and confirm — it snaps to a grid, glowing red if that plot's already taken. Building costs come out of your <b>Gold</b>. Gold isn't just looted from raiders: train a <b>Miner</b> at a Storehouse and it will haul <b>ore</b> from the gold veins scattered around the land back home, turning it into spendable gold on every trip — veins run thin the more you draw from one, so it pays to work more than one, and a scout's report always marks the nearest one for you at the start. <b>Farms</b> produce <b>Provisions</b>, the upkeep every building and soldier draws on; if you run short, training slows down, so keep a Farm or two ahead of your garrison. Tap a placed <b>Barracks</b> to train <b>Footmen</b>, <b>Archers</b> (range, never close in), <b>Spearmen</b> (harder hits, slower afoot) or <b>Catapults</b> (splash damage) — tap a <b>Storehouse</b> to train more <b>Miners</b>. You start with one Footman garrisoned at the keep. Tap a footman to select it, or drag a box over several to command them as a group, then tap the field to post them somewhere new — they'll fight anything that wanders into range on their own. The enemy has a real <b>Warcamp</b> far off that musters raiding parties on its own over time instead of scripted waves — post some of your troops beside it and hold the ground to raid it for bonus gold and set its production back, but they aren't guarding the keep while they're there. Survive as long as you can — your score is how long you last.</p>
     </div>
     <button id="settings-share" class="share">Share the game</button>
     <button id="settings-close" class="ghost-btn">Done</button>
@@ -165,7 +160,7 @@
   </div>
 </div>
 
-<script src="leaderboard.js?v=43"></script>
+<script src="leaderboard.js?v=44"></script>
 <script>
 (function () {
   "use strict";
@@ -194,31 +189,21 @@
   // units, not terrain, so they wink out the instant nothing of yours can
   // currently see them — that's the actual "fog hides the enemy" feel.
   var FOG_CELL = 40;
-  var VISION = { keep: 170, tower: 180, barracks: 110, storehouse: 110, farm: 110, foot: 100, miner: 80, player: 150 };
+  var VISION = { keep: 170, tower: 180, barracks: 110, storehouse: 110, farm: 110, foot: 100, miner: 80 };
 
-  // Combat stats are fixed — there's no more personal Warden upgrade shop in
-  // this version; all your build choices go into the base economy instead.
-  var BASE = { range: 185, speed: 208, fireCd: 0.5, volley: 2, pierce: 0, dmg: 1 };
-  var stat = { range: 185, speed: 208, fireCd: 0.5, volley: 2, pierce: 0, dmg: 1 };
-
-  // Raider archetypes form a counter-triangle with your two stances. The enemy
-  // sends more of whatever beats the weapon you lean on (see pickType):
-  //  - skirmisher: fast, DODGES most arrows -> punishes Bow; but lance-food.
-  //  - pikeman:    braced, the Lance bounces off it -> punishes Lance; arrow-soft.
-  //  - shield:     must be flanked (blocks BOTH weapons from its keep-facing front).
+  // Raider archetypes still vary (dodge/brace/shield/tank), which matters for
+  // your ranged vs. melee troop mix even without a player weapon to counter:
+  //  - skirmisher: fast, DODGES most arrows -> a job for melee troops.
+  //  - pikeman:    tougher against melee -> a job for archers/catapults.
+  //  - shield:     must be flanked (blocks arrows from its keep-facing front).
   //  - brute:      just tanky. basic: filler, dies to either.
   var TYPES = {
     basic:      { hp: 1, spd: 1.05, r: 6,   body: "#7a5648", helm: "#6b7382" },
     skirmisher: { hp: 1, spd: 1.5,  r: 5.4, body: "#7e8a46", helm: "#b3c05e", dodge: 0.62 },
-    pikeman:    { hp: 2, spd: 0.72, r: 6.6, body: "#5a4a3a", helm: "#8a7f6b", braced: true },
+    pikeman:    { hp: 2, spd: 0.72, r: 6.6, body: "#5a4a3a", helm: "#8a7f6b" },
     shield:     { hp: 2, spd: 0.82, r: 6.4, body: "#5a4a5e", helm: "#8b93a8" },
     brute:      { hp: 3, spd: 0.6,  r: 8.6, body: "#4a3a44", helm: "#7a7f92" }
   };
-
-  // ---- Stances (the counter-triangle's other half) ----
-  var LANCE_DMG = 2, LANCE_REACH = 15, LANCE_CD = 0.4;
-  var stance = "bow";              // "bow" (ranged) | "lance" (melee ride-through)
-  var bowScore = 0, lanceScore = 0; // decaying tally of how you've been killing
 
   // ---- Economy ----
   // Gold comes from two places now: raiders still drop a little on the spot,
@@ -269,7 +254,6 @@
   var camera = { x: 0, y: 0 };
   var keepX = W / 2, keepY = H / 2;
 
-  var player = { x: 0, y: 0, tx: 0, ty: 0, vx: 0, face: 1, phase: 0, cd: 0 };
   var raiders = [];  // {x,y,hp,speed,armored,state:"march"|"flee"|"down",t,face,phase}
   var arrows = [];   // {x,y,vx,vy,life}
   var bombs = [];    // catapult shells: {ox,oy,tx,ty,t,dur,dmg,splash}
@@ -283,11 +267,9 @@
   var hearts = HEARTS_MAX;
   var kills = 0;
   var raiderSeq = 1, allySeq = 1;
-  // RTS-style single selection: "horse" (the warden herself) or a footman's
-  // id. Only the selected unit answers to your touch — selecting a footman
-  // parks the horse in place until you deliberately tap her to take the
-  // reins back, same as reselecting any other unit.
-  var selectedUnit = "horse";
+  // RTS-style single selection: a foot ally's id, or null. Only the selected
+  // unit (or group, below) answers to a tap-to-post order.
+  var selectedUnit = null;
   // a drag-box selection of multiple footmen; mutually exclusive with
   // selectedUnit — picking a group clears the single selection and vice versa
   var selectedGroup = [];
@@ -318,9 +300,8 @@
   var DEFAULT_HINT = tapHintEl.textContent;
   function updateTapHint() {
     tapHintEl.textContent = selectedGroup.length > 1 ? selectedGroup.length + " footmen selected — tap the field to post them together"
-      : selectedUnit === "horse" ? DEFAULT_HINT
-      : selectedUnit == null ? "Nothing selected — tap the horse to ride, drag a box to group footmen"
-      : "Footman selected — tap the field to post them, tap the horse to ride again";
+      : selectedUnit == null ? DEFAULT_HINT
+      : "Footman selected — tap the field to post them";
   }
   var waveEl = document.getElementById("wave");
   var goldEl = document.getElementById("gold");
@@ -360,17 +341,16 @@
   // composition/speed curves so the feel carries over.
   function timeLevel() { return 1 + elapsed / 25; }
   function raiderSpeed() { var w = timeLevel(); return 24 + Math.min(30, w * 1.6); }
-  // Adaptive composition: the more lopsided your recent kills (bow vs lance),
-  // the more the enemy fields the counter to your favoured weapon.
+  // Composition grows in variety as time goes on — no more adaptive triangle
+  // to read a player weapon choice from, just an escalating mix your ranged
+  // and melee troops need to handle together.
   function pickType() {
     var w = timeLevel();
-    var tot = bowScore + lanceScore + 0.001;
-    var bowFrac = bowScore / tot, lanceFrac = lanceScore / tot;
     var wt = [["basic", 1.0]];
     if (w >= 4) wt.push(["shield", 0.55]);
     if (w >= 6) wt.push(["brute", 0.35]);
-    if (w >= 2) wt.push(["skirmisher", 0.25 + 1.5 * bowFrac]);   // counters Bow
-    if (w >= 3) wt.push(["pikeman", 0.25 + 1.5 * lanceFrac]);    // counters Lance
+    if (w >= 2) wt.push(["skirmisher", 0.5]);
+    if (w >= 3) wt.push(["pikeman", 0.5]);
     var total = 0, i;
     for (i = 0; i < wt.length; i++) total += wt[i][1];
     var roll = Math.random() * total;
@@ -383,7 +363,7 @@
     raiders.push({
       id: raiderSeq++, x: x, y: y, type: type, hp: T.hp, maxhp: T.hp,
       speed: raiderSpeed() * T.spd * (0.9 + Math.random() * 0.2),
-      state: "march", t: 0, face: 1, phase: Math.random() * 6, charging: false, shieldAng: 0, lanceT: 0
+      state: "march", t: 0, face: 1, phase: Math.random() * 6, charging: false, shieldAng: 0
     });
   }
 
@@ -457,7 +437,6 @@
   function updateFog() {
     fogVisible.fill(false);
     revealAround(keepX, keepY, VISION.keep);
-    revealAround(player.x, player.y, VISION.player);
     for (var i = 0; i < allies.length; i++) {
       var a = allies[i], v = VISION[a.kind];
       if (v) revealAround(a.x, a.y, v);
@@ -716,40 +695,9 @@
     if (selectedBuilding != null) buildTrainPanelUI(); // keep the countdown live
   }
 
-  // Can the archer, from where it stands, damage this raider? Shielded fronts
-  // can't be hit from the keep-side — you must ride around to the flank/rear.
-  function canDamage(r) {
-    if (r.type !== "shield") return true;
-    var nx = keepX - r.x, ny = keepY - r.y, nd = Math.sqrt(nx * nx + ny * ny) || 1;
-    var ax = r.x - player.x, ay = r.y - player.y, ad = Math.sqrt(ax * ax + ay * ay) || 1;
-    return (ax * nx + ay * ny) / (ad * nd) >= -0.5; // only a narrow frontal cone is shielded
-  }
-  function fireAt(r, dist) {
-    var tt = dist / ARROW_SPEED;
-    var rx2 = keepX - r.x, ry2 = keepY - r.y, rd2 = Math.sqrt(rx2 * rx2 + ry2 * ry2) || 1;
-    var esp = r.charging ? r.speed * 1.75 : r.speed;
-    var ax = r.x + rx2 / rd2 * esp * tt - player.x;
-    var ay = r.y + ry2 / rd2 * esp * tt - player.y;
-    var ad = Math.sqrt(ax * ax + ay * ay) || 1;
-    arrows.push({ x: player.x, y: player.y - 10, vx: ax / ad * ARROW_SPEED, vy: ay / ad * ARROW_SPEED,
-      life: stat.range / ARROW_SPEED + 0.3, pierce: stat.pierce, hit: [], dmg: stat.dmg, src: "bow" });
-  }
-
-  // camera follows the warden with a little lag, clamped to the world edges
-  // manualPan: once you've free-looked with a two-finger drag, the camera
-  // stops auto-following the warden until you recenter or grab the reins
-  // again — otherwise every scouting glance would get yanked back mid-look.
-  var manualPan = false;
-  function updateCamera(dt, snap) {
-    if (manualPan && !snap) {
-      camera.x = Math.max(0, Math.min(W - VW, camera.x));
-      camera.y = Math.max(0, Math.min(H - VH, camera.y));
-      return;
-    }
-    var targetX = player.x - VW / 2, targetY = player.y - VH / 2;
-    var lerp = snap ? 1 : Math.min(1, dt * 4);
-    camera.x += (targetX - camera.x) * lerp;
-    camera.y += (targetY - camera.y) * lerp;
+  // there's no player unit any more — the camera only ever moves by a
+  // two-finger drag or the recenter button, both of which just need bounds
+  function clampCamera() {
     camera.x = Math.max(0, Math.min(W - VW, camera.x));
     camera.y = Math.max(0, Math.min(H - VH, camera.y));
   }
@@ -758,29 +706,6 @@
   function update(dt) {
     elapsed += dt;
 
-    // horse chases the finger with a little ease
-    var dx = player.tx - player.x, dy = player.ty - player.y;
-    var d = Math.sqrt(dx * dx + dy * dy);
-    var moving = d > 4;
-    if (moving) {
-      var sp = Math.min(stat.speed, d * 6);
-      player.x += dx / d * sp * dt;
-      player.y += dy / d * sp * dt;
-      if (Math.abs(dx) > 2) player.face = dx > 0 ? 1 : -1;
-      player.phase += sp * dt * 0.055;
-    }
-    player.x = Math.max(14, Math.min(W - 14, player.x));
-    player.y = Math.max(14, Math.min(H - 14, player.y));
-    // the castle is solid — no camping on the keep
-    var kdx = player.x - keepX, kdy = player.y - keepY;
-    var kd = Math.sqrt(kdx * kdx + kdy * kdy);
-    if (kd < KEEP_R + 14) {
-      kd = kd || 1;
-      player.x = keepX + kdx / kd * (KEEP_R + 14);
-      player.y = keepY + kdy / kd * (KEEP_R + 14);
-    }
-
-    updateCamera(dt, false);
     updateFog();
 
     // the Warcamp mans itself: strength fills, and once full it musters a
@@ -789,12 +714,18 @@
       warcamp.strength += warcampGrowRate() * dt;
       if (warcamp.strength >= warcamp.cap) { warcamp.strength = 0; spawnWarcampSquad(); }
       if (warcamp.rcd > 0) warcamp.rcd -= dt;
-      // hold the warden beside it (off cooldown) to raid it: bonus gold, and
-      // a real setback to its production — but she isn't guarding the gate
-      // while this channel runs
+      // post a footman (or several) beside it, off cooldown, to raid it:
+      // bonus gold and a real setback to its production — but they aren't
+      // guarding the gate while they're holding this ground
       if (warcamp.rcd <= 0) {
-        var cdx = player.x - warcamp.x, cdy = player.y - warcamp.y;
-        if (cdx * cdx + cdy * cdy < WARCAMP_R * WARCAMP_R) {
+        var campManned = false;
+        for (var ci = 0; ci < allies.length; ci++) {
+          var ca = allies[ci];
+          if (ca.kind !== "foot") continue;
+          var cdx = ca.x - warcamp.x, cdy = ca.y - warcamp.y;
+          if (cdx * cdx + cdy * cdy < WARCAMP_R * WARCAMP_R) { campManned = true; break; }
+        }
+        if (campManned) {
           warcamp.t += dt;
           if (warcamp.t >= WARCAMP_CHANNEL) {
             gold += warcampReward();
@@ -854,57 +785,6 @@
       }
     }
 
-    // ---- Bow stance: auto-fire, preferring targets this position can damage ----
-    player.cd -= dt;
-    if (stance === "bow" && player.cd <= 0) {
-      var inRange = [];
-      for (var ti = 0; ti < raiders.length; ti++) {
-        var rr = raiders[ti];
-        if (rr.state !== "march") continue;
-        var ddx = rr.x - player.x, ddy = rr.y - player.y, d2 = ddx * ddx + ddy * ddy;
-        if (d2 < stat.range * stat.range) inRange.push({ r: rr, d2: d2, dmg: canDamage(rr) });
-      }
-      inRange.sort(function (a, b) { return a.dmg === b.dmg ? a.d2 - b.d2 : (a.dmg ? -1 : 1); });
-      var targets = inRange.slice(0, stat.volley);
-      if (targets.length) {
-        targets.forEach(function (o) { fireAt(o.r, Math.sqrt(o.d2)); });
-        player.cd = stat.fireCd;
-        sfxTwang();
-      }
-    }
-
-    // ---- Lance stance: ride through raiders to cut them down (no arrows) ----
-    if (stance === "lance") {
-      for (var li = 0; li < raiders.length; li++) {
-        var e2 = raiders[li];
-        if (e2.state !== "march") continue;
-        e2.lanceT -= dt;
-        var lx = e2.x - player.x, ly = e2.y - player.y;
-        var ldist = Math.sqrt(lx * lx + ly * ly);
-        if (ldist < TYPES[e2.type].r + 13 + LANCE_REACH && e2.lanceT <= 0) {
-          if (TYPES[e2.type].braced) {
-            // pikeman braces — the lance bounces off and shoves you back
-            var bx = player.x - e2.x, by = player.y - e2.y, bd = Math.sqrt(bx * bx + by * by) || 1;
-            player.x += bx / bd * 12; player.y += by / bd * 12;
-            player.tx = player.x; player.ty = player.y; // stop driving into the spears
-            puffs.push({ x: (player.x + e2.x) / 2, y: (player.y + e2.y) / 2, t: 0, clink: true });
-            sfxClink();
-            e2.lanceT = 0.5;
-          } else if (!canDamage(e2)) {
-            // shieldbearer's front stops the lance too — come round the side
-            puffs.push({ x: (player.x + e2.x) / 2, y: (player.y + e2.y) / 2, t: 0, clink: true });
-            sfxClink();
-            e2.lanceT = 0.4;
-          } else {
-            e2.hp -= LANCE_DMG;
-            puffs.push({ x: e2.x, y: e2.y, t: 0 });
-            sfxThock(e2.type);
-            e2.lanceT = LANCE_CD;
-            if (e2.hp <= 0) { e2.state = "down"; e2.t = 0; kills++; lanceScore += 1; gold += goldFor(e2.type); }
-          }
-        }
-      }
-    }
 
     // ---- Allies: footmen roam and cut down raiders; towers shoot ----
     function nearestMarcher(ax, ay, maxR) {
@@ -1063,7 +943,7 @@
           sfxThock(e.type);
           puffs.push({ x: ar.x, y: ar.y, t: 0 });
           ar.hit.push(e.id);
-          if (e.hp <= 0) { e.state = "down"; e.t = 0; kills++; gold += goldFor(e.type); if (ar.src === "bow") bowScore += 1; }
+          if (e.hp <= 0) { e.state = "down"; e.t = 0; kills++; gold += goldFor(e.type); }
           if (ar.pierce > 0) ar.pierce--; else remove = true;
           break;
         }
@@ -1108,7 +988,6 @@
     provEl.textContent = supply.used + "/" + supply.cap;
     provEl.parentElement.classList.toggle("short", supply.used > supply.cap);
     updateBuildTray();
-    document.getElementById("recenter-btn").classList.toggle("following", !manualPan);
   }
 
   // The shared leaderboard is temporarily disabled for Warden II (its score
@@ -1205,59 +1084,6 @@
     ctx.fill();
   }
 
-  function drawHorse() {
-    var bob = Math.sin(player.phase * 2) * 1.6;
-    var legSwing = Math.sin(player.phase * 2);
-    ctx.save();
-    ctx.translate(player.x, player.y + bob * 0.4);
-    ctx.scale(player.face, 1);
-    // shadow
-    ctx.fillStyle = "rgba(0,0,0,0.28)";
-    ctx.beginPath(); ctx.ellipse(0, 13, 15, 4.5, 0, 0, Math.PI * 2); ctx.fill();
-    // legs
-    ctx.strokeStyle = "#8a6b4f"; ctx.lineWidth = 2.6; ctx.lineCap = "round";
-    ctx.beginPath();
-    ctx.moveTo(-8, 4); ctx.lineTo(-8 - legSwing * 4, 13);
-    ctx.moveTo(-4, 4); ctx.lineTo(-4 + legSwing * 4, 13);
-    ctx.moveTo(5, 4); ctx.lineTo(5 - legSwing * 4, 13);
-    ctx.moveTo(9, 4); ctx.lineTo(9 + legSwing * 4, 13);
-    ctx.stroke();
-    // body
-    ctx.fillStyle = "#9d7b5b";
-    ctx.beginPath(); ctx.ellipse(0, 0 - bob * 0.4, 13, 6.5, 0, 0, Math.PI * 2); ctx.fill();
-    // neck + head
-    ctx.beginPath(); ctx.ellipse(11, -7 - bob * 0.4, 4.5, 6, 0.6, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(15, -11 - bob * 0.4, 4, 2.6, 0.3, 0, Math.PI * 2); ctx.fill();
-    // mane + tail
-    ctx.strokeStyle = "#6d523a"; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(8, -10 - bob * 0.4); ctx.quadraticCurveTo(6, -6, 7, -3); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(-13, -2); ctx.quadraticCurveTo(-17, 2 + legSwing * 2, -15, 7); ctx.stroke();
-    // rider
-    ctx.fillStyle = "#3d6b63";
-    ctx.beginPath(); ctx.ellipse(-1, -10 - bob, 3.6, 5.5, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = "#e8d4b8";
-    ctx.beginPath(); ctx.arc(-1, -17 - bob, 3, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = "#4a5568";
-    ctx.beginPath(); ctx.arc(-1, -18.5 - bob, 3, Math.PI, 0); ctx.fill();
-    if (stance === "bow") {
-      // bow
-      ctx.strokeStyle = "#d9b98c"; ctx.lineWidth = 1.6;
-      ctx.beginPath(); ctx.arc(5, -11 - bob, 5, -1.1, 1.1); ctx.stroke();
-      ctx.strokeStyle = "rgba(255,255,255,0.5)"; ctx.lineWidth = 0.8;
-      ctx.beginPath(); ctx.moveTo(5 + Math.cos(-1.1) * 5, -11 - bob + Math.sin(-1.1) * 5);
-      ctx.lineTo(5 + Math.cos(1.1) * 5, -11 - bob + Math.sin(1.1) * 5); ctx.stroke();
-    } else {
-      // couched lance, levelled forward
-      ctx.strokeStyle = "#cbb389"; ctx.lineWidth = 2; ctx.lineCap = "round";
-      ctx.beginPath(); ctx.moveTo(-4, -8 - bob); ctx.lineTo(22, -10 - bob); ctx.stroke();
-      ctx.fillStyle = "#e6ebf2";
-      ctx.beginPath(); ctx.moveTo(22, -10 - bob); ctx.lineTo(17, -8.5 - bob); ctx.lineTo(18, -12 - bob); ctx.closePath(); ctx.fill();
-      // small pennon
-      ctx.fillStyle = "#5dd6c0";
-      ctx.beginPath(); ctx.moveTo(6, -9 - bob); ctx.lineTo(11, -8 - bob); ctx.lineTo(6, -6.5 - bob); ctx.closePath(); ctx.fill();
-    }
-    ctx.restore();
-  }
 
   function drawAlly(al) {
     ctx.save();
@@ -1411,13 +1237,6 @@
   function drawSelection() {
     if (selectedUnit == null && selectedGroup.length === 0) return; // nothing selected
     var pulse = 0.5 + 0.5 * Math.sin(elapsed * 5);
-    if (selectedUnit === "horse") {
-      // ring under the warden — only she answers to the drag while this shows
-      ctx.strokeStyle = "rgba(93,214,192," + (0.55 + 0.35 * pulse).toFixed(2) + ")";
-      ctx.lineWidth = 1.8;
-      ctx.beginPath(); ctx.ellipse(player.x, player.y + 12, 15, 5, 0, 0, Math.PI * 2); ctx.stroke();
-      return;
-    }
     if (selectedGroup.length) {
       for (var gi = 0; gi < selectedGroup.length; gi++) {
         var gal = findAllyById(selectedGroup[gi]);
@@ -1642,8 +1461,6 @@
       ctx.fillStyle = "#c0504d";
       ctx.beginPath(); ctx.arc(mx + warcamp.x * sx, my + warcamp.y * sy, 2, 0, Math.PI * 2); ctx.fill();
     }
-    ctx.fillStyle = "#5dd6c0";
-    ctx.beginPath(); ctx.arc(mx + player.x * sx, my + player.y * sy, 2.2, 0, Math.PI * 2); ctx.fill();
     ctx.strokeStyle = "rgba(255,255,255,0.55)"; ctx.lineWidth = 1;
     ctx.strokeRect(mx + camera.x * sx, my + camera.y * sy, VW * sx, VH * sy);
     ctx.strokeStyle = "rgba(255,255,255,0.18)";
@@ -1658,7 +1475,7 @@
     drawKeep();
     for (var ci = 0; ci < allies.length; ci++) drawAlly(allies[ci]);
     if (placing) { drawPlacementGhost(); } else { drawSelection(); drawBuildingSelection(); drawSelectionBox(); }
-    // draw order: downed first, then marching/fleeing by y, arrows, horse.
+    // draw order: downed first, then marching/fleeing by y, then arrows.
     // raiders are units, not terrain — fog hides them the instant nothing
     // of yours can currently see them, unlike the remembered ground beneath.
     var byY = raiders.slice().sort(function (a, b) { return (a.state === "down" ? -1e6 : a.y) - (b.state === "down" ? -1e6 : b.y); });
@@ -1690,7 +1507,6 @@
       ctx.lineWidth = pf.clink ? 1.8 : 1.4;
       ctx.beginPath(); ctx.arc(pf.x, pf.y, (pf.clink ? 2 : 3) + k * (pf.clink ? 6 : 9), 0, Math.PI * 2); ctx.stroke();
     }
-    drawHorse();
     drawFog();
     // band announcement — drawn at the top of the *viewport*, not the world
     if (announced && announceT > 0) {
@@ -1730,18 +1546,13 @@
   // would let the second finger's own lift fall through to tap handling
   var multiTouchGesture = false;
   var activePointers = {};
-  function isOnHorse(p) {
-    var dx = p.x - player.x, dy = p.y - player.y;
-    return dx * dx + dy * dy < 20 * 20;
-  }
-  // ---- RTS-style selection: tap any unit (horse or footman) to select it —
-  // only the selected unit answers to the drag. Tap a different unit to
-  // switch to it; tap the field to give a selected footman a new post (a
+  // ---- RTS-style selection: tap a footman to select it. Tap a different one
+  // to switch to it; tap the field to give a selected footman a new post (a
   // command that lands near the unit's own current spot is just a no-op,
   // not a deselect — otherwise nudging it a short distance would keep
   // kicking you back out mid-order). Tap empty ground with nothing that can
   // be posted there clears the selection. This is the same vocabulary
-  // future selectables (the castle for repair, a tower for upgrades) will use. ----
+  // future selectables (a tower for upgrades) will use. ----
   function selectUnit(u) { selectedUnit = u; selectedGroup = []; updateTapHint(); }
   // scatter a group order around the tapped point (golden-angle spacing,
   // same pattern used to fan out spawn rally posts) so units don't stack
@@ -1763,19 +1574,18 @@
     if (underTrainer) {
       if (selectedBuilding === underTrainer.id) closeTrainingPanel();
       else openTrainingPanel(underTrainer.id);
-      player.tx = player.x; player.ty = player.y; // cancel any nudge from this tap
       return;
     }
     var underFoot = footmanNear(p.x, p.y, 18);
-    var target = underFoot ? underFoot.id : (isOnHorse(p) ? "horse" : null);
+    var target = underFoot ? underFoot.id : null;
     if (target != null) {
-      if (selectedGroup.length || selectedUnit !== target) { selectUnit(target); sfxSelect(); player.tx = player.x; player.ty = player.y; }
+      if (selectedGroup.length || selectedUnit !== target) { selectUnit(target); sfxSelect(); }
       // tapping the already-selected unit's own sprite is a harmless no-op
       return;
     }
     // empty field — no unit here
     if (selectedGroup.length) { postGroupOrder(p.x, p.y); return; }
-    if (selectedUnit !== "horse" && selectedUnit != null) {
+    if (selectedUnit != null) {
       var al = findAllyById(selectedUnit);
       if (al) {
         var c = clampToField(p.x, p.y);
@@ -1799,7 +1609,7 @@
       // a second finger just landed — cancel whatever the first finger was
       // doing and switch this whole gesture to free-look panning instead
       steering = false; boxSel = null;
-      panning = true; manualPan = true; multiTouchGesture = true;
+      panning = true; multiTouchGesture = true;
       if (panAnchorId == null || !activePointers[panAnchorId]) panAnchorId = e.pointerId;
       try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
       return;
@@ -1813,7 +1623,6 @@
     }
     steering = true;
     downX = p.x; downY = p.y; downMoved = false;
-    if (selectedUnit === "horse") { player.tx = p.x; player.ty = p.y; manualPan = false; }
     try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
   });
   canvas.addEventListener("pointermove", function (e) {
@@ -1838,10 +1647,8 @@
     if (!steering) return;
     e.preventDefault();
     if (Math.abs(p.x - downX) > 8 || Math.abs(p.y - downY) > 8) downMoved = true;
-    if (selectedUnit === "horse") { player.tx = p.x; player.ty = p.y; }
-    // dragging while the horse ISN'T the one steering is otherwise a dead
-    // gesture — repurpose it as a marquee select over footmen
-    else if (downMoved) { boxSel = { x0: downX, y0: downY, x1: p.x, y1: p.y }; }
+    // a single-finger drag is always a marquee select over footmen
+    if (downMoved) { boxSel = { x0: downX, y0: downY, x1: p.x, y1: p.y }; }
   });
   canvas.addEventListener("pointerup", function (e) {
     delete activePointers[e.pointerId];
@@ -1877,19 +1684,6 @@
     if (remaining === 0) { multiTouchGesture = false; panAnchorId = null; }
     steering = false; boxSel = null;
   });
-  // ---- Stance toggle ----
-  var stanceBtn = document.getElementById("stance-btn");
-  function updateStanceBtn() {
-    stanceBtn.querySelector(".bb-icon").textContent = stance === "bow" ? "🏹" : "🔱";
-    stanceBtn.querySelector(".bb-cost").textContent = stance === "bow" ? "Bow" : "Lance";
-    stanceBtn.classList.toggle("lance", stance === "lance");
-  }
-  function toggleStance() {
-    stance = stance === "bow" ? "lance" : "bow";
-    updateStanceBtn();
-    audio(); tone(stance === "bow" ? 520 : 300, 0.06, "sine", 0.05);
-  }
-  stanceBtn.addEventListener("click", function (e) { e.preventDefault(); if (!over) toggleStance(); });
   document.getElementById("place-confirm-btn").addEventListener("click", function (e) { e.preventDefault(); confirmPlacement(); });
   document.getElementById("place-cancel-btn").addEventListener("click", function (e) { e.preventDefault(); cancelPlacement(); });
   var trainBtns = document.querySelectorAll(".train-btn");
@@ -1906,16 +1700,6 @@
       if (!over) onBuildTap(this.dataset.build);
     });
   }
-
-  document.addEventListener("keydown", function (e) {
-    if (over) return;
-    var step = 26;
-    if (selectedUnit === "horse" && e.key === "ArrowLeft") { player.tx = player.x - step; player.ty = player.y; e.preventDefault(); }
-    else if (selectedUnit === "horse" && e.key === "ArrowRight") { player.tx = player.x + step; player.ty = player.y; e.preventDefault(); }
-    else if (selectedUnit === "horse" && e.key === "ArrowUp") { player.ty = player.y - step; player.tx = player.x; e.preventDefault(); }
-    else if (selectedUnit === "horse" && e.key === "ArrowDown") { player.ty = player.y + step; player.tx = player.x; e.preventDefault(); }
-    else if (e.key === "q" || e.key === "Q" || e.key === " " || e.key === "Tab") { toggleStance(); e.preventDefault(); }
-  });
 
   // ---- Sizing ----
   function sizeStage() {
@@ -1952,8 +1736,8 @@
   document.getElementById("restart").addEventListener("click", newGame);
   document.getElementById("recenter-btn").addEventListener("click", function (e) {
     e.preventDefault();
-    manualPan = false;
-    updateCamera(0, true);
+    camera.x = keepX - VW / 2; camera.y = keepY - VH / 2;
+    clampCamera();
   });
   var gameoverOverlay = document.getElementById("gameover-overlay");
   document.getElementById("go-again").addEventListener("click", function () { gameoverOverlay.classList.remove("show"); newGame(); });
@@ -1974,20 +1758,15 @@
     kills = 0;
     gold = 26; nFoot = 0; // a bit more starting cushion now the world (and the walk to a vein) is bigger
     counts = { farm: 0, storehouse: 0, barracks: 0, tower: 0, miner: 0 };
-    selectedUnit = "horse"; selectedGroup = []; boxSel = null; updateTapHint();
+    selectedUnit = null; selectedGroup = []; boxSel = null;
     if (selectedBuilding != null) closeTrainingPanel();
     if (placing) endPlacement();
-    stat = { range: BASE.range, speed: BASE.speed, fireCd: BASE.fireCd, volley: BASE.volley, pierce: BASE.pierce, dmg: BASE.dmg };
-    stance = "bow"; bowScore = 0; lanceScore = 0;
     over = false; running = true;
     elapsed = 0;
     document.getElementById("gameover-overlay").classList.remove("show");
-    updateStanceBtn();
-    player.x = keepX; player.y = keepY + 86;
-    player.tx = player.x; player.ty = player.y;
-    player.cd = 0.4;
-    manualPan = false; panning = false; panAnchorId = null; multiTouchGesture = false; activePointers = {};
-    updateCamera(0, true); // snap straight to the keep, no lerp-in on a fresh game
+    panning = false; panAnchorId = null; multiTouchGesture = false; activePointers = {};
+    camera.x = keepX - VW / 2; camera.y = keepY - VH / 2;
+    clampCamera();
     bestEl.textContent = best ? fmtTime(best) : "—";
     initFog();
     initVeins();
@@ -2001,16 +1780,20 @@
       if (d2v < nearestD) { nearestD = d2v; nearestVein = veins[vi3]; }
     }
     if (nearestVein) markExplored(nearestVein.x, nearestVein.y, 70);
+    // one Footman garrisoned at the keep from the start — there's no rider
+    // to lean on any more, so the field isn't totally empty on turn one
+    spawnTroop("footman", keepX, keepY + 80);
+    selectedUnit = allies[allies.length - 1].id;
+    updateTapHint();
     updateBuildTray();
     updateHud();
   }
 
   // test hook for scripted play (harmless in production)
   window.__wd = {
-    go: function (x, y) { player.tx = x; player.ty = y; },
-    setStance: function (s) { if ((s === "bow" || s === "lance") && s !== stance) toggleStance(); },
     build: function (kind) { onBuildTap(kind); },
     tap: function (x, y) { handleTap({ x: x, y: y }); },
+    orderUnit: function (id, x, y) { var al = findAllyById(id); if (al) { var c = clampToField(x, y); al.rallyX = c.x; al.rallyY = c.y; } },
     dragGhost: function (x, y) { if (placing) { var c = snapBuilding(placing.kind, x, y); placing.x = c.x; placing.y = c.y; placing.valid = c.valid; } },
     fogAt: function (x, y) { return { visible: !!fogVisible[fogIndex(x, y)], explored: !!fogExplored[fogIndex(x, y)] }; },
     tapTrainer: function (id) { if (selectedBuilding === id) closeTrainingPanel(); else openTrainingPanel(id); },
@@ -2020,7 +1803,6 @@
     state: function () {
       var supply = computeSupply();
       return { elapsed: Math.round(elapsed * 10) / 10, kills: kills, hearts: hearts, over: over, gold: gold,
-        stance: stance, bowScore: Math.round(bowScore * 10) / 10, lanceScore: Math.round(lanceScore * 10) / 10,
         provisions: { used: supply.used, cap: supply.cap },
         allies: { foot: nFoot, tower: counts.tower, farm: counts.farm, storehouse: counts.storehouse, barracks: counts.barracks, miner: counts.miner },
         selected: selectedUnit, selectedGroup: selectedGroup.slice(), selectedBuilding: selectedBuilding,
@@ -2040,11 +1822,9 @@
           .map(function (a) { return { id: a.id, x: Math.round(a.x), y: Math.round(a.y), state: a.state, carrying: a.carrying }; }),
         foot: allies.filter(function (a) { return a.kind === "foot"; })
           .map(function (a) { return { id: a.id, troop: a.troop || "footman", x: Math.round(a.x), y: Math.round(a.y), t: a.targetId, rx: Math.round(a.rallyX), ry: Math.round(a.rallyY) }; }),
-        stat: { range: stat.range, speed: stat.speed, fireCd: stat.fireCd, volley: stat.volley, pierce: stat.pierce, dmg: stat.dmg },
         raiders: raiders.filter(function (r) { return r.state === "march"; })
           .map(function (r) { return { id: r.id, x: Math.round(r.x), y: Math.round(r.y), type: r.type }; }),
-        px: Math.round(player.x), py: Math.round(player.y), W: W, H: H,
-        VW: VW, VH: VH, camera: { x: Math.round(camera.x), y: Math.round(camera.y) }, manualPan: manualPan };
+        W: W, H: H, VW: VW, VH: VH, camera: { x: Math.round(camera.x), y: Math.round(camera.y) } };
     }
   };
 
