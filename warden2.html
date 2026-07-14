@@ -29,6 +29,16 @@
     position: absolute; left: 0; right: 0; bottom: 12px;
     display: flex; justify-content: center; gap: 6px;
   }
+  .recenter-btn {
+    position: absolute; top: 106px; right: 8px; z-index: 2;
+    width: 30px; height: 30px; border: none; border-radius: 50%; cursor: pointer;
+    background: rgba(10,14,10,0.72); color: var(--accent); font-size: 16px; line-height: 1;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    transition: transform 100ms ease, background 140ms ease;
+    -webkit-user-select: none; user-select: none; touch-action: manipulation;
+  }
+  .recenter-btn:active { transform: scale(0.92); }
+  .recenter-btn.following { opacity: 0.45; }
   .build-btn {
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
     width: 40px; height: 40px; border: none; cursor: pointer; border-radius: 50%;
@@ -102,6 +112,7 @@
 
   <div class="play-area">
     <canvas id="stage"></canvas>
+    <button id="recenter-btn" class="recenter-btn" aria-label="Recenter on the Warden">⌖</button>
     <div id="build-tray" class="build-tray">
       <button id="stance-btn" class="build-btn stance" aria-label="Switch stance"><span class="bb-icon">🏹</span><span class="bb-cost">Bow</span></button>
       <button class="build-btn" data-build="farm" aria-label="Build Farm"><span class="bb-icon">🌾</span><span class="bb-cost"></span></button>
@@ -134,7 +145,7 @@
     </div>
     <div class="how">
       <p class="how-title">How to play</p>
-      <p class="body">The keep sits in a much wider land now — the view scrolls to follow your mounted warden, and a minimap in the corner keeps you oriented. Unscouted ground is hidden; once you've ridden through it it stays dimly remembered, but raiders vanish from sight again the moment nothing of yours can currently see them, so scouting matters. Tap a build icon (<b>Farm</b>, <b>Storehouse</b>, <b>Barracks</b>, <b>Watchtower</b>) then drag the ghost into place and confirm — it snaps to a grid, glowing red if that plot's already taken. Building costs come out of your <b>Gold</b>. Gold isn't just looted from raiders any more: train a <b>Miner</b> at a Storehouse and it will haul <b>ore</b> from the gold veins scattered around the land back home, turning it into spendable gold on every trip — veins run thin the more you draw from one, so it pays to work more than one, and a scout's report always marks the nearest one for you at the start. <b>Farms</b> produce <b>Provisions</b>, the upkeep every building and soldier draws on; if you run short, training slows down, so keep a Farm or two ahead of your garrison. Tap a placed <b>Barracks</b> to train <b>Footmen</b>, <b>Archers</b> (range, never close in), <b>Spearmen</b> (harder hits, slower afoot) or <b>Catapults</b> (splash damage) — tap a <b>Storehouse</b> to train more <b>Miners</b>. Tap the stance button to switch your own weapon: <b>Bow</b> shoots at range on its own, while the <b>Lance</b> cuts down anyone you ride through. The enemy has a real <b>Warcamp</b> far off that musters raiding parties on its own over time instead of scripted waves — ride out and hold your ground beside it to raid it for bonus gold and set its production back, but the keep goes undefended while you're away. Tap a footman to select it, or drag a box over several to command them as a group; tap empty ground to deselect. Survive as long as you can — your score is how long you last.</p>
+      <p class="body">The keep sits in a much wider land now — the view scrolls to follow your mounted warden, and a minimap in the corner keeps you oriented. Drag with two fingers to look around on your own without moving her — the little ⌖ button snaps the view back to the warden whenever you want it. Unscouted ground is hidden; once you've ridden through it it stays dimly remembered, but raiders vanish from sight again the moment nothing of yours can currently see them, so scouting matters. Tap a build icon (<b>Farm</b>, <b>Storehouse</b>, <b>Barracks</b>, <b>Watchtower</b>) then drag the ghost into place and confirm — it snaps to a grid, glowing red if that plot's already taken. Building costs come out of your <b>Gold</b>. Gold isn't just looted from raiders any more: train a <b>Miner</b> at a Storehouse and it will haul <b>ore</b> from the gold veins scattered around the land back home, turning it into spendable gold on every trip — veins run thin the more you draw from one, so it pays to work more than one, and a scout's report always marks the nearest one for you at the start. <b>Farms</b> produce <b>Provisions</b>, the upkeep every building and soldier draws on; if you run short, training slows down, so keep a Farm or two ahead of your garrison. Tap a placed <b>Barracks</b> to train <b>Footmen</b>, <b>Archers</b> (range, never close in), <b>Spearmen</b> (harder hits, slower afoot) or <b>Catapults</b> (splash damage) — tap a <b>Storehouse</b> to train more <b>Miners</b>. Tap the stance button to switch your own weapon: <b>Bow</b> shoots at range on its own, while the <b>Lance</b> cuts down anyone you ride through. The enemy has a real <b>Warcamp</b> far off that musters raiding parties on its own over time instead of scripted waves — ride out and hold your ground beside it to raid it for bonus gold and set its production back, but the keep goes undefended while you're away. Tap a footman to select it, or drag a box over several to command them as a group; tap empty ground to deselect. Survive as long as you can — your score is how long you last.</p>
     </div>
     <button id="settings-share" class="share">Share the game</button>
     <button id="settings-close" class="ghost-btn">Done</button>
@@ -154,7 +165,7 @@
   </div>
 </div>
 
-<script src="leaderboard.js?v=42"></script>
+<script src="leaderboard.js?v=43"></script>
 <script>
 (function () {
   "use strict";
@@ -725,7 +736,16 @@
   }
 
   // camera follows the warden with a little lag, clamped to the world edges
+  // manualPan: once you've free-looked with a two-finger drag, the camera
+  // stops auto-following the warden until you recenter or grab the reins
+  // again — otherwise every scouting glance would get yanked back mid-look.
+  var manualPan = false;
   function updateCamera(dt, snap) {
+    if (manualPan && !snap) {
+      camera.x = Math.max(0, Math.min(W - VW, camera.x));
+      camera.y = Math.max(0, Math.min(H - VH, camera.y));
+      return;
+    }
     var targetX = player.x - VW / 2, targetY = player.y - VH / 2;
     var lerp = snap ? 1 : Math.min(1, dt * 4);
     camera.x += (targetX - camera.x) * lerp;
@@ -1088,6 +1108,7 @@
     provEl.textContent = supply.used + "/" + supply.cap;
     provEl.parentElement.classList.toggle("short", supply.used > supply.cap);
     updateBuildTray();
+    document.getElementById("recenter-btn").classList.toggle("following", !manualPan);
   }
 
   // The shared leaderboard is temporarily disabled for Warden II (its score
@@ -1700,6 +1721,15 @@
   }
   var steering = false;
   var downX = 0, downY = 0, downMoved = false;
+  // ---- Two-finger free-look: a second finger down switches to panning the
+  // camera by itself, independent of the warden — the first finger's own
+  // gesture (steering/box-select) is cancelled so the two don't fight. ----
+  var panning = false, panAnchorId = null;
+  // tracks the whole multi-touch gesture, not just "exactly >=2 fingers right
+  // now" — otherwise the first finger lifting (dropping the count to 1)
+  // would let the second finger's own lift fall through to tap handling
+  var multiTouchGesture = false;
+  var activePointers = {};
   function isOnHorse(p) {
     var dx = p.x - player.x, dy = p.y - player.y;
     return dx * dx + dy * dy < 20 * 20;
@@ -1764,6 +1794,17 @@
     e.preventDefault();
     if (over) return;
     audio();
+    activePointers[e.pointerId] = { x: e.clientX, y: e.clientY };
+    if (Object.keys(activePointers).length >= 2 && !placing) {
+      // a second finger just landed — cancel whatever the first finger was
+      // doing and switch this whole gesture to free-look panning instead
+      steering = false; boxSel = null;
+      panning = true; manualPan = true; multiTouchGesture = true;
+      if (panAnchorId == null || !activePointers[panAnchorId]) panAnchorId = e.pointerId;
+      try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+      return;
+    }
+    if (multiTouchGesture) return; // a third finger, or a straggler from a pan already in progress
     var p = posFromEvent(e);
     if (placing) {
       var pc = snapBuilding(placing.kind, p.x, p.y); placing.x = pc.x; placing.y = pc.y; placing.valid = pc.valid;
@@ -1772,11 +1813,26 @@
     }
     steering = true;
     downX = p.x; downY = p.y; downMoved = false;
-    if (selectedUnit === "horse") { player.tx = p.x; player.ty = p.y; }
+    if (selectedUnit === "horse") { player.tx = p.x; player.ty = p.y; manualPan = false; }
     try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
   });
   canvas.addEventListener("pointermove", function (e) {
     if (over) return;
+    if (activePointers[e.pointerId]) {
+      var prevPt = activePointers[e.pointerId];
+      activePointers[e.pointerId] = { x: e.clientX, y: e.clientY };
+      if (panning) {
+        if (e.pointerId === panAnchorId) {
+          e.preventDefault();
+          var r = canvas.getBoundingClientRect();
+          camera.x -= (e.clientX - prevPt.x) * (VW / r.width);
+          camera.y -= (e.clientY - prevPt.y) * (VH / r.height);
+          camera.x = Math.max(0, Math.min(W - VW, camera.x));
+          camera.y = Math.max(0, Math.min(H - VH, camera.y));
+        }
+        return;
+      }
+    }
     var p = posFromEvent(e);
     if (placing) { e.preventDefault(); var pc2 = snapBuilding(placing.kind, p.x, p.y); placing.x = pc2.x; placing.y = pc2.y; placing.valid = pc2.valid; return; }
     if (!steering) return;
@@ -1787,7 +1843,14 @@
     // gesture — repurpose it as a marquee select over footmen
     else if (downMoved) { boxSel = { x0: downX, y0: downY, x1: p.x, y1: p.y }; }
   });
-  canvas.addEventListener("pointerup", function () {
+  canvas.addEventListener("pointerup", function (e) {
+    delete activePointers[e.pointerId];
+    var remaining = Object.keys(activePointers).length;
+    if (multiTouchGesture) {
+      if (remaining < 2) panning = false; // stop applying pan deltas once below 2 fingers
+      if (remaining === 0) { multiTouchGesture = false; panAnchorId = null; }
+      return; // nothing from a multi-touch gesture ever falls through to tap/box-select
+    }
     if (placing) return; // confirmed/cancelled via the buttons, not by lifting your finger
     if (boxSel) {
       var x0 = Math.min(boxSel.x0, boxSel.x1), x1 = Math.max(boxSel.x0, boxSel.x1);
@@ -1807,7 +1870,13 @@
     if (!over && !downMoved) handleTap({ x: downX, y: downY });
     steering = false;
   });
-  canvas.addEventListener("pointercancel", function () { steering = false; boxSel = null; });
+  canvas.addEventListener("pointercancel", function (e) {
+    delete activePointers[e.pointerId];
+    var remaining = Object.keys(activePointers).length;
+    if (remaining < 2) panning = false;
+    if (remaining === 0) { multiTouchGesture = false; panAnchorId = null; }
+    steering = false; boxSel = null;
+  });
   // ---- Stance toggle ----
   var stanceBtn = document.getElementById("stance-btn");
   function updateStanceBtn() {
@@ -1881,6 +1950,11 @@
   settingsOverlay.addEventListener("click", function (e) { if (e.target === settingsOverlay) settingsOverlay.classList.remove("show"); });
   document.getElementById("settings-share").addEventListener("click", shareGame);
   document.getElementById("restart").addEventListener("click", newGame);
+  document.getElementById("recenter-btn").addEventListener("click", function (e) {
+    e.preventDefault();
+    manualPan = false;
+    updateCamera(0, true);
+  });
   var gameoverOverlay = document.getElementById("gameover-overlay");
   document.getElementById("go-again").addEventListener("click", function () { gameoverOverlay.classList.remove("show"); newGame(); });
   document.getElementById("go-home").addEventListener("click", function () { location.href = "index.html"; });
@@ -1912,6 +1986,7 @@
     player.x = keepX; player.y = keepY + 86;
     player.tx = player.x; player.ty = player.y;
     player.cd = 0.4;
+    manualPan = false; panning = false; panAnchorId = null; multiTouchGesture = false; activePointers = {};
     updateCamera(0, true); // snap straight to the keep, no lerp-in on a fresh game
     bestEl.textContent = best ? fmtTime(best) : "—";
     initFog();
@@ -1969,7 +2044,7 @@
         raiders: raiders.filter(function (r) { return r.state === "march"; })
           .map(function (r) { return { id: r.id, x: Math.round(r.x), y: Math.round(r.y), type: r.type }; }),
         px: Math.round(player.x), py: Math.round(player.y), W: W, H: H,
-        VW: VW, VH: VH, camera: { x: Math.round(camera.x), y: Math.round(camera.y) } };
+        VW: VW, VH: VH, camera: { x: Math.round(camera.x), y: Math.round(camera.y) }, manualPan: manualPan };
     }
   };
 
