@@ -57,7 +57,8 @@
     box-shadow: inset 0 0 0 1px rgba(255,255,255,0.05);
   }
   .sb-select.show { display: flex; }
-  .sb-select .sb-select-icon { font-size: 15px; line-height: 1; flex: none; }
+  .sb-select .sb-select-icon { flex: none; display: flex; }
+  .sb-select .sb-select-icon svg { width: 16px; height: 16px; display: block; }
   .sb-select .sb-select-label { font-size: 9.5px; font-weight: 700; color: var(--ink); line-height: 1.2; }
   .sb-filler {
     flex: 1 1 auto; min-height: 6px; border-radius: 6px;
@@ -77,7 +78,7 @@
   }
   .build-btn:active { transform: scale(0.94); }
   .build-btn.poor { opacity: 0.4; }
-  .build-btn .bb-icon { font-size: 15px; line-height: 1; }
+  .build-btn .bb-icon svg { width: 18px; height: 18px; display: block; }
   .build-btn .bb-cost { font-size: 8px; font-weight: 800; color: #f2c94c; line-height: 1; }
   .place-bar {
     display: flex; flex-direction: column; gap: 6px; flex: none;
@@ -89,7 +90,9 @@
     transition: transform 100ms ease;
     -webkit-user-select: none; user-select: none; touch-action: manipulation;
     width: 100%; line-height: 1.15; white-space: normal;
+    display: flex; align-items: center; justify-content: center; gap: 4px;
   }
+  .place-btn svg { width: 14px; height: 14px; flex: none; display: block; }
   .place-btn:active { transform: translateY(1px) scale(0.97); }
   .place-btn.confirm { background: var(--accent); color: #06231e; }
   .place-btn.cancel { background: var(--grid); color: var(--ink); }
@@ -105,13 +108,16 @@
   }
   .train-btn:active { transform: scale(0.96); }
   .train-btn.poor { opacity: 0.4; }
-  .train-btn .tb-icon { font-size: 13px; line-height: 1; flex: none; }
+  .train-btn .tb-icon { flex: none; display: flex; }
+  .train-btn .tb-icon svg { width: 15px; height: 15px; display: block; }
   .train-btn .tb-cost { font-size: 8.5px; font-weight: 800; color: #f2c94c; line-height: 1; margin-left: auto; }
   .train-queue {
     font-size: 8.5px; font-weight: 700; color: var(--muted); text-align: center;
     background: var(--panel); padding: 5px 6px; border-radius: 8px;
     box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    display: flex; align-items: center; justify-content: center; gap: 4px;
   }
+  .train-queue svg { width: 12px; height: 12px; flex: none; display: block; }
   .score-box.provisions.short .score-val { color: #e8a23c; }
 </style>
 </head>
@@ -146,21 +152,21 @@
       </div>
       <div id="sb-select" class="sb-select"><span class="sb-select-icon" id="sb-select-icon"></span><span class="sb-select-label" id="sb-select-label"></span></div>
       <div id="build-tray" class="build-tray">
-        <button class="build-btn" data-build="farm" aria-label="Build Farm"><span class="bb-icon">🌾</span><span class="bb-cost"></span></button>
-        <button class="build-btn" data-build="storehouse" aria-label="Build Storehouse"><span class="bb-icon">🏦</span><span class="bb-cost"></span></button>
-        <button class="build-btn" data-build="barracks" aria-label="Build Barracks"><span class="bb-icon">🏚️</span><span class="bb-cost"></span></button>
-        <button class="build-btn" data-build="tower" aria-label="Build Watchtower"><span class="bb-icon">🗼</span><span class="bb-cost"></span></button>
+        <button class="build-btn" data-build="farm" aria-label="Build Farm"><span class="bb-icon"></span><span class="bb-cost"></span></button>
+        <button class="build-btn" data-build="storehouse" aria-label="Build Storehouse"><span class="bb-icon"></span><span class="bb-cost"></span></button>
+        <button class="build-btn" data-build="barracks" aria-label="Build Barracks"><span class="bb-icon"></span><span class="bb-cost"></span></button>
+        <button class="build-btn" data-build="tower" aria-label="Build Watchtower"><span class="bb-icon"></span><span class="bb-cost"></span></button>
       </div>
       <div id="place-bar" class="place-bar" style="display:none">
-        <button id="place-confirm-btn" class="place-btn confirm" aria-label="Place building">🏚️ Place</button>
+        <button id="place-confirm-btn" class="place-btn confirm" aria-label="Place building">Place</button>
         <button id="place-cancel-btn" class="place-btn cancel" aria-label="Cancel">✕ Cancel</button>
       </div>
       <div id="train-panel" class="train-panel" style="display:none">
-        <button class="train-btn" data-troop="footman" aria-label="Train Footman"><span class="tb-icon">⚔️</span><span class="tb-cost"></span></button>
-        <button class="train-btn" data-troop="archer" aria-label="Train Archer"><span class="tb-icon">🏹</span><span class="tb-cost"></span></button>
-        <button class="train-btn" data-troop="spearman" aria-label="Train Spearman"><span class="tb-icon">🔱</span><span class="tb-cost"></span></button>
-        <button class="train-btn" data-troop="catapult" aria-label="Train Catapult"><span class="tb-icon">💥</span><span class="tb-cost"></span></button>
-        <button class="train-btn" data-troop="miner" aria-label="Train Miner"><span class="tb-icon">⛏️</span><span class="tb-cost"></span></button>
+        <button class="train-btn" data-troop="footman" aria-label="Train Footman"><span class="tb-icon"></span><span class="tb-cost"></span></button>
+        <button class="train-btn" data-troop="archer" aria-label="Train Archer"><span class="tb-icon"></span><span class="tb-cost"></span></button>
+        <button class="train-btn" data-troop="spearman" aria-label="Train Spearman"><span class="tb-icon"></span><span class="tb-cost"></span></button>
+        <button class="train-btn" data-troop="catapult" aria-label="Train Catapult"><span class="tb-icon"></span><span class="tb-cost"></span></button>
+        <button class="train-btn" data-troop="miner" aria-label="Train Miner"><span class="tb-icon"></span><span class="tb-cost"></span></button>
         <span class="train-queue" id="train-queue-badge">Empty queue</span>
       </div>
       <div class="sb-filler"></div>
@@ -198,7 +204,7 @@
   </div>
 </div>
 
-<script src="leaderboard.js?v=45"></script>
+<script src="leaderboard.js?v=46"></script>
 <script>
 (function () {
   "use strict";
@@ -262,11 +268,11 @@
   // Troops trained at a Barracks (Footman/Archer/Spearman/Catapult) or a
   // Storehouse (Miner). Each has its own combat/work role, keyed off al.troop.
   var TROOPS = {
-    footman:   { icon: "⚔️", name: "Footman",  cost: 5,  time: 4, desc: "A roaming soldier who hunts raiders", trains: "barracks" },
-    archer:    { icon: "🏹", name: "Archer",    cost: 6,  time: 5, desc: "Shoots from range, never closes in", trains: "barracks" },
-    spearman:  { icon: "🔱", name: "Spearman",  cost: 7,  time: 6, desc: "Hits harder in melee, but slower afoot", trains: "barracks" },
-    catapult:  { icon: "💥", name: "Catapult",  cost: 12, time: 9, desc: "Lobs a blast that hits everyone nearby", trains: "barracks" },
-    miner:     { icon: "⛏️", name: "Miner",     cost: 8,  time: 6, desc: "Hauls gold ore from a vein to a Storehouse", trains: "storehouse", cap: 6 }
+    footman:   { name: "Footman",  cost: 5,  time: 4, desc: "A roaming soldier who hunts raiders", trains: "barracks" },
+    archer:    { name: "Archer",    cost: 6,  time: 5, desc: "Shoots from range, never closes in", trains: "barracks" },
+    spearman:  { name: "Spearman",  cost: 7,  time: 6, desc: "Hits harder in melee, but slower afoot", trains: "barracks" },
+    catapult:  { name: "Catapult",  cost: 12, time: 9, desc: "Lobs a blast that hits everyone nearby", trains: "barracks" },
+    miner:     { name: "Miner",     cost: 8,  time: 6, desc: "Hauls gold ore from a vein to a Storehouse", trains: "storehouse", cap: 6 }
   };
   function goldFor(type) { return type === "brute" ? 4 : (type === "shield" || type === "pikeman") ? 2 : 1; }
 
@@ -278,10 +284,24 @@
   var CELL = 24;
   var KEEP_SIZE = { w: 3, h: 3 };
   var BUILDINGS = {
-    farm:       { icon: "🌾", label: "farm",       cost: function () { return 8 + counts.farm * 4; },        cap: 6, phase: 5.4, size: { w: 2, h: 2 } },
-    storehouse: { icon: "🏦", label: "storehouse", cost: function () { return 12 + counts.storehouse * 6; }, cap: 4, phase: 4.2, size: { w: 2, h: 2 } },
-    barracks:   { icon: "🏚️", label: "barracks",   cost: function () { return 10 + counts.barracks * 8; },  cap: 3, phase: 3.0, size: { w: 2, h: 2 } },
-    tower:      { icon: "🗼", label: "tower",      cost: function () { return 7 + counts.tower * 4; },       cap: 8, phase: 0,   size: { w: 1, h: 1 } }
+    farm:       { label: "farm",       cost: function () { return 8 + counts.farm * 4; },        cap: 6, phase: 5.4, size: { w: 2, h: 2 } },
+    storehouse: { label: "storehouse", cost: function () { return 12 + counts.storehouse * 6; }, cap: 4, phase: 4.2, size: { w: 2, h: 2 } },
+    barracks:   { label: "barracks",   cost: function () { return 10 + counts.barracks * 8; },  cap: 3, phase: 3.0, size: { w: 2, h: 2 } },
+    tower:      { label: "tower",      cost: function () { return 7 + counts.tower * 4; },       cap: 8, phase: 0,   size: { w: 1, h: 1 } }
+  };
+  // Small flat-shape SVG glyphs, in the same geometric style as the canvas
+  // art, so build/troop icons render identically everywhere instead of
+  // depending on whatever emoji font a device happens to have.
+  var ICONS = {
+    farm: '<svg viewBox="-10 -10 20 20"><polygon points="-7,2 -9.2,-6 -4.8,-6" fill="#e8c478"/><polygon points="0,2 -2.2,-7 2.2,-7" fill="#f2d68c"/><polygon points="7,2 4.8,-6 9.2,-6" fill="#e8c478"/><line x1="0" y1="2" x2="0" y2="7" stroke="#a5825c" stroke-width="1.4"/></svg>',
+    storehouse: '<svg viewBox="-14 -16 28 32"><rect x="-13" y="-9" width="26" height="19" rx="3" fill="#a89a82"/><rect x="-13" y="-14" width="26" height="6" rx="2" fill="#c2b393"/><circle cx="-9" cy="7" r="4" fill="#d1935a"/><circle cx="9" cy="7" r="4" fill="#d1935a"/><rect x="-3" y="-1" width="6" height="10" rx="2" fill="#2a2018"/></svg>',
+    barracks: '<svg viewBox="-14 -22 28 34"><rect x="-12" y="-10" width="24" height="20" rx="3" fill="#8a6a4a"/><polygon points="-14,-10 0,-21 14,-10" fill="#a5825c"/><rect x="-3" y="-2" width="6" height="12" rx="2" fill="#2a2018"/></svg>',
+    tower: '<svg viewBox="-10 -24 20 40"><rect x="-7" y="-14" width="14" height="26" rx="3" fill="#8b93a8"/><rect x="-8" y="-18" width="16" height="6" rx="2" fill="#a3abc0"/><rect x="-8" y="-22" width="4" height="5" fill="#8b93a8"/><rect x="-2" y="-22" width="4" height="5" fill="#8b93a8"/><rect x="4" y="-22" width="4" height="5" fill="#8b93a8"/><rect x="-3" y="-6" width="6" height="8" rx="2" fill="#2a3140"/></svg>',
+    footman: '<svg viewBox="-10 -10 20 20"><g stroke="#e8edf4" stroke-width="2.2" stroke-linecap="round"><line x1="-7" y1="-7" x2="7" y2="7"/><line x1="7" y1="-7" x2="-7" y2="7"/></g><circle cx="0" cy="0" r="1.8" fill="#e8c478"/></svg>',
+    archer: '<svg viewBox="-10 -10 20 20"><path d="M-5 -8 Q 3 0 -5 8" stroke="#c9b28a" stroke-width="1.6" fill="none"/><line x1="-5" y1="-8" x2="-5" y2="8" stroke="#e8edf4" stroke-width="1"/><line x1="-6" y1="0" x2="8" y2="0" stroke="#d9c9a8" stroke-width="1.6"/><polygon points="9,0 5,-2 5,2" fill="#e8edf4"/></svg>',
+    spearman: '<svg viewBox="-10 -10 20 20"><line x1="-7" y1="8" x2="7" y2="-8" stroke="#c9b28a" stroke-width="2.1" stroke-linecap="round"/><polygon points="7,-8 3,-7 5,-11" fill="#e8edf4"/></svg>',
+    catapult: '<svg viewBox="-10 -18 20 26"><rect x="-8" y="-2" width="16" height="6" rx="2" fill="#8a6a4a"/><circle cx="-5" cy="6" r="3.2" fill="none" stroke="#aab0bd" stroke-width="1.4"/><circle cx="5" cy="6" r="3.2" fill="none" stroke="#aab0bd" stroke-width="1.4"/><line x1="-2" y1="-2" x2="5" y2="-14" stroke="#c9b28a" stroke-width="2" stroke-linecap="round"/><circle cx="5" cy="-14" r="2.6" fill="#8a6a4a"/></svg>',
+    miner: '<svg viewBox="-10 -10 20 20"><line x1="-6" y1="7" x2="4" y2="-7" stroke="#a5825c" stroke-width="1.8" stroke-linecap="round"/><path d="M4 -7 Q 9 -10 8 -4 Q 5 -6 4 -7" fill="#aab0bd"/><path d="M4 -7 Q -1 -10 0 -4 Q 3 -6 4 -7" fill="#aab0bd"/></svg>'
   };
 
   // W/H are now the WORLD size — fixed, independent of the device screen.
@@ -342,16 +362,16 @@
   function updateSelectionCard() {
     if (selectedGroup.length > 1) {
       sbSelectEl.classList.add("show");
-      sbSelectIconEl.textContent = "⚔️";
+      sbSelectIconEl.innerHTML = ICONS.footman;
       sbSelectLabelEl.textContent = selectedGroup.length + " units";
       return;
     }
     if (selectedUnit != null) {
       var al = findAllyById(selectedUnit);
-      var t = TROOPS[(al && al.troop) || "footman"];
+      var troopKey = (al && al.troop) || "footman";
       sbSelectEl.classList.add("show");
-      sbSelectIconEl.textContent = t.icon;
-      sbSelectLabelEl.textContent = t.name;
+      sbSelectIconEl.innerHTML = ICONS[troopKey];
+      sbSelectLabelEl.textContent = TROOPS[troopKey].name;
       return;
     }
     sbSelectEl.classList.remove("show");
@@ -608,7 +628,7 @@
     placing = { kind: kind, x: c.x, y: c.y, valid: c.valid, cost: cost };
     document.getElementById("build-tray").style.display = "none";
     document.getElementById("place-bar").style.display = "flex";
-    document.getElementById("place-confirm-btn").textContent = BUILDINGS[kind].icon + " Place";
+    document.getElementById("place-confirm-btn").innerHTML = ICONS[kind] + " Place";
     var sz = BUILDINGS[kind].size;
     tapHintEl.textContent = "Drag to place the " + BUILDINGS[kind].label + " (" + sz.w + "×" + sz.h + "), then tap Place";
   }
@@ -707,8 +727,7 @@
     var badge = document.getElementById("train-queue-badge");
     if (!bk.queue.length) badge.textContent = "Empty queue";
     else {
-      var first = TROOPS[bk.queue[0].troop];
-      badge.textContent = first.icon + " " + Math.max(0, Math.ceil(bk.queue[0].t)) + "s" +
+      badge.innerHTML = ICONS[bk.queue[0].troop] + " " + Math.max(0, Math.ceil(bk.queue[0].t)) + "s" +
         (bk.queue.length > 1 ? " +" + (bk.queue.length - 1) : "");
     }
   }
@@ -841,7 +860,7 @@
         if (r.t > 2.2) raiders.splice(i, 1);
       } else { // down
         r.t += dt;
-        if (r.t > 1.1) raiders.splice(i, 1);
+        if (r.t > 0.45) raiders.splice(i, 1);
       }
     }
 
@@ -963,7 +982,7 @@
             puffs.push({ x: (al.x + tgt.x) / 2, y: (al.y + tgt.y) / 2, t: 0 });
             sfxThock(tgt.type);
             al.cd = TS.meleeCd;
-            if (tgt.hp <= 0) { tgt.state = "down"; tgt.t = 0; kills++; gold += goldFor(tgt.type); al.targetId = null; }
+            if (tgt.hp <= 0) { tgt.state = "down"; tgt.t = 0; kills++; gold += goldFor(tgt.type); al.targetId = null; puffs.push({ x: tgt.x, y: tgt.y, t: 0 }); }
           }
         }
       } else {
@@ -1003,7 +1022,7 @@
           sfxThock(e.type);
           puffs.push({ x: ar.x, y: ar.y, t: 0 });
           ar.hit.push(e.id);
-          if (e.hp <= 0) { e.state = "down"; e.t = 0; kills++; gold += goldFor(e.type); }
+          if (e.hp <= 0) { e.state = "down"; e.t = 0; kills++; gold += goldFor(e.type); puffs.push({ x: e.x, y: e.y, t: 0 }); }
           if (ar.pierce > 0) ar.pierce--; else remove = true;
           break;
         }
@@ -1074,6 +1093,16 @@
     g.addColorStop(1, "#131e18");
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, W, H);
+    // soft elevation patches — a few fixed, low-contrast blobs so the
+    // ground reads as uneven terrain instead of a flat gradient
+    for (var e = 0; e < 7; e++) {
+      var ex = (e * 271 + 53) % W, ey = (e * 193 + 97) % H;
+      var eg = ctx.createRadialGradient(ex, ey, 0, ex, ey, 80);
+      eg.addColorStop(0, e % 2 === 0 ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.06)");
+      eg.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = eg;
+      ctx.fillRect(ex - 80, ey - 80, 160, 160);
+    }
     // grass flecks + fireflies
     for (var i = 0; i < 46; i++) {
       var gx = (i * 97 + 13) % W, gy = (i * 61 + 41) % H;
@@ -1091,6 +1120,52 @@
     ctx.strokeStyle = "rgba(200,200,180,0.06)";
     ctx.lineWidth = 10;
     ctx.beginPath(); ctx.arc(keepX, keepY, KEEP_R + 22, 0, Math.PI * 2); ctx.stroke();
+  }
+
+  // ---- Ground clutter: purely decorative rocks/bushes/reeds so the field
+  // reads as a place instead of an empty gradient. Regenerated each run
+  // (the keep moves), keeping a clear ring around the keep's own footing. ----
+  var clutter = [];
+  function initClutter() {
+    clutter = [];
+    var kinds = ["rock", "bush", "reed"];
+    for (var i = 0; i < 70; i++) {
+      var x = Math.random() * W, y = Math.random() * H;
+      var dx = x - keepX, dy = y - keepY;
+      if (dx * dx + dy * dy < 130 * 130) continue;
+      clutter.push({ kind: kinds[Math.floor(Math.random() * kinds.length)], x: x, y: y,
+        s: 0.7 + Math.random() * 0.6, rot: Math.random() * 6.283 });
+    }
+  }
+  function drawClutterItem(c) {
+    ctx.save();
+    ctx.translate(c.x, c.y);
+    ctx.rotate(c.rot);
+    ctx.scale(c.s, c.s);
+    if (c.kind === "rock") {
+      ctx.fillStyle = "rgba(0,0,0,0.18)";
+      ctx.beginPath(); ctx.ellipse(0, 3, 9, 3, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#4a5048";
+      ctx.beginPath(); ctx.ellipse(-2, 0, 7, 5, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#5c6459";
+      ctx.beginPath(); ctx.ellipse(2, -1, 5, 3.6, 0, 0, Math.PI * 2); ctx.fill();
+    } else if (c.kind === "bush") {
+      ctx.fillStyle = "rgba(0,0,0,0.16)";
+      ctx.beginPath(); ctx.ellipse(0, 4, 8, 2.6, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#2e4530";
+      ctx.beginPath(); ctx.arc(-3, 0, 5, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(3, -1, 5.4, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(0, 2, 4.6, 0, Math.PI * 2); ctx.fill();
+    } else { // reed
+      ctx.strokeStyle = "#5a6b48"; ctx.lineWidth = 1.4; ctx.lineCap = "round";
+      for (var r = -1; r <= 1; r++) {
+        ctx.beginPath(); ctx.moveTo(r * 3, 6); ctx.quadraticCurveTo(r * 3 + 2, -4, r * 3 + 4, -12); ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+  function drawClutter() {
+    for (var i = 0; i < clutter.length; i++) drawClutterItem(clutter[i]);
   }
 
   function drawKeep() {
@@ -1356,8 +1431,9 @@
       ctx.restore();
     }
     if (r.state === "down") {
-      var k = Math.min(1, r.t / 0.25);
-      ctx.globalAlpha = Math.max(0, 1 - Math.max(0, (r.t - 0.5) / 0.6));
+      // a quick collapse-and-vanish rather than a lingering corpse
+      var k = Math.min(1, r.t / 0.15);
+      ctx.globalAlpha = Math.max(0, 1 - Math.max(0, (r.t - 0.15) / 0.25));
       ctx.rotate(1.5708 * k * (r.face || 1));
     } else if (r.state === "flee") {
       ctx.globalAlpha = Math.max(0, 1 - r.t / 2.2);
@@ -1545,6 +1621,7 @@
   function render() {
     ctx.setTransform(dpr, 0, 0, dpr, -camera.x * dpr, -camera.y * dpr);
     drawGround();
+    drawClutter();
     for (var vi2 = 0; vi2 < veins.length; vi2++) drawVein(veins[vi2]);
     drawWarcamp();
     drawKeep();
@@ -1774,6 +1851,10 @@
       e.preventDefault();
       if (!over) onBuildTap(this.dataset.build);
     });
+    buildBtns[bbi].querySelector(".bb-icon").innerHTML = ICONS[buildBtns[bbi].dataset.build];
+  }
+  for (var tbi2 = 0; tbi2 < trainBtns.length; tbi2++) {
+    trainBtns[tbi2].querySelector(".tb-icon").innerHTML = ICONS[trainBtns[tbi2].dataset.troop];
   }
 
   // ---- Sizing ----
@@ -1841,12 +1922,19 @@
     elapsed = 0;
     document.getElementById("gameover-overlay").classList.remove("show");
     panning = false; panAnchorId = null; multiTouchGesture = false; activePointers = {};
+    // the keep lands somewhere new each run instead of always dead-center —
+    // kept out of the bottom ~28% of the map so it never rolls in too close
+    // to the Warcamp's fixed spot near the bottom edge
+    var KEEP_MARGIN = 150;
+    keepX = KEEP_MARGIN + Math.random() * (W - 2 * KEEP_MARGIN);
+    keepY = KEEP_MARGIN + Math.random() * (H * 0.72 - 2 * KEEP_MARGIN);
     camera.x = keepX - VW / 2; camera.y = keepY - VH / 2;
     clampCamera();
     bestEl.textContent = best ? fmtTime(best) : "—";
     initFog();
     initVeins();
     initWarcamp();
+    initClutter();
     updateFog();
     // a scout's report of the nearest vein — always something to head for
     // rather than wandering fog blind on a fresh run
