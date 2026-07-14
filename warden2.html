@@ -134,7 +134,7 @@
     </div>
     <div class="how">
       <p class="how-title">How to play</p>
-      <p class="body">You are the keep's mounted warden, but the keep now runs its own economy. Tap a build icon (<b>Farm</b>, <b>Storehouse</b>, <b>Barracks</b>, <b>Watchtower</b>) then drag the ghost into place and confirm — building costs come out of your <b>Gold</b>. Gold isn't just looted from raiders any more: train a <b>Miner</b> at a Storehouse and it will haul <b>ore</b> from the gold veins scattered around the field back home, turning it into spendable gold on every trip — veins run thin the more you draw from one, so it pays to work more than one. <b>Farms</b> produce <b>Provisions</b>, the upkeep every building and soldier draws on; if you run short, training slows down, so keep a Farm or two ahead of your garrison. Tap a placed <b>Barracks</b> to train <b>Footmen</b>, <b>Archers</b> (range, never close in), <b>Spearmen</b> (harder hits, slower afoot) or <b>Catapults</b> (splash damage) — tap a <b>Storehouse</b> to train more <b>Miners</b>. Tap the stance button to switch your own weapon: <b>Bow</b> shoots at range on its own, while the <b>Lance</b> cuts down anyone you ride through. The enemy has a real <b>Warcamp</b> at the field's edge that musters raiding parties on its own over time instead of scripted waves — ride out and hold your ground beside it to raid it for bonus gold and set its production back, but the keep goes undefended while you're away. Tap a footman to select it, or drag a box over several to command them as a group; tap empty ground to deselect. Survive as long as you can — your score is how long you last.</p>
+      <p class="body">The keep sits in a much wider land now — the view scrolls to follow your mounted warden, and a minimap in the corner keeps you oriented. Unscouted ground is hidden; once you've ridden through it it stays dimly remembered, but raiders vanish from sight again the moment nothing of yours can currently see them, so scouting matters. Tap a build icon (<b>Farm</b>, <b>Storehouse</b>, <b>Barracks</b>, <b>Watchtower</b>) then drag the ghost into place and confirm — it snaps to a grid, glowing red if that plot's already taken. Building costs come out of your <b>Gold</b>. Gold isn't just looted from raiders any more: train a <b>Miner</b> at a Storehouse and it will haul <b>ore</b> from the gold veins scattered around the land back home, turning it into spendable gold on every trip — veins run thin the more you draw from one, so it pays to work more than one, and a scout's report always marks the nearest one for you at the start. <b>Farms</b> produce <b>Provisions</b>, the upkeep every building and soldier draws on; if you run short, training slows down, so keep a Farm or two ahead of your garrison. Tap a placed <b>Barracks</b> to train <b>Footmen</b>, <b>Archers</b> (range, never close in), <b>Spearmen</b> (harder hits, slower afoot) or <b>Catapults</b> (splash damage) — tap a <b>Storehouse</b> to train more <b>Miners</b>. Tap the stance button to switch your own weapon: <b>Bow</b> shoots at range on its own, while the <b>Lance</b> cuts down anyone you ride through. The enemy has a real <b>Warcamp</b> far off that musters raiding parties on its own over time instead of scripted waves — ride out and hold your ground beside it to raid it for bonus gold and set its production back, but the keep goes undefended while you're away. Tap a footman to select it, or drag a box over several to command them as a group; tap empty ground to deselect. Survive as long as you can — your score is how long you last.</p>
     </div>
     <button id="settings-share" class="share">Share the game</button>
     <button id="settings-close" class="ghost-btn">Done</button>
@@ -154,7 +154,7 @@
   </div>
 </div>
 
-<script src="leaderboard.js?v=41"></script>
+<script src="leaderboard.js?v=42"></script>
 <script>
 (function () {
   "use strict";
@@ -175,6 +175,15 @@
   var BASE_PROVISIONS = 4;     // the keep's own baseline supply, before any Farm
   var PROVISIONS_PER_FARM = 4;
   var UPKEEP = { foot: 1, tower: 1, barracks: 1, storehouse: 1, miner: 1, farm: 0 };
+
+  // ---- Fog of war ----
+  // Everything you own casts vision (the keep, every building, every unit),
+  // so your own base is always lit. Terrain/buildings you've seen before stay
+  // visible-but-dimmed once you look away (a remembered layout); raiders are
+  // units, not terrain, so they wink out the instant nothing of yours can
+  // currently see them — that's the actual "fog hides the enemy" feel.
+  var FOG_CELL = 40;
+  var VISION = { keep: 170, tower: 180, barracks: 110, storehouse: 110, farm: 110, foot: 100, miner: 80, player: 150 };
 
   // Combat stats are fixed — there's no more personal Warden upgrade shop in
   // this version; all your build choices go into the base economy instead.
@@ -229,15 +238,25 @@
 
   // The four always-placeable buildings. Costs climb with how many you
   // already own so no single line runs away.
+  // size is a footprint in grid cells (see CELL below) — a Watchtower is a
+  // small 1x1 that slots into gaps, while the economy buildings and Barracks
+  // all want a proper 2x2 plot; the Keep is a fixed, unmovable 3x3.
+  var CELL = 24;
+  var KEEP_SIZE = { w: 3, h: 3 };
   var BUILDINGS = {
-    farm:       { icon: "🌾", label: "farm",       cost: function () { return 8 + counts.farm * 4; },        cap: 6, phase: 5.4 },
-    storehouse: { icon: "🏦", label: "storehouse", cost: function () { return 12 + counts.storehouse * 6; }, cap: 4, phase: 4.2 },
-    barracks:   { icon: "🏚️", label: "barracks",   cost: function () { return 10 + counts.barracks * 8; },  cap: 3, phase: 3.0 },
-    tower:      { icon: "🗼", label: "tower",      cost: function () { return 7 + counts.tower * 4; },       cap: 8, phase: 0 }
+    farm:       { icon: "🌾", label: "farm",       cost: function () { return 8 + counts.farm * 4; },        cap: 6, phase: 5.4, size: { w: 2, h: 2 } },
+    storehouse: { icon: "🏦", label: "storehouse", cost: function () { return 12 + counts.storehouse * 6; }, cap: 4, phase: 4.2, size: { w: 2, h: 2 } },
+    barracks:   { icon: "🏚️", label: "barracks",   cost: function () { return 10 + counts.barracks * 8; },  cap: 3, phase: 3.0, size: { w: 2, h: 2 } },
+    tower:      { icon: "🗼", label: "tower",      cost: function () { return 7 + counts.tower * 4; },       cap: 8, phase: 0,   size: { w: 1, h: 1 } }
   };
 
-  var W = 300, H = 460, dpr = window.devicePixelRatio || 1;
-  var keepX = 150, keepY = 230;
+  // W/H are now the WORLD size — fixed, independent of the device screen.
+  // VW/VH are the viewport (what actually fits on screen), set by sizeStage().
+  // The camera is a world-space offset the viewport scrolls around within.
+  var W = 820, H = 1260, dpr = window.devicePixelRatio || 1;
+  var VW = 300, VH = 460;
+  var camera = { x: 0, y: 0 };
+  var keepX = W / 2, keepY = H / 2;
 
   var player = { x: 0, y: 0, tx: 0, ty: 0, vx: 0, face: 1, phase: 0, cd: 0 };
   var raiders = [];  // {x,y,hp,speed,armored,state:"march"|"flee"|"down",t,face,phase}
@@ -380,13 +399,72 @@
     sfxWave();
   }
 
+  // fogCols/fogRows size the grid to the world; explored[] persists for the
+  // whole run, visible[] is recomputed fresh every frame from current vision
+  var fogCols = 0, fogRows = 0, fogExplored = [], fogVisible = [];
+  function initFog() {
+    fogCols = Math.ceil(W / FOG_CELL); fogRows = Math.ceil(H / FOG_CELL);
+    fogExplored = new Array(fogCols * fogRows).fill(false);
+    fogVisible = new Array(fogCols * fogRows).fill(false);
+  }
+  function fogIndex(x, y) {
+    var cx = Math.max(0, Math.min(fogCols - 1, Math.floor(x / FOG_CELL)));
+    var cy = Math.max(0, Math.min(fogRows - 1, Math.floor(y / FOG_CELL)));
+    return cy * fogCols + cx;
+  }
+  function fogVisibleAt(x, y) { return fogVisible[fogIndex(x, y)]; }
+  function revealAround(x, y, r) {
+    var c0 = Math.max(0, Math.floor((x - r) / FOG_CELL)), c1 = Math.min(fogCols - 1, Math.floor((x + r) / FOG_CELL));
+    var r0 = Math.max(0, Math.floor((y - r) / FOG_CELL)), r1 = Math.min(fogRows - 1, Math.floor((y + r) / FOG_CELL));
+    var r2 = r * r;
+    for (var cy = r0; cy <= r1; cy++) {
+      for (var cx = c0; cx <= c1; cx++) {
+        var wx = cx * FOG_CELL + FOG_CELL / 2, wy = cy * FOG_CELL + FOG_CELL / 2;
+        var dx = wx - x, dy = wy - y;
+        if (dx * dx + dy * dy > r2) continue;
+        var idx = cy * fogCols + cx;
+        fogVisible[idx] = true; fogExplored[idx] = true;
+      }
+    }
+  }
+  // marks a patch explored (remembered) without making it currently visible —
+  // used once at game start as a "scout's report" of the nearest vein, so a
+  // new run always has an economic target to head for rather than wandering
+  // fog blind in a much bigger world
+  function markExplored(x, y, r) {
+    var c0 = Math.max(0, Math.floor((x - r) / FOG_CELL)), c1 = Math.min(fogCols - 1, Math.floor((x + r) / FOG_CELL));
+    var r0 = Math.max(0, Math.floor((y - r) / FOG_CELL)), r1 = Math.min(fogRows - 1, Math.floor((y + r) / FOG_CELL));
+    var r2 = r * r;
+    for (var cy = r0; cy <= r1; cy++) {
+      for (var cx = c0; cx <= c1; cx++) {
+        var wx = cx * FOG_CELL + FOG_CELL / 2, wy = cy * FOG_CELL + FOG_CELL / 2;
+        var dx = wx - x, dy = wy - y;
+        if (dx * dx + dy * dy <= r2) fogExplored[cy * fogCols + cx] = true;
+      }
+    }
+  }
+  function updateFog() {
+    fogVisible.fill(false);
+    revealAround(keepX, keepY, VISION.keep);
+    revealAround(player.x, player.y, VISION.player);
+    for (var i = 0; i < allies.length; i++) {
+      var a = allies[i], v = VISION[a.kind];
+      if (v) revealAround(a.x, a.y, v);
+    }
+  }
+
   // ---- Gold Ore veins: what Miners actually harvest ----
   var veins = [];
   function initVeins() {
+    // spread across the wider world so a single Storehouse can't reach them
+    // all — working more than one vein (or expanding a second Storehouse
+    // out toward one) is genuinely worth it now
     veins = [
-      { x: W * 0.15, y: H * 0.18, amount: 400, max: 400 },
-      { x: W * 0.85, y: H * 0.18, amount: 400, max: 400 },
-      { x: W * 0.15, y: H * 0.82, amount: 400, max: 400 }
+      { x: W * 0.12, y: H * 0.15, amount: 400, max: 400 },
+      { x: W * 0.88, y: H * 0.15, amount: 400, max: 400 },
+      { x: W * 0.12, y: H * 0.85, amount: 400, max: 400 },
+      { x: W * 0.88, y: H * 0.85, amount: 400, max: 400 },
+      { x: W * 0.5, y: H * 0.06, amount: 400, max: 400 }
     ];
   }
   function pickVein() {
@@ -425,18 +503,41 @@
     }
     return { x: x, y: y };
   }
-  // Same field/keep clamp, plus a nudge off any existing building of the same
-  // kind so new ones never land exactly on top of one another.
-  function clampForBuilding(kind, x, y) {
-    var c = clampToField(x, y);
-    x = c.x; y = c.y;
+  // ---- Grid placement: every building has a footprint in CELL-sized cells
+  // (see BUILDINGS/KEEP_SIZE above). A drag snaps to the grid, then — if that
+  // cell collides with the keep or another building — spirals outward to the
+  // nearest clear spot; if nothing's clear nearby it still snaps (so the
+  // ghost reads sensibly) but comes back invalid and can't be confirmed. ----
+  function footprintRect(x, y, size) {
+    var w = size.w * CELL, h = size.h * CELL;
+    return { x: x - w / 2, y: y - h / 2, w: w, h: h };
+  }
+  function rectsOverlap(a, b) {
+    return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+  }
+  function footprintClear(kind, x, y) {
+    var rect = footprintRect(x, y, BUILDINGS[kind].size);
+    if (rect.x < 0 || rect.y < 0 || rect.x + rect.w > W || rect.y + rect.h > H) return false;
+    if (rectsOverlap(rect, footprintRect(keepX, keepY, KEEP_SIZE))) return false;
     for (var i = 0; i < allies.length; i++) {
       var a = allies[i];
-      if (a.kind !== kind) continue;
-      var dx = x - a.x, dy = y - a.y, d = Math.sqrt(dx * dx + dy * dy);
-      if (d < 26) { d = d || 1; x = a.x + dx / d * 26; y = a.y + dy / d * 26; }
+      if (a.size && rectsOverlap(rect, footprintRect(a.x, a.y, a.size))) return false;
     }
-    return clampToField(x, y);
+    return true;
+  }
+  function snapBuilding(kind, x, y) {
+    var size = BUILDINGS[kind].size, w = size.w * CELL, h = size.h * CELL;
+    var gx = Math.round((x - w / 2) / CELL), gy = Math.round((y - h / 2) / CELL);
+    for (var ring = 0; ring <= 6; ring++) {
+      for (var dy = -ring; dy <= ring; dy++) {
+        for (var dx = -ring; dx <= ring; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== ring) continue; // ring perimeter only
+          var cxWorld = (gx + dx) * CELL + w / 2, cyWorld = (gy + dy) * CELL + h / 2;
+          if (footprintClear(kind, cxWorld, cyWorld)) return { x: cxWorld, y: cyWorld, valid: true };
+        }
+      }
+    }
+    return { x: gx * CELL + w / 2, y: gy * CELL + h / 2, valid: false };
   }
   // ---- Building placement: tap a build-tray icon, drag the ghost, then
   // Place or Cancel (refunds). No pause, no shop — always available. ----
@@ -454,12 +555,13 @@
     updateHud();
   }
   function startPlacingBuilding(kind, cost, x, y) {
-    var c = clampForBuilding(kind, x, y);
-    placing = { kind: kind, x: c.x, y: c.y, cost: cost };
+    var c = snapBuilding(kind, x, y);
+    placing = { kind: kind, x: c.x, y: c.y, valid: c.valid, cost: cost };
     document.getElementById("build-tray").style.display = "none";
     document.getElementById("place-bar").style.display = "flex";
     document.getElementById("place-confirm-btn").textContent = BUILDINGS[kind].icon + " Place";
-    tapHintEl.textContent = "Drag to place the " + BUILDINGS[kind].label + ", then tap Place";
+    var sz = BUILDINGS[kind].size;
+    tapHintEl.textContent = "Drag to place the " + BUILDINGS[kind].label + " (" + sz.w + "×" + sz.h + "), then tap Place";
   }
   function endPlacement() {
     placing = null;
@@ -468,13 +570,14 @@
   }
   function confirmPlacement() {
     if (!placing) return;
-    var kind = placing.kind;
+    if (!placing.valid) { sfxDeselect(); return; } // occupied/out of bounds — can't confirm here
+    var kind = placing.kind, size = BUILDINGS[kind].size;
     if (kind === "barracks" || kind === "storehouse") {
-      allies.push({ id: allySeq++, kind: kind, x: placing.x, y: placing.y, queue: [] });
+      allies.push({ id: allySeq++, kind: kind, x: placing.x, y: placing.y, size: size, queue: [] });
     } else if (kind === "farm") {
-      allies.push({ id: allySeq++, kind: "farm", x: placing.x, y: placing.y });
+      allies.push({ id: allySeq++, kind: "farm", x: placing.x, y: placing.y, size: size });
     } else {
-      allies.push({ id: allySeq++, kind: "tower", x: placing.x, y: placing.y,
+      allies.push({ id: allySeq++, kind: "tower", x: placing.x, y: placing.y, size: size,
         cd: Math.random() * 0.5, phase: Math.random() * 6 });
     }
     sfxBoon();
@@ -621,6 +724,16 @@
       life: stat.range / ARROW_SPEED + 0.3, pierce: stat.pierce, hit: [], dmg: stat.dmg, src: "bow" });
   }
 
+  // camera follows the warden with a little lag, clamped to the world edges
+  function updateCamera(dt, snap) {
+    var targetX = player.x - VW / 2, targetY = player.y - VH / 2;
+    var lerp = snap ? 1 : Math.min(1, dt * 4);
+    camera.x += (targetX - camera.x) * lerp;
+    camera.y += (targetY - camera.y) * lerp;
+    camera.x = Math.max(0, Math.min(W - VW, camera.x));
+    camera.y = Math.max(0, Math.min(H - VH, camera.y));
+  }
+
   // ---- Update ----
   function update(dt) {
     elapsed += dt;
@@ -646,6 +759,9 @@
       player.x = keepX + kdx / kd * (KEEP_R + 14);
       player.y = keepY + kdy / kd * (KEEP_R + 14);
     }
+
+    updateCamera(dt, false);
+    updateFog();
 
     // the Warcamp mans itself: strength fills, and once full it musters a
     // raiding party on its own — no scripted spawn timeline
@@ -1240,8 +1356,16 @@
       ctx.beginPath(); ctx.arc(x, y, TOWER_RANGE, 0, Math.PI * 2); ctx.stroke();
       ctx.setLineDash([]);
     }
+    // footprint rectangle — green if this spot is buildable, red if it
+    // collides with the keep or another building
+    var rect = footprintRect(x, y, BUILDINGS[placing.kind].size);
+    ctx.fillStyle = placing.valid ? "rgba(93,214,192,0.16)" : "rgba(224,108,127,0.22)";
+    ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+    ctx.strokeStyle = placing.valid ? "rgba(93,214,192,0.8)" : "rgba(224,108,127,0.85)";
+    ctx.lineWidth = 1.4;
+    ctx.strokeRect(rect.x, rect.y, rect.w, rect.h);
     ctx.save();
-    ctx.globalAlpha = 0.55;
+    ctx.globalAlpha = placing.valid ? 0.55 : 0.35;
     drawAlly({ kind: placing.kind, x: x, y: y });
     ctx.restore();
   }
@@ -1457,17 +1581,67 @@
     }
   }
 
-  function render() {
+  function drawFog() {
+    var c0 = Math.max(0, Math.floor(camera.x / FOG_CELL));
+    var c1 = Math.min(fogCols - 1, Math.floor((camera.x + VW) / FOG_CELL));
+    var r0 = Math.max(0, Math.floor(camera.y / FOG_CELL));
+    var r1 = Math.min(fogRows - 1, Math.floor((camera.y + VH) / FOG_CELL));
+    for (var cy = r0; cy <= r1; cy++) {
+      for (var cx = c0; cx <= c1; cx++) {
+        var idx = cy * fogCols + cx;
+        if (fogVisible[idx]) continue; // fully lit right now, nothing to draw
+        ctx.fillStyle = fogExplored[idx] ? "rgba(6,10,8,0.55)" : "rgba(4,7,6,0.97)";
+        ctx.fillRect(cx * FOG_CELL, cy * FOG_CELL, FOG_CELL, FOG_CELL);
+      }
+    }
+  }
+
+  // ---- Minimap: fixed corner overlay, screen-space (no camera offset) ----
+  var MM_W = 64, MM_H = 90, MM_MARGIN = 8;
+  function drawMinimap() {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    var mx = VW - MM_W - MM_MARGIN, my = MM_MARGIN;
+    var sx = MM_W / W, sy = MM_H / H;
+    ctx.fillStyle = "rgba(10,14,10,0.72)";
+    ctx.fillRect(mx, my, MM_W, MM_H);
+    ctx.fillStyle = "rgba(232,196,120,0.8)";
+    for (var i = 0; i < veins.length; i++) {
+      if (veins[i].amount <= 0 || !fogExplored[fogIndex(veins[i].x, veins[i].y)]) continue;
+      ctx.beginPath(); ctx.arc(mx + veins[i].x * sx, my + veins[i].y * sy, 1.6, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.fillStyle = "#8b93a8";
+    ctx.fillRect(mx + keepX * sx - 2, my + keepY * sy - 2, 4, 4);
+    for (var ai = 0; ai < allies.length; ai++) {
+      var a = allies[ai];
+      if (a.kind === "miner" || a.kind === "foot") continue; // buildings only, keep it legible
+      ctx.fillStyle = "rgba(93,214,192,0.75)";
+      ctx.fillRect(mx + a.x * sx - 1, my + a.y * sy - 1, 2, 2);
+    }
+    if (warcamp && fogExplored[fogIndex(warcamp.x, warcamp.y)]) {
+      ctx.fillStyle = "#c0504d";
+      ctx.beginPath(); ctx.arc(mx + warcamp.x * sx, my + warcamp.y * sy, 2, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.fillStyle = "#5dd6c0";
+    ctx.beginPath(); ctx.arc(mx + player.x * sx, my + player.y * sy, 2.2, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,0.55)"; ctx.lineWidth = 1;
+    ctx.strokeRect(mx + camera.x * sx, my + camera.y * sy, VW * sx, VH * sy);
+    ctx.strokeStyle = "rgba(255,255,255,0.18)";
+    ctx.strokeRect(mx, my, MM_W, MM_H);
+  }
+
+  function render() {
+    ctx.setTransform(dpr, 0, 0, dpr, -camera.x * dpr, -camera.y * dpr);
     drawGround();
     for (var vi2 = 0; vi2 < veins.length; vi2++) drawVein(veins[vi2]);
     drawWarcamp();
     drawKeep();
     for (var ci = 0; ci < allies.length; ci++) drawAlly(allies[ci]);
     if (placing) { drawPlacementGhost(); } else { drawSelection(); drawBuildingSelection(); drawSelectionBox(); }
-    // draw order: downed first, then marching/fleeing by y, arrows, horse
+    // draw order: downed first, then marching/fleeing by y, arrows, horse.
+    // raiders are units, not terrain — fog hides them the instant nothing
+    // of yours can currently see them, unlike the remembered ground beneath.
     var byY = raiders.slice().sort(function (a, b) { return (a.state === "down" ? -1e6 : a.y) - (b.state === "down" ? -1e6 : b.y); });
-    for (var i = 0; i < byY.length; i++) drawRaider(byY[i]);
+    for (var i = 0; i < byY.length; i++) { if (fogVisibleAt(byY[i].x, byY[i].y)) drawRaider(byY[i]); }
     for (var a = 0; a < arrows.length; a++) drawArrow(arrows[a]);
     for (var bx = 0; bx < bombs.length; bx++) drawBomb(bombs[bx]);
     for (var p = 0; p < puffs.length; p++) {
@@ -1496,13 +1670,15 @@
       ctx.beginPath(); ctx.arc(pf.x, pf.y, (pf.clink ? 2 : 3) + k * (pf.clink ? 6 : 9), 0, Math.PI * 2); ctx.stroke();
     }
     drawHorse();
-    // band announcement
+    drawFog();
+    // band announcement — drawn at the top of the *viewport*, not the world
     if (announced && announceT > 0) {
       ctx.fillStyle = "rgba(232,237,244," + Math.min(0.75, announceT).toFixed(2) + ")";
       ctx.font = "700 15px Quicksand, sans-serif";
       ctx.textAlign = "center";
-      ctx.fillText(announced, W / 2, 34);
+      ctx.fillText(announced, camera.x + VW / 2, camera.y + 34);
     }
+    drawMinimap();
   }
 
   // ---- Loop ----
@@ -1520,7 +1696,7 @@
   // ---- Input ----
   function posFromEvent(e) {
     var r = canvas.getBoundingClientRect();
-    return { x: (e.clientX - r.left) * (W / r.width), y: (e.clientY - r.top) * (H / r.height) };
+    return { x: camera.x + (e.clientX - r.left) * (VW / r.width), y: camera.y + (e.clientY - r.top) * (VH / r.height) };
   }
   var steering = false;
   var downX = 0, downY = 0, downMoved = false;
@@ -1590,7 +1766,7 @@
     audio();
     var p = posFromEvent(e);
     if (placing) {
-      var pc = clampForBuilding(placing.kind, p.x, p.y); placing.x = pc.x; placing.y = pc.y;
+      var pc = snapBuilding(placing.kind, p.x, p.y); placing.x = pc.x; placing.y = pc.y; placing.valid = pc.valid;
       try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
       return;
     }
@@ -1602,7 +1778,7 @@
   canvas.addEventListener("pointermove", function (e) {
     if (over) return;
     var p = posFromEvent(e);
-    if (placing) { e.preventDefault(); var pc2 = clampForBuilding(placing.kind, p.x, p.y); placing.x = pc2.x; placing.y = pc2.y; return; }
+    if (placing) { e.preventDefault(); var pc2 = snapBuilding(placing.kind, p.x, p.y); placing.x = pc2.x; placing.y = pc2.y; placing.valid = pc2.valid; return; }
     if (!steering) return;
     e.preventDefault();
     if (Math.abs(p.x - downX) > 8 || Math.abs(p.y - downY) > 8) downMoved = true;
@@ -1676,9 +1852,10 @@
   function sizeStage() {
     var r = playArea.getBoundingClientRect();
     dpr = window.devicePixelRatio || 1;
-    W = Math.floor(r.width); H = Math.floor(r.height);
-    canvas.width = Math.floor(W * dpr); canvas.height = Math.floor(H * dpr);
-    keepX = W / 2; keepY = H / 2;
+    VW = Math.floor(r.width); VH = Math.floor(r.height);
+    canvas.width = Math.floor(VW * dpr); canvas.height = Math.floor(VH * dpr);
+    camera.x = Math.max(0, Math.min(W - VW, camera.x));
+    camera.y = Math.max(0, Math.min(H - VH, camera.y));
   }
   window.addEventListener("resize", sizeStage);
   window.addEventListener("orientationchange", function () { setTimeout(sizeStage, 150); });
@@ -1721,7 +1898,7 @@
     raiders = []; arrows = []; bombs = []; puffs = []; allies = [];
     hearts = HEARTS_MAX;
     kills = 0;
-    gold = 20; nFoot = 0;
+    gold = 26; nFoot = 0; // a bit more starting cushion now the world (and the walk to a vein) is bigger
     counts = { farm: 0, storehouse: 0, barracks: 0, tower: 0, miner: 0 };
     selectedUnit = "horse"; selectedGroup = []; boxSel = null; updateTapHint();
     if (selectedBuilding != null) closeTrainingPanel();
@@ -1735,9 +1912,20 @@
     player.x = keepX; player.y = keepY + 86;
     player.tx = player.x; player.ty = player.y;
     player.cd = 0.4;
+    updateCamera(0, true); // snap straight to the keep, no lerp-in on a fresh game
     bestEl.textContent = best ? fmtTime(best) : "—";
+    initFog();
     initVeins();
     initWarcamp();
+    updateFog();
+    // a scout's report of the nearest vein — always something to head for
+    // rather than wandering fog blind on a fresh run
+    var nearestVein = null, nearestD = Infinity;
+    for (var vi3 = 0; vi3 < veins.length; vi3++) {
+      var dxv = veins[vi3].x - keepX, dyv = veins[vi3].y - keepY, d2v = dxv * dxv + dyv * dyv;
+      if (d2v < nearestD) { nearestD = d2v; nearestVein = veins[vi3]; }
+    }
+    if (nearestVein) markExplored(nearestVein.x, nearestVein.y, 70);
     updateBuildTray();
     updateHud();
   }
@@ -1748,7 +1936,8 @@
     setStance: function (s) { if ((s === "bow" || s === "lance") && s !== stance) toggleStance(); },
     build: function (kind) { onBuildTap(kind); },
     tap: function (x, y) { handleTap({ x: x, y: y }); },
-    dragGhost: function (x, y) { if (placing) { var c = clampForBuilding(placing.kind, x, y); placing.x = c.x; placing.y = c.y; } },
+    dragGhost: function (x, y) { if (placing) { var c = snapBuilding(placing.kind, x, y); placing.x = c.x; placing.y = c.y; placing.valid = c.valid; } },
+    fogAt: function (x, y) { return { visible: !!fogVisible[fogIndex(x, y)], explored: !!fogExplored[fogIndex(x, y)] }; },
     tapTrainer: function (id) { if (selectedBuilding === id) closeTrainingPanel(); else openTrainingPanel(id); },
     trainAt: function (id, troop) { queueTraining(id, troop); },
     confirmPlace: function () { confirmPlacement(); },
@@ -1763,7 +1952,7 @@
         warcamp: warcamp ? { x: Math.round(warcamp.x), y: Math.round(warcamp.y), strength: Math.round(warcamp.strength),
           cap: warcamp.cap, rcd: Math.round(warcamp.rcd * 10) / 10, t: Math.round(warcamp.t * 10) / 10 } : null,
         veins: veins.map(function (v) { return { x: Math.round(v.x), y: Math.round(v.y), amount: Math.round(v.amount), max: v.max }; }),
-        placing: placing ? { kind: placing.kind, x: Math.round(placing.x), y: Math.round(placing.y), cost: placing.cost } : null,
+        placing: placing ? { kind: placing.kind, x: Math.round(placing.x), y: Math.round(placing.y), cost: placing.cost, valid: placing.valid } : null,
         tower: allies.filter(function (a) { return a.kind === "tower"; })
           .map(function (a) { return { id: a.id, x: Math.round(a.x), y: Math.round(a.y) }; }),
         barracks: allies.filter(function (a) { return a.kind === "barracks"; })
@@ -1779,7 +1968,8 @@
         stat: { range: stat.range, speed: stat.speed, fireCd: stat.fireCd, volley: stat.volley, pierce: stat.pierce, dmg: stat.dmg },
         raiders: raiders.filter(function (r) { return r.state === "march"; })
           .map(function (r) { return { id: r.id, x: Math.round(r.x), y: Math.round(r.y), type: r.type }; }),
-        px: Math.round(player.x), py: Math.round(player.y), W: W, H: H };
+        px: Math.round(player.x), py: Math.round(player.y), W: W, H: H,
+        VW: VW, VH: VH, camera: { x: Math.round(camera.x), y: Math.round(camera.y) } };
     }
   };
 
