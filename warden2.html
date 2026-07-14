@@ -17,71 +17,100 @@
 <link rel="stylesheet" href="shared.css" />
 <title>Warden II — Tranquil</title>
 <style>
-  .play-area { touch-action: none; margin: 6px 0; }
+  .play-area { touch-action: none; margin: 6px 0; display: flex; align-items: stretch; gap: 0; }
+  #stage-wrap { position: relative; flex: 1 1 auto; min-width: 0; }
   #stage {
-    display: block; width: 100%; height: 100%; border-radius: 16px;
+    display: block; width: 100%; height: 100%; border-radius: 16px 0 0 16px;
     background: #14201a;
     touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
   }
   .tap-hint { text-align: center; color: var(--muted); font-size: 12px; min-height: 16px; margin-top: 6px; }
-  .play-area { position: relative; }
-  .build-tray {
-    position: absolute; left: 0; right: 0; bottom: 12px;
-    display: flex; justify-content: center; gap: 6px;
+
+  /* ---- Command sidebar: a fixed-width metal panel beside the map, holding
+     the minimap, current selection, and whichever action panel (build/
+     place/train) is active — the Dune2000-style command column. ---- */
+  .sidebar {
+    flex: 0 0 84px; width: 84px;
+    display: flex; flex-direction: column; gap: 6px;
+    background: linear-gradient(180deg, #2c323d, #191d24);
+    border-radius: 0 16px 16px 0;
+    padding: 6px;
+    box-shadow: inset 1px 0 0 rgba(255,255,255,0.06), inset 0 0 0 1px rgba(0,0,0,0.3);
   }
+  .sb-minimap-wrap {
+    position: relative; border-radius: 8px; overflow: hidden; flex: none;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.4), inset 0 0 0 1px rgba(255,255,255,0.08);
+  }
+  #minimap { display: block; width: 100%; height: 96px; background: #0a0e0a; }
   .recenter-btn {
-    position: absolute; top: 106px; right: 8px; z-index: 2;
-    width: 30px; height: 30px; border: none; border-radius: 50%; cursor: pointer;
-    background: rgba(10,14,10,0.72); color: var(--accent); font-size: 16px; line-height: 1;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    position: absolute; top: 4px; right: 4px; z-index: 2;
+    width: 22px; height: 22px; border: none; border-radius: 50%; cursor: pointer;
+    background: rgba(10,14,10,0.78); color: var(--accent); font-size: 12px; line-height: 1;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.4);
     transition: transform 100ms ease, background 140ms ease;
     -webkit-user-select: none; user-select: none; touch-action: manipulation;
   }
-  .recenter-btn:active { transform: scale(0.92); }
+  .recenter-btn:active { transform: scale(0.9); }
+  .sb-select {
+    display: none; align-items: center; gap: 5px; flex: none;
+    background: rgba(0,0,0,0.25); border-radius: 8px; padding: 5px 6px;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.05);
+  }
+  .sb-select.show { display: flex; }
+  .sb-select .sb-select-icon { font-size: 15px; line-height: 1; flex: none; }
+  .sb-select .sb-select-label { font-size: 9.5px; font-weight: 700; color: var(--ink); line-height: 1.2; }
+  .sb-filler {
+    flex: 1 1 auto; min-height: 6px; border-radius: 6px;
+    background-image: repeating-linear-gradient(135deg, rgba(255,255,255,0.03) 0 6px, transparent 6px 12px);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.03);
+  }
+  .build-tray {
+    display: flex; flex-wrap: wrap; gap: 5px; flex: none;
+  }
+  .build-tray .build-btn { flex: 0 0 calc(50% - 2.5px); }
   .build-btn {
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
-    width: 40px; height: 40px; border: none; cursor: pointer; border-radius: 50%;
-    background: var(--panel); box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    aspect-ratio: 1; border: none; cursor: pointer; border-radius: 9px;
+    background: var(--panel); box-shadow: 0 2px 8px rgba(0,0,0,0.4);
     transition: transform 100ms ease, opacity 140ms ease, background 140ms ease;
     -webkit-user-select: none; user-select: none; touch-action: manipulation;
   }
   .build-btn:active { transform: scale(0.94); }
   .build-btn.poor { opacity: 0.4; }
   .build-btn .bb-icon { font-size: 15px; line-height: 1; }
-  .build-btn .bb-cost { font-size: 8.5px; font-weight: 800; color: #f2c94c; line-height: 1; }
+  .build-btn .bb-cost { font-size: 8px; font-weight: 800; color: #f2c94c; line-height: 1; }
   .place-bar {
-    position: absolute; left: 0; right: 0; bottom: 12px;
-    display: flex; justify-content: center; gap: 10px;
+    display: flex; flex-direction: column; gap: 6px; flex: none;
   }
   .place-btn {
-    border: none; cursor: pointer; font-weight: 800; font-size: 13.5px;
-    border-radius: 999px; padding: 10px 18px; font-family: var(--font-display);
-    box-shadow: 0 4px 14px rgba(0,0,0,0.4);
+    border: none; cursor: pointer; font-weight: 800; font-size: 11px;
+    border-radius: 10px; padding: 8px 4px; font-family: var(--font-display);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.4);
     transition: transform 100ms ease;
     -webkit-user-select: none; user-select: none; touch-action: manipulation;
+    width: 100%; line-height: 1.15; white-space: normal;
   }
   .place-btn:active { transform: translateY(1px) scale(0.97); }
   .place-btn.confirm { background: var(--accent); color: #06231e; }
   .place-btn.cancel { background: var(--grid); color: var(--ink); }
   .train-panel {
-    position: absolute; left: 0; right: 0; bottom: 12px;
-    display: flex; justify-content: center; align-items: center; gap: 7px;
+    display: flex; flex-direction: column; gap: 5px; flex: none;
   }
   .train-btn {
-    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
-    width: 42px; height: 42px; border: none; cursor: pointer; border-radius: 50%;
-    background: var(--panel); box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    display: flex; flex-direction: row; align-items: center; gap: 5px;
+    width: 100%; height: 28px; border: none; cursor: pointer; border-radius: 8px; padding: 0 6px;
+    background: var(--panel); box-shadow: 0 2px 8px rgba(0,0,0,0.4);
     transition: transform 100ms ease, opacity 140ms ease;
     -webkit-user-select: none; user-select: none; touch-action: manipulation;
   }
-  .train-btn:active { transform: scale(0.94); }
+  .train-btn:active { transform: scale(0.96); }
   .train-btn.poor { opacity: 0.4; }
-  .train-btn .tb-icon { font-size: 15px; line-height: 1; }
-  .train-btn .tb-cost { font-size: 8.5px; font-weight: 800; color: #f2c94c; line-height: 1; }
+  .train-btn .tb-icon { font-size: 13px; line-height: 1; flex: none; }
+  .train-btn .tb-cost { font-size: 8.5px; font-weight: 800; color: #f2c94c; line-height: 1; margin-left: auto; }
   .train-queue {
-    font-size: 11px; font-weight: 700; color: var(--muted);
-    background: var(--panel); padding: 8px 12px; border-radius: 999px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.4); white-space: nowrap;
+    font-size: 8.5px; font-weight: 700; color: var(--muted); text-align: center;
+    background: var(--panel); padding: 5px 6px; border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.4);
   }
   .score-box.provisions.short .score-val { color: #e8a23c; }
 </style>
@@ -107,25 +136,34 @@
   </div>
 
   <div class="play-area">
-    <canvas id="stage"></canvas>
-    <button id="recenter-btn" class="recenter-btn" aria-label="Recenter on the keep">⌖</button>
-    <div id="build-tray" class="build-tray">
-      <button class="build-btn" data-build="farm" aria-label="Build Farm"><span class="bb-icon">🌾</span><span class="bb-cost"></span></button>
-      <button class="build-btn" data-build="storehouse" aria-label="Build Storehouse"><span class="bb-icon">🏦</span><span class="bb-cost"></span></button>
-      <button class="build-btn" data-build="barracks" aria-label="Build Barracks"><span class="bb-icon">🏚️</span><span class="bb-cost"></span></button>
-      <button class="build-btn" data-build="tower" aria-label="Build Watchtower"><span class="bb-icon">🗼</span><span class="bb-cost"></span></button>
+    <div class="stage-wrap" id="stage-wrap">
+      <canvas id="stage"></canvas>
     </div>
-    <div id="place-bar" class="place-bar" style="display:none">
-      <button id="place-confirm-btn" class="place-btn confirm" aria-label="Place building">🏚️ Place</button>
-      <button id="place-cancel-btn" class="place-btn cancel" aria-label="Cancel">✕ Cancel</button>
-    </div>
-    <div id="train-panel" class="train-panel" style="display:none">
-      <button class="train-btn" data-troop="footman" aria-label="Train Footman"><span class="tb-icon">⚔️</span><span class="tb-cost"></span></button>
-      <button class="train-btn" data-troop="archer" aria-label="Train Archer"><span class="tb-icon">🏹</span><span class="tb-cost"></span></button>
-      <button class="train-btn" data-troop="spearman" aria-label="Train Spearman"><span class="tb-icon">🔱</span><span class="tb-cost"></span></button>
-      <button class="train-btn" data-troop="catapult" aria-label="Train Catapult"><span class="tb-icon">💥</span><span class="tb-cost"></span></button>
-      <button class="train-btn" data-troop="miner" aria-label="Train Miner"><span class="tb-icon">⛏️</span><span class="tb-cost"></span></button>
-      <span class="train-queue" id="train-queue-badge">Empty queue</span>
+    <div class="sidebar">
+      <div class="sb-minimap-wrap">
+        <canvas id="minimap"></canvas>
+        <button id="recenter-btn" class="recenter-btn" aria-label="Recenter on the keep">⌖</button>
+      </div>
+      <div id="sb-select" class="sb-select"><span class="sb-select-icon" id="sb-select-icon"></span><span class="sb-select-label" id="sb-select-label"></span></div>
+      <div id="build-tray" class="build-tray">
+        <button class="build-btn" data-build="farm" aria-label="Build Farm"><span class="bb-icon">🌾</span><span class="bb-cost"></span></button>
+        <button class="build-btn" data-build="storehouse" aria-label="Build Storehouse"><span class="bb-icon">🏦</span><span class="bb-cost"></span></button>
+        <button class="build-btn" data-build="barracks" aria-label="Build Barracks"><span class="bb-icon">🏚️</span><span class="bb-cost"></span></button>
+        <button class="build-btn" data-build="tower" aria-label="Build Watchtower"><span class="bb-icon">🗼</span><span class="bb-cost"></span></button>
+      </div>
+      <div id="place-bar" class="place-bar" style="display:none">
+        <button id="place-confirm-btn" class="place-btn confirm" aria-label="Place building">🏚️ Place</button>
+        <button id="place-cancel-btn" class="place-btn cancel" aria-label="Cancel">✕ Cancel</button>
+      </div>
+      <div id="train-panel" class="train-panel" style="display:none">
+        <button class="train-btn" data-troop="footman" aria-label="Train Footman"><span class="tb-icon">⚔️</span><span class="tb-cost"></span></button>
+        <button class="train-btn" data-troop="archer" aria-label="Train Archer"><span class="tb-icon">🏹</span><span class="tb-cost"></span></button>
+        <button class="train-btn" data-troop="spearman" aria-label="Train Spearman"><span class="tb-icon">🔱</span><span class="tb-cost"></span></button>
+        <button class="train-btn" data-troop="catapult" aria-label="Train Catapult"><span class="tb-icon">💥</span><span class="tb-cost"></span></button>
+        <button class="train-btn" data-troop="miner" aria-label="Train Miner"><span class="tb-icon">⛏️</span><span class="tb-cost"></span></button>
+        <span class="train-queue" id="train-queue-badge">Empty queue</span>
+      </div>
+      <div class="sb-filler"></div>
     </div>
   </div>
   <div class="tap-hint" id="tap-hint">Tap a footman to command them · drag with two fingers to look around</div>
@@ -160,7 +198,7 @@
   </div>
 </div>
 
-<script src="leaderboard.js?v=44"></script>
+<script src="leaderboard.js?v=45"></script>
 <script>
 (function () {
   "use strict";
@@ -282,7 +320,7 @@
   var elapsed = 0;
   var best = Number(localStorage.getItem("tranquil_wardenii_best") || 0) || 0;
 
-  var playArea = document.querySelector(".play-area");
+  var stageWrap = document.getElementById("stage-wrap");
   var canvas = document.getElementById("stage");
   var ctx = canvas.getContext("2d");
   if (!ctx.roundRect) {
@@ -298,10 +336,31 @@
   }
   var tapHintEl = document.getElementById("tap-hint");
   var DEFAULT_HINT = tapHintEl.textContent;
+  var sbSelectEl = document.getElementById("sb-select");
+  var sbSelectIconEl = document.getElementById("sb-select-icon");
+  var sbSelectLabelEl = document.getElementById("sb-select-label");
+  function updateSelectionCard() {
+    if (selectedGroup.length > 1) {
+      sbSelectEl.classList.add("show");
+      sbSelectIconEl.textContent = "⚔️";
+      sbSelectLabelEl.textContent = selectedGroup.length + " units";
+      return;
+    }
+    if (selectedUnit != null) {
+      var al = findAllyById(selectedUnit);
+      var t = TROOPS[(al && al.troop) || "footman"];
+      sbSelectEl.classList.add("show");
+      sbSelectIconEl.textContent = t.icon;
+      sbSelectLabelEl.textContent = t.name;
+      return;
+    }
+    sbSelectEl.classList.remove("show");
+  }
   function updateTapHint() {
     tapHintEl.textContent = selectedGroup.length > 1 ? selectedGroup.length + " footmen selected — tap the field to post them together"
       : selectedUnit == null ? DEFAULT_HINT
       : "Footman selected — tap the field to post them";
+    updateSelectionCard();
   }
   var waveEl = document.getElementById("wave");
   var goldEl = document.getElementById("gold");
@@ -557,6 +616,7 @@
     placing = null;
     document.getElementById("place-bar").style.display = "none";
     document.getElementById("build-tray").style.display = "flex";
+    updateTapHint();
   }
   function confirmPlacement() {
     if (!placing) return;
@@ -1217,11 +1277,21 @@
     ctx.restore();
   }
 
+  // RTS-style bracket corners around a selected unit/building's bounding
+  // box, in the vein of the classic command-and-conquer selection marker
+  function drawBracket(cx, cy, hw, hh, len, color) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(cx - hw, cy - hh + len); ctx.lineTo(cx - hw, cy - hh); ctx.lineTo(cx - hw + len, cy - hh);
+    ctx.moveTo(cx + hw - len, cy - hh); ctx.lineTo(cx + hw, cy - hh); ctx.lineTo(cx + hw, cy - hh + len);
+    ctx.moveTo(cx + hw, cy + hh - len); ctx.lineTo(cx + hw, cy + hh); ctx.lineTo(cx + hw - len, cy + hh);
+    ctx.moveTo(cx - hw + len, cy + hh); ctx.lineTo(cx - hw, cy + hh); ctx.lineTo(cx - hw, cy + hh - len);
+    ctx.stroke();
+  }
   function drawFootRing(al, pulse) {
-    // ring under a selected footman
-    ctx.strokeStyle = "rgba(93,214,192," + (0.55 + 0.35 * pulse).toFixed(2) + ")";
-    ctx.lineWidth = 1.8;
-    ctx.beginPath(); ctx.ellipse(al.x, al.y + 9, 10, 4, 0, 0, Math.PI * 2); ctx.stroke();
+    // bracket corners around a selected footman
+    drawBracket(al.x, al.y - 3, 10, 15, 4, "rgba(93,214,192," + (0.55 + 0.35 * pulse).toFixed(2) + ")");
     // dashed line + flag at its post, so you can see where a tap will send it
     var dx = al.rallyX - al.x, dy = al.rallyY - al.y;
     if (dx * dx + dy * dy > 8 * 8) {
@@ -1264,9 +1334,8 @@
     var bk = findAllyById(selectedBuilding);
     if (!bk) return;
     var pulse = 0.5 + 0.5 * Math.sin(elapsed * 5);
-    ctx.strokeStyle = "rgba(93,214,192," + (0.55 + 0.35 * pulse).toFixed(2) + ")";
-    ctx.lineWidth = 1.8;
-    ctx.beginPath(); ctx.ellipse(bk.x, bk.y + 12, 14, 5, 0, 0, Math.PI * 2); ctx.stroke();
+    var hw = (bk.size.w * CELL) / 2, hh = (bk.size.h * CELL) / 2;
+    drawBracket(bk.x, bk.y, hw, hh, 5, "rgba(93,214,192," + (0.55 + 0.35 * pulse).toFixed(2) + ")");
   }
 
   function drawRaider(r) {
@@ -1436,35 +1505,41 @@
     }
   }
 
-  // ---- Minimap: fixed corner overlay, screen-space (no camera offset) ----
-  var MM_W = 64, MM_H = 90, MM_MARGIN = 8;
+  // ---- Minimap: its own small canvas in the sidebar, own coordinate space
+  // (no relation to the main viewport transform) ----
+  var minimapCanvas = document.getElementById("minimap");
+  var mctx = minimapCanvas.getContext("2d");
+  var MM_W = 64, MM_H = 90, mdpr = 1;
+  function sizeMinimap() {
+    var r = minimapCanvas.getBoundingClientRect();
+    mdpr = window.devicePixelRatio || 1;
+    MM_W = Math.max(1, Math.floor(r.width)); MM_H = Math.max(1, Math.floor(r.height));
+    minimapCanvas.width = Math.floor(MM_W * mdpr); minimapCanvas.height = Math.floor(MM_H * mdpr);
+  }
   function drawMinimap() {
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    var mx = VW - MM_W - MM_MARGIN, my = MM_MARGIN;
+    mctx.setTransform(mdpr, 0, 0, mdpr, 0, 0);
     var sx = MM_W / W, sy = MM_H / H;
-    ctx.fillStyle = "rgba(10,14,10,0.72)";
-    ctx.fillRect(mx, my, MM_W, MM_H);
-    ctx.fillStyle = "rgba(232,196,120,0.8)";
+    mctx.fillStyle = "rgba(10,14,10,0.92)";
+    mctx.fillRect(0, 0, MM_W, MM_H);
+    mctx.fillStyle = "rgba(232,196,120,0.8)";
     for (var i = 0; i < veins.length; i++) {
       if (veins[i].amount <= 0 || !fogExplored[fogIndex(veins[i].x, veins[i].y)]) continue;
-      ctx.beginPath(); ctx.arc(mx + veins[i].x * sx, my + veins[i].y * sy, 1.6, 0, Math.PI * 2); ctx.fill();
+      mctx.beginPath(); mctx.arc(veins[i].x * sx, veins[i].y * sy, 1.6, 0, Math.PI * 2); mctx.fill();
     }
-    ctx.fillStyle = "#8b93a8";
-    ctx.fillRect(mx + keepX * sx - 2, my + keepY * sy - 2, 4, 4);
+    mctx.fillStyle = "#8b93a8";
+    mctx.fillRect(keepX * sx - 2, keepY * sy - 2, 4, 4);
     for (var ai = 0; ai < allies.length; ai++) {
       var a = allies[ai];
       if (a.kind === "miner" || a.kind === "foot") continue; // buildings only, keep it legible
-      ctx.fillStyle = "rgba(93,214,192,0.75)";
-      ctx.fillRect(mx + a.x * sx - 1, my + a.y * sy - 1, 2, 2);
+      mctx.fillStyle = "rgba(93,214,192,0.75)";
+      mctx.fillRect(a.x * sx - 1, a.y * sy - 1, 2, 2);
     }
     if (warcamp && fogExplored[fogIndex(warcamp.x, warcamp.y)]) {
-      ctx.fillStyle = "#c0504d";
-      ctx.beginPath(); ctx.arc(mx + warcamp.x * sx, my + warcamp.y * sy, 2, 0, Math.PI * 2); ctx.fill();
+      mctx.fillStyle = "#c0504d";
+      mctx.beginPath(); mctx.arc(warcamp.x * sx, warcamp.y * sy, 2, 0, Math.PI * 2); mctx.fill();
     }
-    ctx.strokeStyle = "rgba(255,255,255,0.55)"; ctx.lineWidth = 1;
-    ctx.strokeRect(mx + camera.x * sx, my + camera.y * sy, VW * sx, VH * sy);
-    ctx.strokeStyle = "rgba(255,255,255,0.18)";
-    ctx.strokeRect(mx, my, MM_W, MM_H);
+    mctx.strokeStyle = "rgba(255,255,255,0.55)"; mctx.lineWidth = 1;
+    mctx.strokeRect(camera.x * sx, camera.y * sy, VW * sx, VH * sy);
   }
 
   function render() {
@@ -1703,12 +1778,13 @@
 
   // ---- Sizing ----
   function sizeStage() {
-    var r = playArea.getBoundingClientRect();
+    var r = stageWrap.getBoundingClientRect();
     dpr = window.devicePixelRatio || 1;
     VW = Math.floor(r.width); VH = Math.floor(r.height);
     canvas.width = Math.floor(VW * dpr); canvas.height = Math.floor(VH * dpr);
     camera.x = Math.max(0, Math.min(W - VW, camera.x));
     camera.y = Math.max(0, Math.min(H - VH, camera.y));
+    sizeMinimap();
   }
   window.addEventListener("resize", sizeStage);
   window.addEventListener("orientationchange", function () { setTimeout(sizeStage, 150); });
