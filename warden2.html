@@ -216,7 +216,7 @@
   </div>
 </div>
 
-<script src="leaderboard.js?v=48"></script>
+<script src="leaderboard.js?v=49"></script>
 <script>
 (function () {
   "use strict";
@@ -332,6 +332,20 @@
   var VW = 300, VH = 460;
   var camera = { x: 0, y: 0 };
   var keepX = W / 2, keepY = H / 2;
+
+  // ---- Isometric projection ----
+  // Everything else — movement, collision, fog, AI — stays in the same flat
+  // world-coordinate system as before. Isometric is purely a rendering/input
+  // transform on top of it: project() turns a world point into a screen
+  // point (a 2:1 diamond), unproject() is its exact inverse. Both are linear
+  // (no translation term), so they can also be applied directly to a
+  // screen-space DELTA (e.g. a pan drag) to get the equivalent world delta.
+  var ISO_KX = 1, ISO_KY = 0.5;
+  function project(wx, wy) { return { x: (wx - wy) * ISO_KX, y: (wx + wy) * ISO_KY }; }
+  function unproject(sx, sy) {
+    var hx = sx / (2 * ISO_KX), hy = sy / (2 * ISO_KY);
+    return { x: hx + hy, y: hy - hx };
+  }
 
   var raiders = [];  // {x,y,hp,speed,armored,state:"march"|"flee"|"down",t,face,phase}
   var arrows = [];   // {x,y,vx,vy,life}
@@ -871,10 +885,27 @@
   }
 
   // there's no player unit any more — the camera only ever moves by a
-  // two-finger drag or the recenter button, both of which just need bounds
+  // two-finger drag or the recenter button, both of which just need bounds.
+  // camera.x/y is the world point that lands at the screen's top-left
+  // corner. A tight zero-slack clamp (matching the whole sheared viewport's
+  // projected footprint to the world rectangle exactly) turned out far too
+  // restrictive: once the projection shears, that footprint's own bounding
+  // box is nearly as big as the whole map, so a strict fit left almost no
+  // room to pan and crushed the camera away from wherever it should center.
+  // A simple generous margin avoids that — the trade-off is you can pan a
+  // bit past the map's edge into empty fog near the corners, which reads
+  // as normal in most isometric games anyway.
   function clampCamera() {
-    camera.x = Math.max(0, Math.min(W - VW, camera.x));
-    camera.y = Math.max(0, Math.min(H - VH, camera.y));
+    camera.x = Math.max(-VW, Math.min(W, camera.x));
+    camera.y = Math.max(-VH, Math.min(H, camera.y));
+  }
+  // puts the given world point's projected screen position at the center
+  // of the viewport (used to center on the keep at game start / recenter)
+  function centerCameraOn(wx, wy) {
+    var p = project(wx, wy);
+    var c = unproject(p.x - VW / 2, p.y - VH / 2);
+    camera.x = c.x; camera.y = c.y;
+    clampCamera();
   }
 
   // ---- Update ----
@@ -1281,7 +1312,8 @@
   }
   function drawClutterItem(c) {
     ctx.save();
-    ctx.translate(c.x, c.y);
+    var pc0 = project(c.x, c.y);
+    ctx.translate(pc0.x, pc0.y);
     ctx.rotate(c.rot);
     ctx.scale(c.s, c.s);
     if (c.kind === "rock") {
@@ -1324,13 +1356,11 @@
     }
     ctx.restore();
   }
-  function drawClutter() {
-    for (var i = 0; i < clutter.length; i++) drawClutterItem(clutter[i]);
-  }
 
   function drawKeep() {
     ctx.save();
-    ctx.translate(keepX, keepY);
+    var pk = project(keepX, keepY);
+    ctx.translate(pk.x, pk.y);
     // shadow
     ctx.fillStyle = "rgba(0,0,0,0.25)";
     ctx.beginPath(); ctx.ellipse(0, 26, 40, 12, 0, 0, Math.PI * 2); ctx.fill();
@@ -1389,9 +1419,11 @@
     ctx.lineTo(0, -42); ctx.closePath();
     ctx.fill(); outline("rgba(0,0,0,0.25)", 0.8);
     ctx.restore();
-    // hearts
+    // hearts — positioned relative to the keep's projected screen anchor,
+    // not raw world coordinates, since we're back outside the local
+    // (upright, unprojected) transform drawKeep() used above
     for (var h = 0; h < HEARTS_MAX; h++) {
-      var hx = keepX - (HEARTS_MAX - 1) * 7 + h * 14, hy = keepY - 60;
+      var hx = pk.x - (HEARTS_MAX - 1) * 7 + h * 14, hy = pk.y - 60;
       ctx.fillStyle = h < hearts ? "#e06c9f" : "rgba(255,255,255,0.14)";
       drawHeart(hx, hy, 5);
     }
@@ -1407,7 +1439,8 @@
 
   function drawAlly(al) {
     ctx.save();
-    ctx.translate(al.x, al.y);
+    var pa = project(al.x, al.y);
+    ctx.translate(pa.x, pa.y);
     ctx.fillStyle = "rgba(0,0,0,0.22)";
     var shadowRy = (al.kind === "tower" || al.kind === "barracks" || al.kind === "storehouse") ? 12 : (al.kind === "farm" ? 6 : (al.kind === "wall" || al.kind === "gate") ? 5 : 9);
     var shadowRx = (al.kind === "barracks" || al.kind === "storehouse") ? 13 : (al.kind === "tower" ? 9 : (al.kind === "farm" ? 14 : (al.kind === "wall" || al.kind === "gate") ? 11 : 6));
@@ -1566,7 +1599,12 @@
     ctx.restore();
   }
 
-  function drawPlacementGhost() {
+  // split in two: the footprint outline is flat ground (drawn under the
+  // sheared ground transform, so it automatically renders as the correct
+  // iso diamond — no coordinate changes needed here at all), while the
+  // building preview itself is drawn upright in the entity layer
+  function drawPlacementFootprint() {
+    if (!placing) return;
     var x = placing.x, y = placing.y;
     if (placing.kind === "tower") {
       ctx.strokeStyle = "rgba(93,214,192,0.35)";
@@ -1583,9 +1621,12 @@
     ctx.strokeStyle = placing.valid ? "rgba(93,214,192,0.8)" : "rgba(224,108,127,0.85)";
     ctx.lineWidth = 1.4;
     ctx.strokeRect(rect.x, rect.y, rect.w, rect.h);
+  }
+  function drawPlacementPreview() {
+    if (!placing) return;
     ctx.save();
     ctx.globalAlpha = placing.valid ? 0.55 : 0.35;
-    drawAlly({ kind: placing.kind, x: x, y: y });
+    drawAlly({ kind: placing.kind, x: placing.x, y: placing.y });
     ctx.restore();
   }
 
@@ -1602,19 +1643,20 @@
     ctx.stroke();
   }
   function drawFootRing(al, pulse) {
+    var pf = project(al.x, al.y), pr2 = project(al.rallyX, al.rallyY);
     // bracket corners around a selected footman
-    drawBracket(al.x, al.y - 3, 10, 15, 4, "rgba(93,214,192," + (0.55 + 0.35 * pulse).toFixed(2) + ")");
+    drawBracket(pf.x, pf.y - 3, 10, 15, 4, "rgba(93,214,192," + (0.55 + 0.35 * pulse).toFixed(2) + ")");
     // dashed line + flag at its post, so you can see where a tap will send it
     var dx = al.rallyX - al.x, dy = al.rallyY - al.y;
     if (dx * dx + dy * dy > 8 * 8) {
       ctx.strokeStyle = "rgba(93,214,192,0.4)";
       ctx.setLineDash([4, 5]);
       ctx.lineWidth = 1.2;
-      ctx.beginPath(); ctx.moveTo(al.x, al.y); ctx.lineTo(al.rallyX, al.rallyY); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(pf.x, pf.y); ctx.lineTo(pr2.x, pr2.y); ctx.stroke();
       ctx.setLineDash([]);
     }
     ctx.fillStyle = "rgba(93,214,192,0.85)";
-    ctx.beginPath(); ctx.arc(al.rallyX, al.rallyY, 3, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(pr2.x, pr2.y, 3, 0, Math.PI * 2); ctx.fill();
   }
   function drawSelection() {
     if (selectedUnit == null && selectedGroup.length === 0) return; // nothing selected
@@ -1630,6 +1672,10 @@
     if (!al) return;
     drawFootRing(al, pulse);
   }
+  // boxSel is screen-space (canvas-logical-pixel) coordinates, not world —
+  // a screen-space marquee doesn't map to a world-space rectangle once the
+  // projection shears, so it's drawn in a plain screen-space pass with no
+  // camera/projection transform at all (see the "UI overlay" pass in render())
   function drawSelectionBox() {
     if (!boxSel) return;
     var x0 = Math.min(boxSel.x0, boxSel.x1), y0 = Math.min(boxSel.y0, boxSel.y1);
@@ -1647,18 +1693,23 @@
     if (!bk) return;
     var pulse = 0.5 + 0.5 * Math.sin(elapsed * 5);
     var hw = (bk.size.w * CELL) / 2, hh = (bk.size.h * CELL) / 2;
-    drawBracket(bk.x, bk.y, hw, hh, 5, "rgba(93,214,192," + (0.55 + 0.35 * pulse).toFixed(2) + ")");
+    var pb2 = project(bk.x, bk.y);
+    drawBracket(pb2.x, pb2.y, hw, hh, 5, "rgba(93,214,192," + (0.55 + 0.35 * pulse).toFixed(2) + ")");
   }
 
   function drawRaider(r) {
     var T = TYPES[r.type], s = T.r / 6;
     ctx.save();
-    ctx.translate(r.x, r.y);
+    var pr = project(r.x, r.y);
+    ctx.translate(pr.x, pr.y);
     // shieldbearer's plate on the keep-facing side (drawn under the body, in
-    // its own world-space rotation so it always faces the keep)
+    // its own rotation so it always faces the keep) — shieldAng is a WORLD
+    // angle, reprojected to screen space so the plate points the right way
+    // once drawn upright on the tilted iso ground
     if (r.type === "shield" && r.state === "march") {
       ctx.save();
-      ctx.rotate(r.shieldAng);
+      var sv = project(Math.cos(r.shieldAng), Math.sin(r.shieldAng));
+      ctx.rotate(Math.atan2(sv.y, sv.x));
       ctx.fillStyle = grad2(T.r - 0.5, 0, T.r + 5.5, 0, "#aab3c6", "#77809a");
       ctx.beginPath(); ctx.ellipse(T.r + 2.5, 0, 3, T.r + 3, 0, 0, Math.PI * 2);
       ctx.fill(); outline("rgba(0,0,0,0.3)", 0.9);
@@ -1735,9 +1786,13 @@
   }
 
   function drawArrow(a) {
-    var ang = Math.atan2(a.vy, a.vx);
+    // rotate to match the arrow's SCREEN-space direction of travel, not its
+    // raw world velocity — the two differ once the projection shears
+    var pv = project(a.vx, a.vy);
+    var ang = Math.atan2(pv.y, pv.x);
     ctx.save();
-    ctx.translate(a.x, a.y);
+    var pa2 = project(a.x, a.y);
+    ctx.translate(pa2.x, pa2.y);
     ctx.rotate(ang);
     ctx.strokeStyle = "#d9c9a8"; ctx.lineWidth = 1.6;
     ctx.beginPath(); ctx.moveTo(-6, 0); ctx.lineTo(5, 0); ctx.stroke();
@@ -1749,16 +1804,18 @@
   function drawBomb(bm) {
     var k = Math.min(1, bm.t / bm.dur);
     var x = bm.ox + (bm.tx - bm.ox) * k, y = bm.oy + (bm.ty - bm.oy) * k;
-    var hump = Math.sin(k * Math.PI) * 26;
+    var hump = Math.sin(k * Math.PI) * 26; // a purely visual lob arc, applied in screen space
+    var pb = project(x, y);
     ctx.fillStyle = "#7a7f8c";
-    ctx.beginPath(); ctx.arc(x, y - hump, 3.6, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(pb.x, pb.y - hump, 3.6, 0, Math.PI * 2); ctx.fill();
     ctx.strokeStyle = "rgba(0,0,0,0.3)"; ctx.lineWidth = 1; ctx.stroke();
   }
 
   function drawVein(v) {
     if (v.amount <= 0) return; // depleted for now — reappears as it regenerates
     ctx.save();
-    ctx.translate(v.x, v.y);
+    var pv2 = project(v.x, v.y);
+    ctx.translate(pv2.x, pv2.y);
     var pct = v.amount / v.max;
     ctx.fillStyle = "rgba(80,70,50,0.4)";
     ctx.beginPath(); ctx.ellipse(0, 4, 12, 5, 0, 0, Math.PI * 2); ctx.fill();
@@ -1781,7 +1838,8 @@
   function drawQuarry(q) {
     if (q.amount <= 0) return; // depleted for now — reappears as it regenerates
     ctx.save();
-    ctx.translate(q.x, q.y);
+    var pq = project(q.x, q.y);
+    ctx.translate(pq.x, pq.y);
     var pct = q.amount / q.max;
     ctx.fillStyle = "rgba(60,60,58,0.4)";
     ctx.beginPath(); ctx.ellipse(0, 4, 12, 5, 0, 0, Math.PI * 2); ctx.fill();
@@ -1800,7 +1858,8 @@
   function drawWarcamp() {
     if (!warcamp) return;
     ctx.save();
-    ctx.translate(warcamp.x, warcamp.y);
+    var pw = project(warcamp.x, warcamp.y);
+    ctx.translate(pw.x, pw.y);
     // firelight glow washing the whole camp, flickering a little
     var campFlicker = 0.7 + 0.3 * Math.sin(elapsed * 8.5);
     var cglow = ctx.createRadialGradient(-16, 9, 0, -16, 9, 26);
@@ -1826,31 +1885,42 @@
     ctx.beginPath(); ctx.moveTo(-6, -20); ctx.lineTo(2, -18); ctx.lineTo(-6, -15); ctx.closePath();
     ctx.fill(); outline("rgba(0,0,0,0.3)", 0.8);
     ctx.restore();
-    // strength meter — fills as it musters its next raiding party
+    // strength meter and raid-channel ring are positioned off the warcamp's
+    // projected screen anchor (pw), not raw world coords — same reason as
+    // the keep's hearts above
     var pct = Math.min(1, warcamp.strength / warcamp.cap);
     ctx.fillStyle = "rgba(0,0,0,0.35)";
-    ctx.fillRect(warcamp.x - 18, warcamp.y - 30, 36, 4);
+    ctx.fillRect(pw.x - 18, pw.y - 30, 36, 4);
     ctx.fillStyle = warcamp.rcd > 0 ? "rgba(150,150,150,0.6)" : "rgba(220,90,90,0.85)";
-    ctx.fillRect(warcamp.x - 18, warcamp.y - 30, 36 * pct, 4);
-    // raid-channel ring (only meaningful off cooldown)
+    ctx.fillRect(pw.x - 18, pw.y - 30, 36 * pct, 4);
+    // raid-channel ring (only meaningful off cooldown) — drawn as a plain
+    // circle rather than iso-squashed for a clearer range affordance
     if (warcamp.rcd <= 0) {
       var pulse = 0.5 + 0.5 * Math.sin(elapsed * 4);
       ctx.strokeStyle = "rgba(93,214,192," + (0.3 + 0.2 * pulse).toFixed(2) + ")";
       ctx.lineWidth = 1.2;
-      ctx.beginPath(); ctx.arc(warcamp.x, warcamp.y, WARCAMP_R, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(pw.x, pw.y, WARCAMP_R, 0, Math.PI * 2); ctx.stroke();
       if (warcamp.t > 0) {
         ctx.strokeStyle = "rgba(93,214,192,0.9)";
         ctx.lineWidth = 2.4;
-        ctx.beginPath(); ctx.arc(warcamp.x, warcamp.y, WARCAMP_R, -Math.PI / 2, -Math.PI / 2 + (warcamp.t / WARCAMP_CHANNEL) * Math.PI * 2); ctx.stroke();
+        ctx.beginPath(); ctx.arc(pw.x, pw.y, WARCAMP_R, -Math.PI / 2, -Math.PI / 2 + (warcamp.t / WARCAMP_CHANNEL) * Math.PI * 2); ctx.stroke();
       }
     }
   }
 
   function drawFog() {
-    var c0 = Math.max(0, Math.floor(camera.x / FOG_CELL));
-    var c1 = Math.min(fogCols - 1, Math.floor((camera.x + VW) / FOG_CELL));
-    var r0 = Math.max(0, Math.floor(camera.y / FOG_CELL));
-    var r1 = Math.min(fogRows - 1, Math.floor((camera.y + VH) / FOG_CELL));
+    // the world-space bounding box of the projected viewport corners —
+    // bigger than the old camera.x..camera.x+VW box since a screen
+    // rectangle covers a wider diamond of world space once sheared. A
+    // generous over-fetch is fine here: cells outside the true diamond
+    // just render off the visible area and cost nothing but a fillRect.
+    var offTR = unproject(VW, 0), offBL = unproject(0, VH), offBR = unproject(VW, VH);
+    var wx0 = camera.x + Math.min(0, offTR.x, offBL.x, offBR.x), wx1 = camera.x + Math.max(0, offTR.x, offBL.x, offBR.x);
+    var wy0 = camera.y + Math.min(0, offTR.y, offBL.y, offBR.y), wy1 = camera.y + Math.max(0, offTR.y, offBL.y, offBR.y);
+    var c0 = Math.max(0, Math.floor(wx0 / FOG_CELL));
+    var c1 = Math.min(fogCols - 1, Math.floor(wx1 / FOG_CELL));
+    var r0 = Math.max(0, Math.floor(wy0 / FOG_CELL));
+    var r1 = Math.min(fogRows - 1, Math.floor(wy1 / FOG_CELL));
     for (var cy = r0; cy <= r1; cy++) {
       for (var cx = c0; cx <= c1; cx++) {
         var idx = cy * fogCols + cx;
@@ -1899,60 +1969,105 @@
       mctx.fillStyle = "#c0504d";
       mctx.beginPath(); mctx.arc(warcamp.x * sx, warcamp.y * sy, 2, 0, Math.PI * 2); mctx.fill();
     }
+    // the visible area is a diamond once the main view is sheared, not a
+    // "VW x VH" world rectangle starting at camera.x,y — use the same
+    // projected-corner bounding box as clampCamera()/drawFog() so this
+    // outline actually tracks what's on screen
+    var offTR2 = unproject(VW, 0), offBL2 = unproject(0, VH), offBR2 = unproject(VW, VH);
+    var vx0 = camera.x + Math.min(0, offTR2.x, offBL2.x, offBR2.x), vx1 = camera.x + Math.max(0, offTR2.x, offBL2.x, offBR2.x);
+    var vy0 = camera.y + Math.min(0, offTR2.y, offBL2.y, offBR2.y), vy1 = camera.y + Math.max(0, offTR2.y, offBL2.y, offBR2.y);
     mctx.strokeStyle = "rgba(255,255,255,0.55)"; mctx.lineWidth = 1;
-    mctx.strokeRect(camera.x * sx, camera.y * sy, VW * sx, VH * sy);
+    mctx.strokeRect(vx0 * sx, vy0 * sy, (vx1 - vx0) * sx, (vy1 - vy0) * sy);
   }
 
-  function render() {
-    ctx.setTransform(dpr, 0, 0, dpr, -camera.x * dpr, -camera.y * dpr);
-    drawGround();
-    drawClutter();
-    for (var vi2 = 0; vi2 < veins.length; vi2++) drawVein(veins[vi2]);
-    for (var qi2 = 0; qi2 < quarries.length; qi2++) drawQuarry(quarries[qi2]);
-    drawWarcamp();
-    drawKeep();
-    for (var ci = 0; ci < allies.length; ci++) drawAlly(allies[ci]);
-    if (placing) { drawPlacementGhost(); } else { drawSelection(); drawBuildingSelection(); drawSelectionBox(); }
-    // draw order: downed first, then marching/fleeing by y, then arrows.
-    // raiders are units, not terrain — fog hides them the instant nothing
-    // of yours can currently see them, unlike the remembered ground beneath.
-    var byY = raiders.slice().sort(function (a, b) { return (a.state === "down" ? -1e6 : a.y) - (b.state === "down" ? -1e6 : b.y); });
-    for (var i = 0; i < byY.length; i++) { if (fogVisibleAt(byY[i].x, byY[i].y)) drawRaider(byY[i]); }
-    for (var a = 0; a < arrows.length; a++) drawArrow(arrows[a]);
-    for (var bx = 0; bx < bombs.length; bx++) drawBomb(bombs[bx]);
-    for (var p = 0; p < puffs.length; p++) {
-      var pf = puffs[p], k = pf.t / 0.4;
-      if (pf.splash) {
-        // a wide, fast-fading ring for a catapult impact
-        ctx.strokeStyle = "rgba(230,180,120," + (0.5 * (1 - k)).toFixed(2) + ")";
-        ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.arc(pf.x, pf.y, 6 + k * 34, 0, Math.PI * 2); ctx.stroke();
-        continue;
-      }
-      if (pf.dodge) {
-        // a light "whiff" dash beside the raider who slipped the arrow
-        ctx.strokeStyle = "rgba(150,200,240," + (0.6 * (1 - k)).toFixed(2) + ")";
-        ctx.lineWidth = 1.4;
-        ctx.beginPath();
-        ctx.moveTo(pf.x - 6 - k * 6, pf.y - 4 - k * 5);
-        ctx.lineTo(pf.x + 2 + k * 4, pf.y + 1 - k * 2);
-        ctx.stroke();
-        continue;
-      }
-      ctx.strokeStyle = pf.clink
-        ? "rgba(200,214,235," + (0.7 * (1 - k)).toFixed(2) + ")"
-        : "rgba(232,237,244," + (0.5 * (1 - k)).toFixed(2) + ")";
-      ctx.lineWidth = pf.clink ? 1.8 : 1.4;
-      ctx.beginPath(); ctx.arc(pf.x, pf.y, (pf.clink ? 2 : 3) + k * (pf.clink ? 6 : 9), 0, Math.PI * 2); ctx.stroke();
+  function drawPuff(pf) {
+    var k = pf.t / 0.4;
+    var pp = project(pf.x, pf.y);
+    if (pf.splash) {
+      // a wide, fast-fading ring for a catapult impact
+      ctx.strokeStyle = "rgba(230,180,120," + (0.5 * (1 - k)).toFixed(2) + ")";
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(pp.x, pp.y, 6 + k * 34, 0, Math.PI * 2); ctx.stroke();
+      return;
     }
+    if (pf.dodge) {
+      // a light "whiff" dash beside the raider who slipped the arrow
+      ctx.strokeStyle = "rgba(150,200,240," + (0.6 * (1 - k)).toFixed(2) + ")";
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(pp.x - 6 - k * 6, pp.y - 4 - k * 5);
+      ctx.lineTo(pp.x + 2 + k * 4, pp.y + 1 - k * 2);
+      ctx.stroke();
+      return;
+    }
+    ctx.strokeStyle = pf.clink
+      ? "rgba(200,214,235," + (0.7 * (1 - k)).toFixed(2) + ")"
+      : "rgba(232,237,244," + (0.5 * (1 - k)).toFixed(2) + ")";
+    ctx.lineWidth = pf.clink ? 1.8 : 1.4;
+    ctx.beginPath(); ctx.arc(pp.x, pp.y, (pf.clink ? 2 : 3) + k * (pf.clink ? 6 : 9), 0, Math.PI * 2); ctx.stroke();
+  }
+
+  // ---- Rendering: split into layers because isometric needs different
+  // transforms for different things. Ground/fog are drawn under a SHEARED
+  // transform (so flat axis-aligned shapes automatically become the correct
+  // diamond tiles). Entities are drawn UPRIGHT (unsheared) at their
+  // projected screen anchor and depth-sorted back-to-front by world x+y, so
+  // buildings/units/effects overlap each other correctly. UI overlays
+  // (announcement banner, box-select marquee) are plain screen-space, no
+  // camera offset at all. ----
+  function render() {
+    var pc = project(camera.x, camera.y);
+
+    // 1. ground layer (sheared)
+    ctx.setTransform(ISO_KX * dpr, ISO_KY * dpr, -ISO_KX * dpr, ISO_KY * dpr, -pc.x * dpr, -pc.y * dpr);
+    drawGround();
+    if (placing) drawPlacementFootprint();
+
+    // 2. entity layer (upright, depth-sorted)
+    ctx.setTransform(dpr, 0, 0, dpr, -pc.x * dpr, -pc.y * dpr);
+    var depth = [];
+    for (var ci2 = 0; ci2 < clutter.length; ci2++) { (function (c) { depth.push({ d: c.x + c.y, f: function () { drawClutterItem(c); } }); })(clutter[ci2]); }
+    for (var vi2 = 0; vi2 < veins.length; vi2++) { (function (v) { depth.push({ d: v.x + v.y, f: function () { drawVein(v); } }); })(veins[vi2]); }
+    for (var qi2 = 0; qi2 < quarries.length; qi2++) { (function (q) { depth.push({ d: q.x + q.y, f: function () { drawQuarry(q); } }); })(quarries[qi2]); }
+    if (warcamp) depth.push({ d: warcamp.x + warcamp.y, f: drawWarcamp });
+    depth.push({ d: keepX + keepY, f: drawKeep });
+    for (var ci = 0; ci < allies.length; ci++) { (function (al2) { depth.push({ d: al2.x + al2.y, f: function () { drawAlly(al2); } }); })(allies[ci]); }
+    // raiders: fog-gated exactly as before (down/fleeing raiders vanish
+    // from sight the instant nothing of yours can see them too), and
+    // "down" raiders sort to the very back so they never render on top of
+    // a marching raider standing over their fading body
+    for (var ri = 0; ri < raiders.length; ri++) {
+      var rr = raiders[ri];
+      if (!fogVisibleAt(rr.x, rr.y)) continue;
+      (function (r) { depth.push({ d: r.state === "down" ? -1e6 : r.x + r.y, f: function () { drawRaider(r); } }); })(rr);
+    }
+    for (var ai2 = 0; ai2 < arrows.length; ai2++) { (function (a2) { depth.push({ d: a2.x + a2.y, f: function () { drawArrow(a2); } }); })(arrows[ai2]); }
+    for (var bi2 = 0; bi2 < bombs.length; bi2++) {
+      (function (bm) {
+        var k = Math.min(1, bm.t / bm.dur);
+        var x = bm.ox + (bm.tx - bm.ox) * k, y = bm.oy + (bm.ty - bm.oy) * k;
+        depth.push({ d: x + y, f: function () { drawBomb(bm); } });
+      })(bombs[bi2]);
+    }
+    for (var pi2 = 0; pi2 < puffs.length; pi2++) { (function (pf2) { depth.push({ d: pf2.x + pf2.y, f: function () { drawPuff(pf2); } }); })(puffs[pi2]); }
+    depth.sort(function (a, b) { return a.d - b.d; });
+    for (var di = 0; di < depth.length; di++) depth[di].f();
+    if (placing) { drawPlacementPreview(); } else { drawSelection(); drawBuildingSelection(); }
+
+    // 3. fog overlay (sheared again, drawn on top of everything above)
+    ctx.setTransform(ISO_KX * dpr, ISO_KY * dpr, -ISO_KX * dpr, ISO_KY * dpr, -pc.x * dpr, -pc.y * dpr);
     drawFog();
-    // band announcement — drawn at the top of the *viewport*, not the world
+
+    // 4. plain screen-space UI — no camera offset, no shear
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     if (announced && announceT > 0) {
       ctx.fillStyle = "rgba(232,237,244," + Math.min(0.75, announceT).toFixed(2) + ")";
       ctx.font = "700 15px Quicksand, sans-serif";
       ctx.textAlign = "center";
-      ctx.fillText(announced, camera.x + VW / 2, camera.y + 34);
+      ctx.fillText(announced, VW / 2, 34);
     }
+    drawSelectionBox();
+
     drawMinimap();
   }
 
@@ -1969,12 +2084,23 @@
   }
 
   // ---- Input ----
-  function posFromEvent(e) {
+  // canvas-relative screen position (logical/CSS pixels, not world) — used
+  // for box-select, which has to work in screen space (see below)
+  function canvasPos(e) {
     var r = canvas.getBoundingClientRect();
-    return { x: camera.x + (e.clientX - r.left) * (VW / r.width), y: camera.y + (e.clientY - r.top) * (VH / r.height) };
+    return { x: (e.clientX - r.left) * (VW / r.width), y: (e.clientY - r.top) * (VH / r.height) };
+  }
+  // world position under the pointer — a single screen point always maps
+  // to exactly one world point via the inverse projection, so every
+  // single-point use (taps, drags, placement) stays correct as-is
+  function posFromEvent(e) {
+    var s = canvasPos(e);
+    var pc = project(camera.x, camera.y);
+    return unproject(s.x + pc.x, s.y + pc.y);
   }
   var steering = false;
   var downX = 0, downY = 0, downMoved = false;
+  var downSX = 0, downSY = 0; // screen-space (canvasPos), used only for box-select
   // ---- Two-finger free-look: a second finger down switches to panning the
   // camera by itself, independent of the warden — the first finger's own
   // gesture (steering/box-select) is cancelled so the two don't fight. ----
@@ -2069,6 +2195,7 @@
     }
     steering = true;
     downX = p.x; downY = p.y; downMoved = false;
+    var s0 = canvasPos(e); downSX = s0.x; downSY = s0.y;
     try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
   });
   canvas.addEventListener("pointermove", function (e) {
@@ -2080,10 +2207,13 @@
         if (e.pointerId === panAnchorId) {
           e.preventDefault();
           var r = canvas.getBoundingClientRect();
-          camera.x -= (e.clientX - prevPt.x) * (VW / r.width);
-          camera.y -= (e.clientY - prevPt.y) * (VH / r.height);
-          camera.x = Math.max(0, Math.min(W - VW, camera.x));
-          camera.y = Math.max(0, Math.min(H - VH, camera.y));
+          // a raw screen-pixel drag delta, converted through the inverse
+          // projection to the equivalent world-space delta (both project()
+          // and unproject() are linear, so this works on a bare delta too)
+          var wd = unproject((e.clientX - prevPt.x) * (VW / r.width), (e.clientY - prevPt.y) * (VH / r.height));
+          camera.x -= wd.x;
+          camera.y -= wd.y;
+          clampCamera();
         }
         return;
       }
@@ -2092,9 +2222,12 @@
     if (placing) { e.preventDefault(); var pc2 = snapBuilding(placing.kind, p.x, p.y); placing.x = pc2.x; placing.y = pc2.y; placing.valid = pc2.valid; return; }
     if (!steering) return;
     e.preventDefault();
-    if (Math.abs(p.x - downX) > 8 || Math.abs(p.y - downY) > 8) downMoved = true;
-    // a single-finger drag is always a marquee select over footmen
-    if (downMoved) { boxSel = { x0: downX, y0: downY, x1: p.x, y1: p.y }; }
+    var s = canvasPos(e);
+    if (Math.abs(s.x - downSX) > 8 || Math.abs(s.y - downSY) > 8) downMoved = true;
+    // a single-finger drag is always a marquee select over footmen — kept
+    // in screen space, since a screen rectangle doesn't correspond to a
+    // world rectangle once the projection shears (see pointerup)
+    if (downMoved) { boxSel = { x0: downSX, y0: downSY, x1: s.x, y1: s.y }; }
   });
   canvas.addEventListener("pointerup", function (e) {
     delete activePointers[e.pointerId];
@@ -2108,10 +2241,15 @@
     if (boxSel) {
       var x0 = Math.min(boxSel.x0, boxSel.x1), x1 = Math.max(boxSel.x0, boxSel.x1);
       var y0 = Math.min(boxSel.y0, boxSel.y1), y1 = Math.max(boxSel.y0, boxSel.y1);
+      // boxSel is a screen-space rectangle, so test each ally's PROJECTED
+      // screen position against it, not its world position
+      var pcBox = project(camera.x, camera.y);
       var ids = [];
       for (var i = 0; i < allies.length; i++) {
         var a = allies[i];
-        if (a.kind === "foot" && a.x >= x0 && a.x <= x1 && a.y >= y0 && a.y <= y1) ids.push(a.id);
+        if (a.kind !== "foot") continue;
+        var pa3 = project(a.x, a.y), sx = pa3.x - pcBox.x, sy = pa3.y - pcBox.y;
+        if (sx >= x0 && sx <= x1 && sy >= y0 && sy <= y1) ids.push(a.id);
       }
       boxSel = null;
       if (ids.length > 1) { selectedUnit = null; selectedGroup = ids; sfxSelect(); updateTapHint(); }
@@ -2157,8 +2295,7 @@
     dpr = window.devicePixelRatio || 1;
     VW = Math.floor(r.width); VH = Math.floor(r.height);
     canvas.width = Math.floor(VW * dpr); canvas.height = Math.floor(VH * dpr);
-    camera.x = Math.max(0, Math.min(W - VW, camera.x));
-    camera.y = Math.max(0, Math.min(H - VH, camera.y));
+    clampCamera();
     sizeMinimap();
   }
   window.addEventListener("resize", sizeStage);
@@ -2187,8 +2324,7 @@
   document.getElementById("restart").addEventListener("click", newGame);
   document.getElementById("recenter-btn").addEventListener("click", function (e) {
     e.preventDefault();
-    camera.x = keepX - VW / 2; camera.y = keepY - VH / 2;
-    clampCamera();
+    centerCameraOn(keepX, keepY);
   });
   var gameoverOverlay = document.getElementById("gameover-overlay");
   document.getElementById("go-again").addEventListener("click", function () { gameoverOverlay.classList.remove("show"); newGame(); });
@@ -2222,8 +2358,7 @@
     var KEEP_MARGIN = 150;
     keepX = KEEP_MARGIN + Math.random() * (W - 2 * KEEP_MARGIN);
     keepY = KEEP_MARGIN + Math.random() * (H * 0.72 - 2 * KEEP_MARGIN);
-    camera.x = keepX - VW / 2; camera.y = keepY - VH / 2;
-    clampCamera();
+    centerCameraOn(keepX, keepY);
     bestEl.textContent = best ? fmtTime(best) : "—";
     initFog();
     initVeins();
@@ -2255,6 +2390,9 @@
     orderUnit: function (id, x, y) { var al = findAllyById(id); if (al) { var c = clampToField(x, y); al.rallyX = c.x; al.rallyY = c.y; } },
     setGate: function (id, open) { var al = findAllyById(id); if (al && al.kind === "gate") al.open = open; },
     spawnRaiderAt: function (x, y) { spawnRaider(x, y); return raiders[raiders.length - 1].id; },
+    project: function (x, y) { return project(x, y); },
+    unproject: function (x, y) { return unproject(x, y); },
+    keepPos: function () { return { keepX: keepX, keepY: keepY }; },
     addGold: function (n) { gold += n; updateHud(); },
     addStone: function (n) { stone += n; updateHud(); },
     dragGhost: function (x, y) { if (placing) { var c = snapBuilding(placing.kind, x, y); placing.x = c.x; placing.y = c.y; placing.valid = c.valid; } },
