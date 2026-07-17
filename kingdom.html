@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#11151c" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Tranquil" />
+<link rel="apple-touch-icon" href="icon.png" />
+<link rel="icon" href="icon.png" />
+<link rel="manifest" href="manifest.json" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="shared.css" />
+<title>Kingdom Tiles — Tranquil</title>
+<style>
+  :root {
+    --kt-player: var(--accent);
+    --kt-player-dark: color-mix(in srgb, var(--accent) 65%, black);
+    --kt-enemy: #e8735c;
+    --kt-enemy-dark: #c1543e;
+    --kt-neutral: var(--cell-empty);
+    --kt-neutral-border: rgba(255,255,255,0.06);
+  }
+  @keyframes kt-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(255,255,255,0.5); }
+    50% { box-shadow: 0 0 0 5px rgba(255,255,255,0); }
+  }
+  #message {
+    min-height: 30px; display: flex; align-items: center; justify-content: center;
+    margin: 2px 0 8px;
+  }
+  #message span {
+    font-size: 12.5px; font-weight: 700; border-radius: 10px; padding: 6px 12px;
+  }
+  #message.info span { color: #8fbfe0; background: rgba(143,191,224,0.12); }
+  #message.warn span { color: #e8a35e; background: rgba(232,163,94,0.14); }
+  #message.good span { color: var(--kt-player); background: color-mix(in srgb, var(--kt-player) 16%, transparent); }
+
+  #board {
+    background: var(--panel);
+    border-radius: 14px;
+    padding: 6px;
+    display: grid;
+    gap: 4px;
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .kt-tile {
+    border-radius: 8px;
+    background: var(--kt-neutral);
+    box-shadow: inset 0 0 0 1.5px var(--kt-neutral-border);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    transition: transform 100ms ease;
+  }
+  .kt-tile:active { transform: scale(0.92); }
+  .kt-tile.owner-player { background: var(--kt-player); box-shadow: inset 0 0 0 1.5px var(--kt-player-dark); }
+  .kt-tile.owner-enemy { background: var(--kt-enemy); box-shadow: inset 0 0 0 1.5px var(--kt-enemy-dark); }
+  .kt-tile.capturable { animation: kt-pulse 1.6s ease-in-out infinite; }
+  .kt-badge { width: 28%; height: 28%; border-radius: 30%; background: rgba(255,255,255,0.92); }
+
+  #units { display: flex; gap: 8px; margin: 10px 0 4px; }
+  .unit-card {
+    flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px;
+    padding: 9px 4px 10px; border-radius: 14px; cursor: pointer;
+    background: var(--panel); border: 2px solid transparent;
+  }
+  .unit-card.selected { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--panel)); }
+  .unit-card.unaffordable { opacity: 0.5; }
+  .unit-card:active { transform: translateY(1px); }
+  .unit-badge {
+    width: 30px; height: 30px; border-radius: 9px;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-weight: 800; font-size: 13px; font-family: var(--font-display);
+  }
+  .unit-name { font-family: var(--font-display); font-weight: 700; font-size: 12.5px; }
+  .unit-cost { display: flex; gap: 6px; align-items: center; }
+  .unit-cost span { font-size: 11px; font-weight: 800; }
+  .unit-cost .g { color: #e8c34a; }
+  .unit-cost .w { color: #9ece6a; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="topbar">
+    <div class="brand">
+      <a href="index.html" class="icon-btn" aria-label="Back to games">‹</a>
+      <span class="title">Kingdom Tiles</span>
+    </div>
+    <div class="bar-actions">
+      <button id="lb-btn" class="icon-btn" aria-label="High scores">🏆</button>
+      <button id="restart" class="icon-btn" aria-label="New game">↻</button>
+      <button id="settings-btn" class="icon-btn" aria-label="Settings">⚙</button>
+    </div>
+  </header>
+
+  <div class="scores">
+    <div class="score-box"><div class="score-label">Gold</div><div class="score-val" id="gold">5</div></div>
+    <div class="score-box"><div class="score-label">Wood</div><div class="score-val" id="wood">5</div></div>
+    <div class="score-box"><div class="score-label">Territory</div><div class="score-val" id="territory">3/42</div></div>
+  </div>
+
+  <div id="message" class="info"><span id="message-text">Tap a unit, then tap a tile next to your territory.</span></div>
+
+  <div class="play-area"><div id="board"></div></div>
+
+  <div id="units"></div>
+</div>
+
+<div id="settings-overlay" class="modal-overlay">
+  <div class="modal settings">
+    <h2>Kingdom Tiles</h2>
+    <div class="setting-row">
+      <span class="label">Sound</span>
+      <button id="sound-toggle" class="toggle on">On</button>
+    </div>
+    <div class="how">
+      <p class="how-title">How to play</p>
+      <p class="body">Grow your kingdom one tile at a time. Pick a unit — Scout, Warrior, or Builder — then tap any tile next to your territory to claim it, paying that unit's gold and wood cost. Every claim earns back gold and wood, so keep expanding. The rival kingdom claims a tile of its own after each of your moves. The game ends once every tile is spoken for — the more of the board you hold, the better your score.</p>
+    </div>
+    <button id="settings-share" class="share">Share the game</button>
+    <button id="settings-close" class="ghost-btn">Done</button>
+    <div class="version-tag" id="app-version"></div>
+  </div>
+</div>
+
+<script src="leaderboard.js?v=52"></script>
+<script>
+(function () {
+  "use strict";
+
+  var COLS = 6, ROWS = 7, N = COLS * ROWS;
+
+  var UNITS = [
+    { id: "scout", name: "Scout", letter: "S", gold: 1, wood: 1, color: "#7aa2f7" },
+    { id: "warrior", name: "Warrior", letter: "W", gold: 3, wood: 0, color: "#e8735c" },
+    { id: "builder", name: "Builder", letter: "B", gold: 1, wood: 3, color: "#9ece6a" }
+  ];
+
+  var tiles = [];        // { r, c, owner: 'player' | 'enemy' | 'neutral' }
+  var gold = 5, wood = 5, turn = 1;
+  var selectedUnit = "scout";
+  var over = false;
+
+  var boardEl = document.getElementById("board");
+  var playArea = document.querySelector(".play-area");
+  var unitsEl = document.getElementById("units");
+  var goldEl = document.getElementById("gold");
+  var woodEl = document.getElementById("wood");
+  var territoryEl = document.getElementById("territory");
+  var messageEl = document.getElementById("message");
+  var messageTextEl = document.getElementById("message-text");
+  var settingsOverlay = document.getElementById("settings-overlay");
+  var soundToggle = document.getElementById("sound-toggle");
+  var restartBtn = document.getElementById("restart");
+
+  var tileEls = [];
+  var unitEls = {};
+
+  // ---- Shared sound (collection-wide mute key) ----
+  var muted = localStorage.getItem("tranquil_muted") === "1";
+  var actx = null;
+  function audio() {
+    if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { actx = null; } }
+    if (actx && actx.state === "suspended") actx.resume();
+  }
+  function tone(f, d, t, g) {
+    if (muted || !actx) return;
+    var o = actx.createOscillator(), gn = actx.createGain();
+    o.type = t || "sine"; o.frequency.value = f;
+    gn.gain.setValueAtTime(0.0001, actx.currentTime);
+    gn.gain.exponentialRampToValueAtTime(g || 0.1, actx.currentTime + 0.01);
+    gn.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + d);
+    o.connect(gn); gn.connect(actx.destination); o.start(); o.stop(actx.currentTime + d + 0.02);
+  }
+  function sfxSelect() { tone(440, 0.04, "sine", 0.04); }
+  function sfxClaim() { tone(392, 0.08, "triangle", 0.07); }
+  function sfxConquer() { tone(392, 0.08, "triangle", 0.07); setTimeout(function () { tone(523, 0.1, "triangle", 0.07); }, 70); }
+  function sfxWarn() { tone(200, 0.09, "square", 0.06); }
+  function sfxDone() { [523.25, 659.25, 783.99, 1046.5].forEach(function (f, i) { setTimeout(function () { tone(f, 0.32, "sine", 0.1); }, i * 100); }); }
+
+  // ---- Board helpers ----
+  function idx(r, c) { return r * COLS + c; }
+  function neighbors(r, c) {
+    var out = [];
+    if (r > 0) out.push([r - 1, c]);
+    if (r < ROWS - 1) out.push([r + 1, c]);
+    if (c > 0) out.push([r, c - 1]);
+    if (c < COLS - 1) out.push([r, c + 1]);
+    return out;
+  }
+  function isAdjacentToPlayer(r, c) {
+    return neighbors(r, c).some(function (p) { return tiles[idx(p[0], p[1])].owner === "player"; });
+  }
+  function isAdjacentToEnemy(r, c) {
+    return neighbors(r, c).some(function (p) { return tiles[idx(p[0], p[1])].owner === "enemy"; });
+  }
+  function unitById(id) { return UNITS.filter(function (u) { return u.id === id; })[0]; }
+
+  function makeGrid() {
+    var t = [];
+    for (var r = 0; r < ROWS; r++) for (var c = 0; c < COLS; c++) t.push({ r: r, c: c, owner: "neutral" });
+    t[0].owner = "player";
+    t[1].owner = "player";
+    t[idx(1, 0)].owner = "player";
+    var last = N - 1;
+    t[last].owner = "enemy";
+    t[last - 1].owner = "enemy";
+    t[last - COLS].owner = "enemy";
+    return t;
+  }
+
+  function enemyTurn() {
+    var candidates = tiles.filter(function (t) { return t.owner === "neutral" && isAdjacentToEnemy(t.r, t.c); });
+    if (!candidates.length) return;
+    var pick = candidates[Math.floor(Math.random() * candidates.length)];
+    pick.owner = "enemy";
+  }
+
+  function hasLegalMove() {
+    return tiles.some(function (t) {
+      if (t.owner === "player" || !isAdjacentToPlayer(t.r, t.c)) return false;
+      return UNITS.some(function (u) { return gold >= u.gold && wood >= u.wood; });
+    });
+  }
+
+  function setMessage(text, kind) {
+    messageTextEl.textContent = text;
+    messageEl.className = kind || "info";
+  }
+
+  // ---- Actions ----
+  function selectUnit(id) {
+    if (over) return;
+    selectedUnit = id;
+    sfxSelect();
+    renderUnits();
+  }
+
+  function captureTile(t) {
+    if (over) return;
+    var unit = unitById(selectedUnit);
+    if (t.owner === "player") { setMessage("Already your territory.", "warn"); sfxWarn(); return; }
+    if (!isAdjacentToPlayer(t.r, t.c)) { setMessage("Must be adjacent to your territory.", "warn"); sfxWarn(); return; }
+    if (gold < unit.gold || wood < unit.wood) { setMessage("Not enough resources for that unit.", "warn"); sfxWarn(); return; }
+
+    var wasEnemy = t.owner === "enemy";
+    t.owner = "player";
+    gold = gold - unit.gold + 2;
+    wood = wood - unit.wood + 1;
+    turn++;
+    enemyTurn();
+
+    if (wasEnemy) { setMessage("Enemy territory conquered!", "good"); sfxConquer(); }
+    else { setMessage("Territory claimed!", "good"); sfxClaim(); }
+
+    var neutralLeft = tiles.some(function (x) { return x.owner === "neutral"; });
+    if (!neutralLeft || !hasLegalMove()) { finishGame(); return; }
+    render();
+  }
+
+  // ---- Rendering ----
+  function ownedCount(owner) { return tiles.filter(function (t) { return t.owner === owner; }).length; }
+
+  function renderBoard() {
+    tiles.forEach(function (t, i) {
+      var el = tileEls[i];
+      el.className = "kt-tile owner-" + t.owner;
+      var capturable = t.owner !== "player" && isAdjacentToPlayer(t.r, t.c);
+      if (!over && capturable) el.classList.add("capturable");
+      el.innerHTML = t.owner === "player" ? '<div class="kt-badge"></div>' : "";
+    });
+  }
+
+  function renderUnits() {
+    UNITS.forEach(function (u) {
+      var el = unitEls[u.id];
+      el.classList.toggle("selected", u.id === selectedUnit);
+      el.classList.toggle("unaffordable", gold < u.gold || wood < u.wood);
+    });
+  }
+
+  function renderHud() {
+    goldEl.textContent = gold;
+    woodEl.textContent = wood;
+    territoryEl.textContent = ownedCount("player") + "/" + N;
+  }
+
+  function render() {
+    renderBoard();
+    renderUnits();
+    renderHud();
+  }
+
+  function buildBoard() {
+    boardEl.style.gridTemplateColumns = "repeat(" + COLS + ", 1fr)";
+    boardEl.style.gridTemplateRows = "repeat(" + ROWS + ", 1fr)";
+    boardEl.innerHTML = "";
+    tileEls = [];
+    tiles.forEach(function (t, i) {
+      var el = document.createElement("div");
+      el.className = "kt-tile";
+      el.addEventListener("click", function () { captureTile(t); });
+      boardEl.appendChild(el);
+      tileEls[i] = el;
+    });
+  }
+
+  function buildUnits() {
+    unitsEl.innerHTML = "";
+    unitEls = {};
+    UNITS.forEach(function (u) {
+      var el = document.createElement("div");
+      el.className = "unit-card";
+      el.innerHTML =
+        '<div class="unit-badge" style="background:' + u.color + '">' + u.letter + '</div>' +
+        '<div class="unit-name">' + u.name + '</div>' +
+        '<div class="unit-cost"><span class="g">' + u.gold + 'G</span><span class="w">' + u.wood + 'W</span></div>';
+      el.addEventListener("click", function () { selectUnit(u.id); });
+      unitsEl.appendChild(el);
+      unitEls[u.id] = el;
+    });
+  }
+
+  // ---- End states ----
+  function finishGame() {
+    over = true;
+    var mine = ownedCount("player"), theirs = ownedCount("enemy");
+    var title = mine > theirs ? "🏰 Kingdom secured!" : mine === theirs ? "⚖️ Even split." : "🛡️ Outmatched.";
+    var sub = theirs + " tiles stayed enemy-held over " + (turn - 1) + " turns.";
+    sfxDone();
+    render();
+    setTimeout(function () {
+      LB.finish({ game: "kingdom", value: mine, resultTitle: title, subtitle: sub, onPlayAgain: newGame });
+    }, 500);
+  }
+
+  function newGame() {
+    tiles = makeGrid();
+    gold = 5; wood = 5; turn = 1;
+    selectedUnit = "scout";
+    over = false;
+    buildBoard();
+    setMessage("Tap a unit, then tap a tile next to your territory.", "info");
+    render();
+    sizeBoard();
+  }
+
+  // ---- Sizing (largest COLS×ROWS box that fits) ----
+  function sizeBoard() {
+    var r = playArea.getBoundingClientRect();
+    var w = r.width, h = w * (ROWS / COLS);
+    if (h > r.height) { h = r.height; w = h * (COLS / ROWS); }
+    boardEl.style.width = Math.max(0, Math.floor(w)) + "px";
+    boardEl.style.height = Math.max(0, Math.floor(h)) + "px";
+  }
+  window.addEventListener("resize", sizeBoard);
+  window.addEventListener("orientationchange", function () { setTimeout(sizeBoard, 150); });
+
+  // ---- Settings / sound ----
+  function updateSoundToggle() { soundToggle.textContent = muted ? "Off" : "On"; soundToggle.classList.toggle("on", !muted); }
+  soundToggle.addEventListener("click", function () {
+    muted = !muted;
+    localStorage.setItem("tranquil_muted", muted ? "1" : "0");
+    updateSoundToggle();
+    if (!muted) { audio(); tone(392, 0.06, "sine", 0.06); }
+  });
+  document.getElementById("settings-btn").addEventListener("click", function () { updateSoundToggle(); settingsOverlay.classList.add("show"); });
+  document.getElementById("settings-close").addEventListener("click", function () { settingsOverlay.classList.remove("show"); });
+  settingsOverlay.addEventListener("click", function (e) { if (e.target === settingsOverlay) settingsOverlay.classList.remove("show"); });
+
+  async function shareGame() {
+    var text = "Kingdom Tiles — a calm territory-claiming puzzle with no ads. Play it:";
+    var url = "https://pete1552.github.io/AGTest/";
+    try { if (navigator.share) { await navigator.share({ title: "Kingdom Tiles — Tranquil", text: text, url: url }); return; } } catch (e) { return; }
+    try {
+      await navigator.clipboard.writeText(text + " " + url);
+      var b = document.getElementById("settings-share"), old = b.textContent;
+      b.textContent = "Link copied!"; setTimeout(function () { b.textContent = old; }, 1500);
+    } catch (e) {}
+  }
+  document.getElementById("settings-share").addEventListener("click", shareGame);
+
+  document.getElementById("lb-btn").addEventListener("click", function () { LB.open("kingdom"); });
+  restartBtn.addEventListener("click", newGame);
+
+  // first pointerdown unlocks audio
+  window.addEventListener("pointerdown", function () { audio(); }, { once: false });
+
+  // ---- iOS hardening ----
+  document.addEventListener("gesturestart", function (e) { e.preventDefault(); });
+  var lastTouchEnd = 0;
+  document.addEventListener("touchend", function (e) { var n = Date.now(); if (n - lastTouchEnd <= 320) e.preventDefault(); lastTouchEnd = n; }, { passive: false });
+
+  // ---- Boot ----
+  buildUnits();
+  updateSoundToggle();
+  newGame();
+  requestAnimationFrame(sizeBoard);
+  setTimeout(sizeBoard, 300);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(sizeBoard);
+})();
+</script>
+</body>
+</html>
