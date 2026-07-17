@@ -73,6 +73,7 @@
     orbit:  { name: "Orbit",   dir: "desc", fmt: function (v) { return String(v); } },
     hamlet: { name: "Hamlet",  dir: "desc", fmt: function (v) { return v + " pts"; } },
     keystone: { name: "Keystone", dir: "desc", fmt: function (v) { return (v / 10).toFixed(1) + " m"; } },
+    kingdom: { name: "Kingdom Tiles", dir: "desc", fmt: function (v) { return v + "/42"; } },
     stratego: { name: "Stratego", dir: "asc", fmt: function (v) { return v + " turns"; } },
     daily:  { name: "Daily Set", dir: "desc", fmt: function (v) { return v + " pts"; } }
   };
