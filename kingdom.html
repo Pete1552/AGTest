@@ -70,26 +70,29 @@
     display: flex; align-items: center; justify-content: center;
   }
 
-  #units { display: flex; gap: 8px; margin: 10px 0 4px; }
+  #units { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 4px; }
   .unit-card {
-    flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
+    flex: 1 1 calc(33.333% - 6px); min-width: 88px; display: flex; flex-direction: column; align-items: center; gap: 3px;
     padding: 9px 4px 10px; border-radius: 14px; cursor: pointer;
     background: var(--panel); border: 2px solid transparent;
   }
   .unit-card.selected { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--panel)); }
   .unit-card.unaffordable { opacity: 0.5; }
+  .unit-card.locked { cursor: default; opacity: 0.55; }
   .unit-card:active { transform: translateY(1px); }
   .unit-badge {
     width: 30px; height: 30px; border-radius: 9px;
     display: flex; align-items: center; justify-content: center;
     color: #fff; font-weight: 800; font-size: 13px; font-family: var(--font-display);
   }
+  .unit-badge.dim { background: var(--grid) !important; color: var(--muted); }
   .unit-name { font-family: var(--font-display); font-weight: 700; font-size: 12.5px; }
   .unit-cost { display: flex; gap: 6px; align-items: center; }
   .unit-cost span { font-size: 11px; font-weight: 800; }
   .unit-cost .g { color: #e8c34a; }
   .unit-cost .w { color: #9ece6a; }
   .unit-power { font-size: 10.5px; font-weight: 800; color: var(--muted); }
+  .unit-lock-hint { font-size: 10px; font-weight: 700; color: var(--muted); text-align: center; }
 </style>
 </head>
 <body>
@@ -129,7 +132,7 @@
     </div>
     <div class="how">
       <p class="how-title">How to play</p>
-      <p class="body">Grow your kingdom by claiming tiles next to your territory. Every tile shows a defense number — the strength of whoever is holding it. Scout (power 1) is cheap but leaves a weak garrison; Warrior (power 4) is expensive but breaks tough tiles and holds the line; Builder (power 2) leaves a modest garrison and turns the tile into a farm, earning gold and wood every turn. To take an enemy tile, your unit's power must beat its defense number. The rival kingdom grows stronger as it expands, and it will strike back at your weakly-held border tiles — so decide what's worth defending. The game ends once every tile is spoken for; the more of the board you hold, the better your score.</p>
+      <p class="body">Grow your kingdom by claiming tiles next to your territory. Every tile shows a defense number — the strength of whoever is holding it. Scout (power 1) is cheap but leaves a weak garrison; Warrior (power 4) is expensive but breaks tough tiles and holds the line; Builder (power 2) leaves a modest garrison and turns the tile into a farm, earning gold and wood every turn. To take an enemy tile, your unit's power must beat its defense number. The rival kingdom grows stronger the longer it expands, and it will strike back at your weakly-held border tiles — so decide what's worth defending. Hold out and stronger recruits join you too: Champion (power 6) unlocks at turn 10, General (power 9) at turn 20, so your ceiling keeps pace with theirs. The game ends once every tile is spoken for; the more of the board you hold, the better your score.</p>
     </div>
     <button id="settings-share" class="share">Share the game</button>
     <button id="settings-close" class="ghost-btn">Done</button>
@@ -149,7 +152,9 @@
   var UNITS = [
     { id: "scout", name: "Scout", letter: "S", gold: 1, wood: 1, power: 1, color: "#7aa2f7" },
     { id: "warrior", name: "Warrior", letter: "W", gold: 3, wood: 1, power: 4, color: "#e8735c" },
-    { id: "builder", name: "Builder", letter: "B", gold: 1, wood: 3, power: 2, color: "#9ece6a" }
+    { id: "builder", name: "Builder", letter: "B", gold: 1, wood: 3, power: 2, color: "#9ece6a" },
+    { id: "champion", name: "Champion", letter: "C", gold: 5, wood: 2, power: 6, color: "#bb9af7", unlockTurn: 10 },
+    { id: "general", name: "General", letter: "G", gold: 8, wood: 4, power: 9, color: "#e8c34a", unlockTurn: 20 }
   ];
 
   var tiles = [];        // { r, c, owner: 'player' | 'enemy' | 'neutral', defense }
@@ -214,6 +219,7 @@
     return neighbors(r, c).some(function (p) { return tiles[idx(p[0], p[1])].owner === "enemy"; });
   }
   function unitById(id) { return UNITS.filter(function (u) { return u.id === id; })[0]; }
+  function isUnlocked(u) { return !u.unlockTurn || turn >= u.unlockTurn; }
 
   function makeGrid() {
     var t = [];
@@ -260,6 +266,7 @@
     return tiles.some(function (t) {
       if (t.owner === "player" || !isAdjacentToPlayer(t.r, t.c)) return false;
       return UNITS.some(function (u) {
+        if (!isUnlocked(u)) return false;
         if (gold < u.gold || wood < u.wood) return false;
         if (t.owner === "enemy" && u.power <= t.defense) return false;
         return true;
@@ -275,6 +282,8 @@
   // ---- Actions ----
   function selectUnit(id) {
     if (over) return;
+    var u = unitById(id);
+    if (!isUnlocked(u)) { setMessage(u.name + " unlocks at turn " + u.unlockTurn + ".", "warn"); sfxWarn(); return; }
     selectedUnit = id;
     sfxSelect();
     renderBoard();
@@ -284,6 +293,7 @@
   function captureTile(t) {
     if (over) return;
     var unit = unitById(selectedUnit);
+    if (!isUnlocked(unit)) return;
     if (t.owner === "player") { setMessage("Already your territory.", "warn"); sfxWarn(); return; }
     if (!isAdjacentToPlayer(t.r, t.c)) { setMessage("Must be adjacent to your territory.", "warn"); sfxWarn(); return; }
     if (t.owner === "enemy" && unit.power <= t.defense) {
@@ -336,8 +346,18 @@
   function renderUnits() {
     UNITS.forEach(function (u) {
       var el = unitEls[u.id];
-      el.classList.toggle("selected", u.id === selectedUnit);
-      el.classList.toggle("unaffordable", gold < u.gold || wood < u.wood);
+      var unlocked = isUnlocked(u);
+      el.classList.toggle("locked", !unlocked);
+      el.classList.toggle("selected", unlocked && u.id === selectedUnit);
+      el.classList.toggle("unaffordable", unlocked && (gold < u.gold || wood < u.wood));
+      el.innerHTML = unlocked
+        ? '<div class="unit-badge" style="background:' + u.color + '">' + u.letter + '</div>' +
+          '<div class="unit-name">' + u.name + '</div>' +
+          '<div class="unit-cost"><span class="g">' + u.gold + 'G</span><span class="w">' + u.wood + 'W</span></div>' +
+          '<div class="unit-power">⚔ ' + u.power + '</div>'
+        : '<div class="unit-badge dim">🔒</div>' +
+          '<div class="unit-name">' + u.name + ' · ⚔ ' + u.power + '</div>' +
+          '<div class="unit-lock-hint">Unlocks turn ' + u.unlockTurn + '</div>';
     });
   }
 
@@ -374,11 +394,6 @@
     UNITS.forEach(function (u) {
       var el = document.createElement("div");
       el.className = "unit-card";
-      el.innerHTML =
-        '<div class="unit-badge" style="background:' + u.color + '">' + u.letter + '</div>' +
-        '<div class="unit-name">' + u.name + '</div>' +
-        '<div class="unit-cost"><span class="g">' + u.gold + 'G</span><span class="w">' + u.wood + 'W</span></div>' +
-        '<div class="unit-power">⚔ ' + u.power + '</div>';
       el.addEventListener("click", function () { selectUnit(u.id); });
       unitsEl.appendChild(el);
       unitEls[u.id] = el;
