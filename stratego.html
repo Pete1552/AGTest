@@ -398,16 +398,42 @@
   }
 
   // ---- AI turn ----
+  // 1-ply lookahead: would any *already-revealed* human piece be able to legally
+  // capture the AI's piece at toIdx next turn? Only considers revealed pieces —
+  // the AI never peeks at hidden human ranks, so this can't "cheat".
+  function wouldExposeToCapture(fromIdx, toIdx, revealedAfter) {
+    var origFrom = board[fromIdx], origTo = board[toIdx];
+    board[fromIdx] = null;
+    board[toIdx] = { type: origFrom.type, owner: "p2", revealed: revealedAfter };
+    var danger = false;
+    for (var i = 0; i < N && !danger; i++) {
+      var q = board[i];
+      if (!q || q.owner !== "p1" || !q.revealed) continue;
+      var dests = legalDestinations(i);
+      for (var k = 0; k < dests.length; k++) {
+        if (dests[k].attack && dests[k].to === toIdx) { danger = true; break; }
+      }
+    }
+    board[fromIdx] = origFrom;
+    board[toIdx] = origTo;
+    return danger;
+  }
   function scoreMove(i, d) {
     var p = board[i];
     if (!d.attack) {
       var rr = rowOf(d.to), r = rowOf(i);
-      return (rr - r) * 0.3 + Math.random() * 0.4;
+      var base = (rr - r) * 0.3 + Math.random() * 0.4;
+      if (wouldExposeToCapture(i, d.to, p.revealed)) base -= 4 + RANK_DATA[p.type].rank;
+      return base;
     }
     var target = board[d.to];
     if (target.revealed) {
       var outcome = fight(p, target);
-      if (outcome === "attacker") return 6 + Math.random();
+      if (outcome === "attacker") {
+        var s = 6 + Math.random();
+        if (wouldExposeToCapture(i, d.to, true)) s -= 4 + RANK_DATA[p.type].rank;
+        return s;
+      }
       if (outcome === "tie") return -1 + Math.random() * 0.5;
       return -8;
     }
