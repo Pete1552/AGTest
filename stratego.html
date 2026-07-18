@@ -40,7 +40,7 @@
   .cell.legal-attack { box-shadow: inset 0 0 0 2px rgba(224,101,95,0.85); }
 
   .piece {
-    width: 82%; height: 82%; border-radius: 6px;
+    width: 82%; height: 82%; border-radius: 6px; position: relative;
     display: flex; align-items: center; justify-content: center;
     font-family: var(--font-display); font-weight: 800;
     font-size: clamp(10px, 3vw, 14px); line-height: 1;
@@ -49,6 +49,12 @@
   .piece.p1 { background: linear-gradient(160deg, #6fe6d1, #3fa792); color: #06231e; }
   .piece.p2.revealed { background: linear-gradient(160deg, #ea9490, #b0524d); color: #2a0e0c; }
   .piece.p2.hidden { background: linear-gradient(160deg, #8a4a47, #5f302e); color: rgba(255,255,255,0.5); }
+  .piece .p-icon { width: 68%; height: 68%; }
+  .piece .p-icon svg { width: 100%; height: 100%; display: block; }
+  .piece .p-rank {
+    position: absolute; right: 2px; bottom: 1px; font-size: 7.5px; font-weight: 700;
+    opacity: 0.72; line-height: 1;
+  }
 
   #setup-tray {
     display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px; margin-top: 8px;
@@ -62,8 +68,13 @@
   .tray-btn:active { transform: scale(0.94); }
   .tray-btn.armed { box-shadow: inset 0 0 0 2px var(--accent); }
   .tray-btn.empty { opacity: 0.32; pointer-events: none; }
-  .tray-btn .t-abbr { font-family: var(--font-display); font-weight: 800; font-size: 15px; }
-  .tray-btn .t-count { font-size: 9px; color: var(--muted); font-weight: 700; }
+  .tray-btn .t-icon { width: 52%; position: relative; }
+  .tray-btn .t-icon svg { width: 100%; height: 100%; display: block; color: var(--ink); }
+  .tray-btn .t-rank {
+    position: absolute; right: -7px; bottom: -3px; font-size: 8px; font-weight: 700;
+    color: var(--muted);
+  }
+  .tray-btn .t-count { font-size: 9px; color: var(--muted); font-weight: 700; margin-top: 2px; }
   #setup-actions { display: flex; gap: 6px; margin-top: 8px; }
   #setup-actions button {
     flex: 1; border: none; border-radius: 999px; padding: 10px 0; font-weight: 700;
@@ -167,6 +178,37 @@
     bomb:       { rank: 98, count: 6, name: "Bomb",       abbr: "💣", immobile: true },
     flag:       { rank: 99, count: 1, name: "Flag",       abbr: "🚩", immobile: true }
   };
+
+  // Solid-silhouette class icons (24x24 viewBox, currentColor) — read clearly at small
+  // sizes without relying on the rank digit. Ladder: specialists get a unique glyph,
+  // ranks 4-6 get chevrons, 7-8 get bars, 9-10 get stars (mirrors real rank insignia).
+  // Generates n evenly-spaced "^" chevron strokes, vertically centered in the viewBox.
+  function chevrons(n) {
+    var h = 5, gap = 2.6, spacing = h + gap;
+    var total = h + (n - 1) * spacing;
+    var start = (24 - total) / 2;
+    var s = "";
+    for (var i = 0; i < n; i++) {
+      var apex = start + i * spacing, base = apex + h;
+      s += '<path d="M3.5 ' + base + ' L12 ' + apex + ' L20.5 ' + base + '" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>';
+    }
+    return s;
+  }
+  var ICONS = {
+    spy: '<circle cx="12" cy="8" r="4.2"/><path d="M9.2 11h5.6l2.1 10H7.1z"/>',
+    scout: '<circle cx="7.3" cy="14" r="5.4"/><circle cx="16.7" cy="14" r="5.4"/><rect x="10.3" y="10.6" width="3.4" height="4.6" rx="1"/>',
+    miner: '<rect x="10.9" y="2.4" width="2.2" height="11" rx="1.1"/><path d="M7 13h10v3.4c0 3.7-2.2 6.5-5 7.6-2.8-1.1-5-3.9-5-7.6z"/>',
+    sergeant: chevrons(1),
+    lieutenant: chevrons(2),
+    captain: chevrons(3),
+    major: '<rect x="4" y="10.2" width="16" height="3.8" rx="1.4"/>',
+    colonel: '<rect x="4" y="5.4" width="16" height="3.6" rx="1.4"/><rect x="4" y="15" width="16" height="3.6" rx="1.4"/>',
+    general: '<path d="M12 2.2l2.7 6.7 7.1.6-5.5 4.7 1.7 7-6-3.9-6 3.9 1.7-7-5.5-4.7 7.1-.6z"/>',
+    marshal: '<circle cx="12" cy="12" r="10.2" fill="none" stroke="currentColor" stroke-width="2.1"/><path d="M12 4.6l2.2 5.4 5.7.5-4.4 3.8 1.4 5.6-4.9-3.1-4.9 3.1 1.4-5.6-4.4-3.8 5.7-.5z"/>',
+    bomb: '<circle cx="12" cy="14.5" r="6.2"/><g stroke="currentColor" stroke-width="1.7" stroke-linecap="round" fill="none"><path d="M12 4v2.6"/><path d="M12 3.2l2 1.7M12 3.2l-2 1.7"/><path d="M4.6 8.6l1.9 1.9M19.4 8.6l-1.9 1.9"/></g>',
+    flag: '<rect x="5" y="2" width="2.2" height="20" rx="1.1"/><path d="M7.2 3.4h11.3l-3.1 4 3.1 4H7.2z"/>'
+  };
+  function pieceIcon(type) { return '<span class="p-icon"><svg viewBox="0 0 24 24" fill="currentColor">' + ICONS[type] + '</svg></span>'; }
   var TYPE_ORDER = ["marshal", "general", "colonel", "major", "captain", "lieutenant", "sergeant", "miner", "scout", "spy", "bomb", "flag"];
 
   var board = new Array(N).fill(null);
@@ -459,7 +501,12 @@
   }
 
   // ---- Rendering ----
-  function pieceLabel(p) { return (p.owner === "p1" || p.revealed) ? RANK_DATA[p.type].abbr : "?"; }
+  function pieceContent(p) {
+    if (!(p.owner === "p1" || p.revealed)) return "?";
+    var rd = RANK_DATA[p.type];
+    var rankBadge = rd.rank <= 10 ? '<span class="p-rank">' + rd.rank + '</span>' : "";
+    return pieceIcon(p.type) + rankBadge;
+  }
   function renderBoard() {
     var legal = (phase === "play" && selected != null) ? legalDestinations(selected) : [];
     var legalMap = {};
@@ -475,7 +522,7 @@
       el.className = cls;
       if (p) {
         var known = p.owner === "p1" || p.revealed;
-        el.innerHTML = '<span class="piece ' + p.owner + (p.owner === "p2" ? (known ? " revealed" : " hidden") : "") + '">' + pieceLabel(p) + '</span>';
+        el.innerHTML = '<span class="piece ' + p.owner + (p.owner === "p2" ? (known ? " revealed" : " hidden") : "") + '">' + pieceContent(p) + '</span>';
       } else el.innerHTML = "";
     }
   }
@@ -527,7 +574,9 @@
     TYPE_ORDER.forEach(function (t) {
       var b = document.createElement("button");
       b.className = "tray-btn";
-      b.innerHTML = '<span class="t-abbr">' + RANK_DATA[t].abbr + '</span><span class="t-count"></span>';
+      var rd = RANK_DATA[t];
+      var rankBadge = rd.rank <= 10 ? '<span class="t-rank">' + rd.rank + '</span>' : "";
+      b.innerHTML = '<span class="t-icon"><svg viewBox="0 0 24 24" fill="currentColor">' + ICONS[t] + '</svg>' + rankBadge + '</span><span class="t-count"></span>';
       b.setAttribute("aria-label", RANK_DATA[t].name);
       b.addEventListener("click", function () {
         audio();
