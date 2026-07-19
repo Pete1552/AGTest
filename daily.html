@@ -104,7 +104,7 @@
   <div class="foot-note">Every game scores up to 100 points · the set and puzzles are the same for everyone · new set at midnight</div>
 </div>
 
-<script src="leaderboard.js?v=53"></script>
+<script src="leaderboard.js?v=54"></script>
 <script>
 (function () {
   "use strict";
@@ -115,11 +115,6 @@
   function esc(s) {
     return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; });
   }
-
-  // ---- Per-game daily scoring: raw result -> 0..100 points, sourced from
-  // leaderboard.js so this stays in sync with World Score's totals. ----
-  var GAME_INFO = {};
-  LB.gameList().forEach(function (g) { if (g.pts) GAME_INFO[g.id] = { icon: g.icon, pts: g.pts }; });
 
   // ---- Dates / deterministic set selection ----
   function mulberry32(a) {
@@ -142,10 +137,13 @@
   var TODAY = new Date();
   var DATE = dstr(TODAY);
 
+  var META = {}; LB.gameList().forEach(function (g) { META[g.id] = g; });
+  var GAME_IDS = Object.keys(META).filter(function (id) { return !!META[id].icon; }); // excludes the "daily" aggregate entry
+
   function setForDate(dateStr) {
     var seedBase = Number(dateStr.replace(/-/g, "")) >>> 0;
     var rng = mulberry32(seedBase);
-    var ids = shuffle(Object.keys(GAME_INFO), rng);
+    var ids = shuffle(GAME_IDS.slice(), rng);
     var n = 5 + Math.floor(rng() * 4); // 5..8 games
     return ids.slice(0, n).map(function (id, i) {
       return { id: id, seed: ((seedBase * 131 + i * 9973) % 2147483647) >>> 0 };
@@ -153,7 +151,16 @@
   }
   var SET = setForDate(DATE);
 
-  var META = {}; LB.gameList().forEach(function (g) { META[g.id] = g; });
+  // ---- Per-game scoring: raw result -> 0..100 points, relative to that
+  // game's own current record (see LB.ptsFrom) — fetched once per game in
+  // the set so myTotals()/renderList() can compute points synchronously.
+  var BEST = {};
+  function loadBests() {
+    return Promise.all(SET.map(function (s) {
+      return LB.gameBest(s.id).then(function (v) { BEST[s.id] = v; });
+    }));
+  }
+  function ptsForResult(id, val) { return LB.ptsFrom(META[id].dir, val, BEST[id]); }
 
   // ---- My results (written by leaderboard.js when a game finishes in daily mode) ----
   function myResults() {
@@ -162,7 +169,7 @@
   function myTotals() {
     var r = myResults(), pts = 0, done = 0;
     SET.forEach(function (s) {
-      if (r[s.id] != null) { done++; pts += GAME_INFO[s.id].pts(r[s.id]); }
+      if (r[s.id] != null) { done++; pts += ptsForResult(s.id, r[s.id]); }
     });
     return { pts: pts, done: done };
   }
@@ -245,12 +252,12 @@
     var r = myResults();
     var h = "";
     SET.forEach(function (s) {
-      var info = GAME_INFO[s.id], m = META[s.id];
+      var m = META[s.id];
       var played = r[s.id] != null;
       var resultTxt = played ? "Best: " + m.fmt(r[s.id]) : "Not played yet";
-      var pts = played ? info.pts(r[s.id]) : null;
+      var pts = played ? ptsForResult(s.id, r[s.id]) : null;
       h += '<div class="game-row">' +
-        '<div class="g-icon">' + info.icon + '</div>' +
+        '<div class="g-icon">' + m.icon + '</div>' +
         '<div class="g-info"><div class="g-name">' + esc(m.name) + '</div>' +
           '<div class="g-result">' + esc(resultTxt) + '</div></div>' +
         '<div class="g-pts' + (played ? '' : ' zero') + '">' + (played ? pts + ' pt' + (pts === 1 ? '' : 's') : '—') + '</div>' +
@@ -322,7 +329,7 @@
     }
   }
 
-  function renderAll() { renderHeader(); renderList(); renderSubmit(); renderBoard(); }
+  function renderAll() { loadBests().then(function () { renderHeader(); renderList(); renderSubmit(); renderBoard(); }); }
 
   document.getElementById("tab-today").addEventListener("click", function () {
     tab = "today";

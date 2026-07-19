@@ -47,45 +47,68 @@
   // puzzle instances of different difficulty are comparable on one board.
   function fmtOverPar(v) { return v === 0 ? "Perfect" : "+" + v; }
 
-  // Every game's raw score lives on its own scale (a Fuse run tops out near
-  // 4000, Glean is a %, Sudoku is seconds), so cross-game totals (Daily Set,
-  // World Score) can't sum raw scores directly. `pts` converts a raw value
-  // to a common 0..100 scale — first-pass calibration: ~100 is a
-  // strong-but-reachable result for each game. Single source of truth so
-  // every page that totals across games agrees.
-  function clampPts(x) { return Math.max(0, Math.min(100, Math.round(x))); }
-
   // Per-game rules: dir 'desc' = higher is better, 'asc' = lower is better.
   var GAMES = {
-    blocks: { name: "Blocks", dir: "desc", fmt: function (v) { return String(v); }, icon: "🟦", pts: function (v) { return clampPts(v / 8); } },
-    bloom:  { name: "Bloom",  dir: "asc",  fmt: fmtOverPar, icon: "🌸", pts: function (v) { return clampPts(100 - 12 * v); } },
-    ripple: { name: "Ripple", dir: "asc",  fmt: function (v) { return v + " moves"; }, icon: "💧", pts: function (v) { return clampPts(115 - 3 * v); } },
-    trace:  { name: "Trace",  dir: "asc",  fmt: function (v) { return v + "s"; }, icon: "✏️", pts: function (v) { return clampPts(140 - v); } },
-    fuse:   { name: "Fuse",   dir: "desc", fmt: function (v) { return String(v); }, icon: "🔢", pts: function (v) { return clampPts(v / 40); } },
-    blend:  { name: "Blend",  dir: "asc",  fmt: fmtOverPar, icon: "🌈", pts: function (v) { return clampPts(100 - 8 * v); } },
-    mix:    { name: "Mix",    dir: "desc", fmt: function (v) { return String(v); }, icon: "🎨", pts: function (v) { return clampPts(v / 6); } },
-    sort:   { name: "Sort",   dir: "asc",  fmt: fmtOverPar, icon: "🧪", pts: function (v) { return clampPts(100 - 10 * v); } },
-    tower:  { name: "Tower",  dir: "desc", fmt: function (v) { return String(v); }, icon: "🏙️", pts: function (v) { return clampPts(4 * v); } },
-    defense:{ name: "Defense", dir: "desc", fmt: function (v) { return "Wave " + v; }, icon: "🛡️", pts: function (v) { return clampPts(8 * v); } },
-    lantern:{ name: "Lantern", dir: "asc", fmt: function (v) { return v + "s"; }, icon: "🀄", pts: function (v) { return clampPts(148 - 0.8 * v); } },
-    breaker:{ name: "Breaker", dir: "desc", fmt: function (v) { return String(v); }, icon: "🧱", pts: function (v) { return clampPts(v / 6); } },
-    aegis:  { name: "Aegis",   dir: "desc", fmt: function (v) { return String(v); }, icon: "💥", pts: function (v) { return clampPts(v / 8); } },
-    sweep:  { name: "Sweep",   dir: "asc",  fmt: function (v) { return v + "s"; }, icon: "💣", pts: function (v) { return clampPts(130 - v); } },
-    nibble: { name: "Nibble",  dir: "desc", fmt: function (v) { return String(v); }, icon: "🐍", pts: function (v) { return clampPts(4 * v); } },
-    runway: { name: "Runway",  dir: "asc",  fmt: fmtOverPar, icon: "🛫", pts: function (v) { return clampPts(100 - 12 * v); } },
-    jigsaw: { name: "Jigsaw",  dir: "asc",  fmt: function (v) { return v + "s"; }, icon: "🧩", pts: function (v) { return clampPts(160 - v); } },
-    dodge:  { name: "Dodge",   dir: "desc", fmt: function (v) { return v + "s"; }, icon: "🥎", pts: function (v) { return clampPts(2 * v); } },
-    sudoku: { name: "Sudoku",  dir: "asc",  fmt: function (v) { return v + "s"; }, icon: "9️⃣", pts: function (v) { return clampPts(130 - v / 6); } },
-    silt:   { name: "Silt",    dir: "desc", fmt: function (v) { return String(v); }, icon: "⏳", pts: function (v) { return clampPts(v / 150); } },
-    glean:  { name: "Glean",   dir: "desc", fmt: function (v) { return v + "%"; }, icon: "🌾", pts: function (v) { return clampPts(v); } },
-    orbit:  { name: "Orbit",   dir: "desc", fmt: function (v) { return String(v); }, icon: "🪐", pts: function (v) { return clampPts(v / 15); } },
-    hamlet: { name: "Hamlet",  dir: "desc", fmt: function (v) { return v + " pts"; }, icon: "🏡", pts: function (v) { return clampPts(v / 1.6); } },
-    keystone: { name: "Keystone", dir: "desc", fmt: function (v) { return (v / 10).toFixed(1) + " m"; }, icon: "🏛️", pts: function (v) { return clampPts(v * 2.2); } },
-    kingdom: { name: "Kingdom Tiles", dir: "desc", fmt: function (v) { return v + "/42"; }, icon: "👑", pts: function (v) { return clampPts(v * 100 / 42); } },
-    stratego: { name: "Stratego", dir: "asc", fmt: function (v) { return v + " turns"; }, icon: "🎖️", pts: function (v) { return clampPts(120 - v); } },
+    blocks: { name: "Blocks", dir: "desc", fmt: function (v) { return String(v); }, icon: "🟦" },
+    bloom:  { name: "Bloom",  dir: "asc",  fmt: fmtOverPar, icon: "🌸" },
+    ripple: { name: "Ripple", dir: "asc",  fmt: function (v) { return v + " moves"; }, icon: "💧" },
+    trace:  { name: "Trace",  dir: "asc",  fmt: function (v) { return v + "s"; }, icon: "✏️" },
+    fuse:   { name: "Fuse",   dir: "desc", fmt: function (v) { return String(v); }, icon: "🔢" },
+    blend:  { name: "Blend",  dir: "asc",  fmt: fmtOverPar, icon: "🌈" },
+    mix:    { name: "Mix",    dir: "desc", fmt: function (v) { return String(v); }, icon: "🎨" },
+    sort:   { name: "Sort",   dir: "asc",  fmt: fmtOverPar, icon: "🧪" },
+    tower:  { name: "Tower",  dir: "desc", fmt: function (v) { return String(v); }, icon: "🏙️" },
+    defense:{ name: "Defense", dir: "desc", fmt: function (v) { return "Wave " + v; }, icon: "🛡️" },
+    lantern:{ name: "Lantern", dir: "asc", fmt: function (v) { return v + "s"; }, icon: "🀄" },
+    breaker:{ name: "Breaker", dir: "desc", fmt: function (v) { return String(v); }, icon: "🧱" },
+    aegis:  { name: "Aegis",   dir: "desc", fmt: function (v) { return String(v); }, icon: "💥" },
+    sweep:  { name: "Sweep",   dir: "asc",  fmt: function (v) { return v + "s"; }, icon: "💣" },
+    nibble: { name: "Nibble",  dir: "desc", fmt: function (v) { return String(v); }, icon: "🐍" },
+    runway: { name: "Runway",  dir: "asc",  fmt: fmtOverPar, icon: "🛫" },
+    jigsaw: { name: "Jigsaw",  dir: "asc",  fmt: function (v) { return v + "s"; }, icon: "🧩" },
+    dodge:  { name: "Dodge",   dir: "desc", fmt: function (v) { return v + "s"; }, icon: "🥎" },
+    sudoku: { name: "Sudoku",  dir: "asc",  fmt: function (v) { return v + "s"; }, icon: "9️⃣" },
+    silt:   { name: "Silt",    dir: "desc", fmt: function (v) { return String(v); }, icon: "⏳" },
+    glean:  { name: "Glean",   dir: "desc", fmt: function (v) { return v + "%"; }, icon: "🌾" },
+    orbit:  { name: "Orbit",   dir: "desc", fmt: function (v) { return String(v); }, icon: "🪐" },
+    hamlet: { name: "Hamlet",  dir: "desc", fmt: function (v) { return v + " pts"; }, icon: "🏡" },
+    keystone: { name: "Keystone", dir: "desc", fmt: function (v) { return (v / 10).toFixed(1) + " m"; }, icon: "🏛️" },
+    kingdom: { name: "Kingdom Tiles", dir: "desc", fmt: function (v) { return v + "/42"; }, icon: "👑" },
+    stratego: { name: "Stratego", dir: "asc", fmt: function (v) { return v + " turns"; }, icon: "🎖️" },
     daily:  { name: "Daily Set", dir: "desc", fmt: function (v) { return v + " pts"; } }
   };
   var MAX = 10;
+
+  // Cross-game totals (Daily Set, World Score) score every game relative to
+  // that game's own current record — the record holder always scores 100,
+  // everyone else scores their fraction of it. This replaces a table of
+  // hand-tuned per-game formulas with one rule that updates itself as new
+  // records are set.
+  function clampPts(x) { return Math.max(0, Math.min(100, Math.round(x))); }
+  function ptsFrom(dir, value, best) {
+    if (value == null) return null;
+    if (best == null) return 100; // no record yet — this run *is* the record
+    if (dir === "desc") {
+      if (best <= 0) return value > 0 ? 100 : 0;
+      return clampPts(100 * value / best);
+    }
+    // asc (lower is better): shift by 1 so a record of 0 (e.g. a "perfect"
+    // over-par run) still scores the record holder 100 instead of dividing
+    // by zero, and decays smoothly from there as value grows past best.
+    return clampPts(100 * (best + 1) / (value + 1));
+  }
+  // The record for a game is just rank 1 of its all-time (round-less) board
+  // — top()/sbTop() already sort by the right direction, so rows[0] is it.
+  var bestCache = {};
+  function gameBest(id) {
+    if (bestCache[id]) return bestCache[id];
+    return bestCache[id] = top(id, null).then(function (rows) {
+      return rows.length ? rows[0].score : null;
+    }).catch(function () { return null; });
+  }
+  function pointsFor(id, value) {
+    return gameBest(id).then(function (best) { return ptsFrom(meta(id).dir, value, best); });
+  }
 
   function meta(id) { return GAMES[id] || { name: id, dir: "desc", fmt: String }; }
   function sortBest(id, arr) {
@@ -373,9 +396,12 @@
     isGlobal: isGlobal,
     getConfig: function () { return { url: CFG.url, anonKey: CFG.anonKey }; },
     allRows: allRows,
+    gameBest: gameBest,
+    ptsFrom: ptsFrom,
+    pointsFor: pointsFor,
     gameList: function () {
       return Object.keys(GAMES).map(function (id) {
-        return { id: id, name: GAMES[id].name, dir: GAMES[id].dir, fmt: GAMES[id].fmt, icon: GAMES[id].icon, pts: GAMES[id].pts };
+        return { id: id, name: GAMES[id].name, dir: GAMES[id].dir, fmt: GAMES[id].fmt, icon: GAMES[id].icon };
       });
     }
   };

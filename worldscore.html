@@ -73,7 +73,7 @@
   <div class="foot-note">All-time totals across every game · updates as new high scores come in</div>
 </div>
 
-<script src="leaderboard.js?v=53"></script>
+<script src="leaderboard.js?v=54"></script>
 <script>
 (function () {
   "use strict";
@@ -82,7 +82,7 @@
     return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; });
   }
 
-  var GAMES = LB.gameList().filter(function (g) { return typeof g.pts === "function"; });
+  var GAMES = LB.gameList().filter(function (g) { return typeof g.icon === "string"; });
   var scope = LB.isGlobal() ? "🌍 Global" : "On this device";
   var myName = localStorage.getItem("tranquil_name") || "";
 
@@ -90,8 +90,10 @@
   var boardEl = document.getElementById("board");
 
   // Fetch every game's all-time rows once, compute each name's best raw
-  // score per game, and derive both "my" per-game breakdown and the full
-  // cross-player totals board from that single pass.
+  // score per game, then score everyone relative to that game's own record
+  // (the best recorded run = 100 points — see LB.ptsFrom) and derive both
+  // "my" per-game breakdown and the full cross-player totals board from
+  // that single pass.
   function load() {
     boardEl.innerHTML = '<div class="lb-loading">Loading…</div>';
     document.getElementById("board-title").textContent = scope + " · all-time";
@@ -100,21 +102,22 @@
         .catch(function () { return { game: g, rows: [] }; });
     })).then(function (results) {
       var totals = {};  // name -> { sum, games }
-      var mine = {};    // gameId -> best raw score for myName
+      var mine = {};    // gameId -> { val, pts } for myName
 
       results.forEach(function (r) {
-        var best = {}; // name -> best raw score in this game
+        var best = {}, record = null; // name -> best raw score; record -> the game's own best
         r.rows.forEach(function (row) {
           var n = row.name || "—";
           var better = best[n] == null || (r.game.dir === "asc" ? row.score < best[n] : row.score > best[n]);
           if (better) best[n] = row.score;
+          if (record == null || (r.game.dir === "asc" ? row.score < record : row.score > record)) record = row.score;
         });
         Object.keys(best).forEach(function (n) {
-          var p = r.game.pts(best[n]);
+          var p = LB.ptsFrom(r.game.dir, best[n], record);
           var t = totals[n] || (totals[n] = { sum: 0, games: 0 });
           t.sum += p; t.games++;
+          if (n === myName) mine[r.game.id] = { val: best[n], pts: p };
         });
-        if (myName && best[myName] != null) mine[r.game.id] = best[myName];
       });
 
       var board = Object.keys(totals).map(function (n) {
@@ -128,14 +131,13 @@
   function renderMine(mine) {
     var pts = 0, done = 0, h = "";
     GAMES.forEach(function (g) {
-      var val = mine[g.id];
-      var played = val != null;
-      if (played) { pts += g.pts(val); done++; }
+      var m = mine[g.id], played = m != null;
+      if (played) { pts += m.pts; done++; }
       h += '<div class="game-row">' +
         '<div class="g-icon">' + g.icon + '</div>' +
         '<div class="g-info"><div class="g-name">' + esc(g.name) + '</div>' +
-          '<div class="g-result">' + (played ? "Best: " + esc(g.fmt(val)) : "Not played yet") + '</div></div>' +
-        '<div class="g-pts' + (played ? '' : ' zero') + '">' + (played ? g.pts(val) + ' pt' + (g.pts(val) === 1 ? '' : 's') : '—') + '</div>' +
+          '<div class="g-result">' + (played ? "Best: " + esc(g.fmt(m.val)) : "Not played yet") + '</div></div>' +
+        '<div class="g-pts' + (played ? '' : ' zero') + '">' + (played ? m.pts + ' pt' + (m.pts === 1 ? '' : 's') : '—') + '</div>' +
       '</div>';
     });
     listEl.innerHTML = h;
