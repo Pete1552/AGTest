@@ -82,6 +82,7 @@
     hamlet: { name: "Hamlet",  dir: "desc", fmt: function (v) { return v + " pts"; }, icon: "🏡", pts: function (v) { return clampPts(v / 1.6); } },
     keystone: { name: "Keystone", dir: "desc", fmt: function (v) { return (v / 10).toFixed(1) + " m"; }, icon: "🏛️", pts: function (v) { return clampPts(v * 2.2); } },
     kingdom: { name: "Kingdom Tiles", dir: "desc", fmt: function (v) { return v + "/42"; }, icon: "👑", pts: function (v) { return clampPts(v * 100 / 42); } },
+    stratego: { name: "Stratego", dir: "asc", fmt: function (v) { return v + " turns"; }, icon: "🎖️", pts: function (v) { return clampPts(120 - v); } },
     daily:  { name: "Daily Set", dir: "desc", fmt: function (v) { return v + " pts"; } }
   };
   var MAX = 10;

@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#11151c" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Tranquil" />
+<link rel="apple-touch-icon" href="icon.png" />
+<link rel="icon" href="icon.png" />
+<link rel="manifest" href="manifest.json" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="shared.css" />
+<title>Stratego — Tranquil</title>
+<style>
+  .status-row { text-align: center; color: var(--muted); font-size: 12.5px; min-height: 16px; margin: 2px 0 6px; }
+  .status-row.mine { color: var(--accent); font-weight: 700; }
+  .status-row.theirs { color: #e0857f; font-weight: 700; }
+
+  #board {
+    background: var(--panel); border-radius: 10px; padding: 5px;
+    display: grid; grid-template-columns: repeat(10, 1fr); grid-template-rows: repeat(10, 1fr);
+    gap: 1.5px; touch-action: manipulation; user-select: none; -webkit-user-select: none;
+  }
+  .cell {
+    background: var(--cell-empty); border-radius: 3px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; position: relative;
+  }
+  .cell.lake { background: color-mix(in srgb, #4a7bb0 35%, var(--cell-empty)); cursor: default; }
+  .cell.own-zone { box-shadow: inset 0 0 0 1px rgba(93,214,192,0.12); }
+  .cell.sel { box-shadow: inset 0 0 0 2px var(--accent); }
+  .cell.legal-move::after {
+    content: ""; position: absolute; width: 26%; height: 26%; border-radius: 50%;
+    background: rgba(93,214,192,0.55);
+  }
+  .cell.legal-attack { box-shadow: inset 0 0 0 2px rgba(224,101,95,0.85); }
+
+  .piece {
+    width: 82%; height: 82%; border-radius: 6px; position: relative;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-display); font-weight: 800;
+    font-size: clamp(10px, 3vw, 14px); line-height: 1;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.35);
+  }
+  .piece.p1 { background: linear-gradient(160deg, #6fe6d1, #3fa792); color: #06231e; }
+  .piece.p2.revealed { background: linear-gradient(160deg, #ea9490, #b0524d); color: #2a0e0c; }
+  .piece.p2.hidden { background: linear-gradient(160deg, #8a4a47, #5f302e); color: rgba(255,255,255,0.5); }
+  .piece .p-icon { width: 68%; height: 68%; }
+  .piece .p-icon svg { width: 100%; height: 100%; display: block; }
+  .piece .p-rank {
+    position: absolute; right: 2px; bottom: 1px; font-size: 7.5px; font-weight: 700;
+    opacity: 0.72; line-height: 1;
+  }
+
+  #setup-tray {
+    display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px; margin-top: 8px;
+  }
+  .tray-btn {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+    aspect-ratio: 1; border: none; cursor: pointer; border-radius: 9px;
+    background: var(--panel); box-shadow: 0 2px 8px rgba(0,0,0,0.35);
+    color: var(--ink); transition: transform 100ms ease, opacity 140ms ease;
+  }
+  .tray-btn:active { transform: scale(0.94); }
+  .tray-btn.armed { box-shadow: inset 0 0 0 2px var(--accent); }
+  .tray-btn.empty { opacity: 0.32; pointer-events: none; }
+  .tray-btn .t-icon { width: 52%; position: relative; }
+  .tray-btn .t-icon svg { width: 100%; height: 100%; display: block; color: var(--ink); }
+  .tray-btn .t-rank {
+    position: absolute; right: -7px; bottom: -3px; font-size: 8px; font-weight: 700;
+    color: var(--muted);
+  }
+  .tray-btn .t-count { font-size: 9px; color: var(--muted); font-weight: 700; margin-top: 2px; }
+  #setup-actions { display: flex; gap: 6px; margin-top: 8px; }
+  #setup-actions button {
+    flex: 1; border: none; border-radius: 999px; padding: 10px 0; font-weight: 700;
+    font-size: 12.5px; cursor: pointer; font-family: var(--font-text);
+  }
+  #randomize-btn, #autofill-btn { background: var(--grid); color: var(--ink); }
+  #start-btn { background: var(--accent); color: #06231e; }
+  #start-btn:disabled { opacity: 0.4; pointer-events: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="topbar">
+    <div class="brand">
+      <a href="index.html" class="icon-btn" aria-label="Back to games">‹</a>
+      <span class="title">Stratego</span>
+    </div>
+    <div class="bar-actions">
+      <button id="lb-btn" class="icon-btn" aria-label="High scores">🏆</button>
+      <button id="restart" class="icon-btn" aria-label="New game">↻</button>
+      <button id="settings-btn" class="icon-btn" aria-label="Settings">⚙</button>
+    </div>
+  </header>
+
+  <div class="scores">
+    <div class="score-box"><div class="score-label">Turn</div><div class="score-val" id="turn-count">0</div></div>
+    <div class="score-box"><div class="score-label">Yours</div><div class="score-val" id="mine-left">40</div></div>
+    <div class="score-box"><div class="score-label">Theirs</div><div class="score-val" id="theirs-left">40</div></div>
+    <div class="score-box best"><div class="score-label">Best</div><div class="score-val" id="best">—</div></div>
+  </div>
+
+  <div class="play-area"><div id="board"></div></div>
+  <div class="status-row" id="status">Place your army in your own four rows</div>
+
+  <div id="setup-tray"></div>
+  <div id="setup-actions">
+    <button id="randomize-btn">Randomize all</button>
+    <button id="autofill-btn">Auto-place rest</button>
+    <button id="start-btn" disabled>Start Battle</button>
+  </div>
+</div>
+
+<div id="settings-overlay" class="modal-overlay">
+  <div class="modal settings">
+    <h2>Stratego</h2>
+    <div class="setting-row">
+      <span class="label">Sound</span>
+      <button id="sound-toggle" class="toggle on">On</button>
+    </div>
+    <div class="how">
+      <p class="how-title">How to play</p>
+      <p class="body">Classic Stratego against the computer. You each command 40 pieces: ranks <b>1</b> (Spy) through <b>10</b> (Marshal), six <b>Bombs</b>, and the <b>Flag</b> — all hidden from your opponent until they fight. Tap a piece type below, then tap an empty cell in your own four rows to place it (tap a placed piece to pick it back up); <b>Randomize all</b> or <b>Auto-place rest</b> saves you the trouble. Once every piece is down, tap <b>Start Battle</b>. On your turn, tap one of your pieces to see where it can go, then tap a highlighted cell to move or attack — most pieces step one square, but the <b>Scout</b> (2) can dash any distance in a straight line. Whichever rank is higher wins a fight, and both pieces are revealed either way, win or lose. Two exceptions: the <b>Spy</b> can defeat the <b>Marshal</b>, but only if the Spy is the one attacking — the Marshal still wins if it attacks the Spy. And only a <b>Miner</b> (3) can safely clear a <b>Bomb</b>; anyone else who attacks one is destroyed instead. Capture the enemy Flag, or leave them with no piece able to move at all, and you win. Your score is how many turns the win took — fewer is better.</p>
+    </div>
+    <button id="settings-share" class="share">Share the game</button>
+    <button id="settings-close" class="ghost-btn">Done</button>
+    <div class="version-tag" id="app-version"></div>
+  </div>
+</div>
+
+<div id="lose-overlay" class="modal-overlay">
+  <div class="modal">
+    <h2>Defeated</h2>
+    <div class="final-sub" id="lose-sub"></div>
+    <button id="lose-again">Play again</button>
+    <button id="lose-home" class="share">Home</button>
+    <button id="lose-close" class="ghost-btn">Close</button>
+  </div>
+</div>
+
+<script src="leaderboard.js?v=53"></script>
+<script>
+(function () {
+  "use strict";
+
+  var muted = localStorage.getItem("tranquil_muted") === "1";
+  var SIZE = 10, N = 100;
+  function idx(r, c) { return r * SIZE + c; }
+  function rowOf(i) { return (i / SIZE) | 0; }
+  function colOf(i) { return i % SIZE; }
+  function inBounds(r, c) { return r >= 0 && r < SIZE && c >= 0 && c < SIZE; }
+
+  // two 2x2 lakes, standard position: rows 4-5, columns 2-3 and 6-7
+  var LAKES = {};
+  [4, 5].forEach(function (r) { [2, 3, 6, 7].forEach(function (c) { LAKES[idx(r, c)] = true; }); });
+  function isLake(i) { return !!LAKES[i]; }
+
+  var OWN_ZONE_START = 60; // rows 6-9 are the human's own territory
+  function inOwnZone(i) { return i >= OWN_ZONE_START; }
+
+  var RANK_DATA = {
+    marshal:    { rank: 10, count: 1, name: "Marshal",    abbr: "10" },
+    general:    { rank: 9,  count: 1, name: "General",    abbr: "9"  },
+    colonel:    { rank: 8,  count: 2, name: "Colonel",    abbr: "8"  },
+    major:      { rank: 7,  count: 3, name: "Major",      abbr: "7"  },
+    captain:    { rank: 6,  count: 4, name: "Captain",    abbr: "6"  },
+    lieutenant: { rank: 5,  count: 4, name: "Lieutenant", abbr: "5"  },
+    sergeant:   { rank: 4,  count: 4, name: "Sergeant",   abbr: "4"  },
+    miner:      { rank: 3,  count: 5, name: "Miner",      abbr: "3"  },
+    scout:      { rank: 2,  count: 8, name: "Scout",      abbr: "2"  },
+    spy:        { rank: 1,  count: 1, name: "Spy",        abbr: "1"  },
+    bomb:       { rank: 98, count: 6, name: "Bomb",       abbr: "💣", immobile: true },
+    flag:       { rank: 99, count: 1, name: "Flag",       abbr: "🚩", immobile: true }
+  };
+
+  // Solid-silhouette class icons (24x24 viewBox, currentColor) — read clearly at small
+  // sizes without relying on the rank digit. Ladder: specialists get a unique glyph,
+  // ranks 4-6 get chevrons, 7-8 get bars, 9-10 get stars (mirrors real rank insignia).
+  // Generates n evenly-spaced "^" chevron strokes, vertically centered in the viewBox.
+  function chevrons(n) {
+    var h = 5, gap = 2.6, spacing = h + gap;
+    var total = h + (n - 1) * spacing;
+    var start = (24 - total) / 2;
+    var s = "";
+    for (var i = 0; i < n; i++) {
+      var apex = start + i * spacing, base = apex + h;
+      s += '<path d="M3.5 ' + base + ' L12 ' + apex + ' L20.5 ' + base + '" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>';
+    }
+    return s;
+  }
+  var ICONS = {
+    spy: '<circle cx="12" cy="8" r="4.2"/><path d="M9.2 11h5.6l2.1 10H7.1z"/>',
+    scout: '<circle cx="7.3" cy="14" r="5.4"/><circle cx="16.7" cy="14" r="5.4"/><rect x="10.3" y="10.6" width="3.4" height="4.6" rx="1"/>',
+    miner: '<rect x="10.9" y="2.4" width="2.2" height="11" rx="1.1"/><path d="M7 13h10v3.4c0 3.7-2.2 6.5-5 7.6-2.8-1.1-5-3.9-5-7.6z"/>',
+    sergeant: chevrons(1),
+    lieutenant: chevrons(2),
+    captain: chevrons(3),
+    major: '<rect x="4" y="10.2" width="16" height="3.8" rx="1.4"/>',
+    colonel: '<rect x="4" y="5.4" width="16" height="3.6" rx="1.4"/><rect x="4" y="15" width="16" height="3.6" rx="1.4"/>',
+    general: '<path d="M12 2.2l2.7 6.7 7.1.6-5.5 4.7 1.7 7-6-3.9-6 3.9 1.7-7-5.5-4.7 7.1-.6z"/>',
+    marshal: '<circle cx="12" cy="12" r="10.2" fill="none" stroke="currentColor" stroke-width="2.1"/><path d="M12 4.6l2.2 5.4 5.7.5-4.4 3.8 1.4 5.6-4.9-3.1-4.9 3.1 1.4-5.6-4.4-3.8 5.7-.5z"/>',
+    bomb: '<circle cx="12" cy="14.5" r="6.2"/><g stroke="currentColor" stroke-width="1.7" stroke-linecap="round" fill="none"><path d="M12 4v2.6"/><path d="M12 3.2l2 1.7M12 3.2l-2 1.7"/><path d="M4.6 8.6l1.9 1.9M19.4 8.6l-1.9 1.9"/></g>',
+    flag: '<rect x="5" y="2" width="2.2" height="20" rx="1.1"/><path d="M7.2 3.4h11.3l-3.1 4 3.1 4H7.2z"/>'
+  };
+  function pieceIcon(type) { return '<span class="p-icon"><svg viewBox="0 0 24 24" fill="currentColor">' + ICONS[type] + '</svg></span>'; }
+  var TYPE_ORDER = ["marshal", "general", "colonel", "major", "captain", "lieutenant", "sergeant", "miner", "scout", "spy", "bomb", "flag"];
+
+  var board = new Array(N).fill(null);
+  var remaining = {}; // human's un-placed counts during setup
+  var armed = null;
+  var phase = "setup"; // "setup" | "play" | "over"
+  var turn = "p1";
+  var selected = null;
+  var turnCount = 0;
+
+  var boardEl = document.getElementById("board");
+  var playArea = document.querySelector(".play-area");
+  var statusEl = document.getElementById("status");
+  var trayEl = document.getElementById("setup-tray");
+  var actionsEl = document.getElementById("setup-actions");
+  var turnCountEl = document.getElementById("turn-count");
+  var mineLeftEl = document.getElementById("mine-left");
+  var theirsLeftEl = document.getElementById("theirs-left");
+  var bestEl = document.getElementById("best");
+  var cellEls = new Array(N);
+
+  // ---- Sound ----
+  var actx = null;
+  function audio() {
+    if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { actx = null; } }
+    if (actx && actx.state === "suspended") actx.resume();
+  }
+  function tone(f, d, t, g) {
+    if (muted || !actx) return;
+    var o = actx.createOscillator(), gn = actx.createGain();
+    o.type = t || "sine"; o.frequency.value = f;
+    gn.gain.setValueAtTime(0.0001, actx.currentTime);
+    gn.gain.exponentialRampToValueAtTime(g || 0.1, actx.currentTime + 0.01);
+    gn.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + d);
+    o.connect(gn); gn.connect(actx.destination); o.start(); o.stop(actx.currentTime + d + 0.02);
+  }
+  function sfxPlace() { tone(480, 0.05, "sine", 0.06); }
+  function sfxErase() { tone(320, 0.05, "sine", 0.05); }
+  function sfxSelect() { tone(600, 0.05, "sine", 0.05); }
+  function sfxMove() { tone(440, 0.06, "triangle", 0.06); }
+  function sfxWinFight() { tone(660, 0.05, "square", 0.06); setTimeout(function () { tone(880, 0.06, "square", 0.05); }, 60); }
+  function sfxLoseFight() { tone(260, 0.09, "sawtooth", 0.06); }
+  function sfxWin() { [523.25, 659.25, 783.99, 1046.5].forEach(function (f, i) { setTimeout(function () { tone(f, 0.35, "sine", 0.12); }, i * 100); }); }
+  function sfxLose() { [330, 247, 175].forEach(function (f, i) { setTimeout(function () { tone(f, 0.3, "sine", 0.09); }, i * 130); }); }
+
+  // ---- Movement ----
+  function legalDestinations(i) {
+    var p = board[i];
+    if (!p || RANK_DATA[p.type].immobile) return [];
+    var r = rowOf(i), c = colOf(i);
+    var dirs = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+    var dests = [];
+    if (p.type === "scout") {
+      dirs.forEach(function (d) {
+        var rr = r + d[0], cc = c + d[1];
+        while (inBounds(rr, cc)) {
+          var j = idx(rr, cc);
+          if (isLake(j)) break;
+          if (!board[j]) { dests.push({ to: j, attack: false }); rr += d[0]; cc += d[1]; continue; }
+          if (board[j].owner !== p.owner) dests.push({ to: j, attack: true });
+          break;
+        }
+      });
+    } else {
+      dirs.forEach(function (d) {
+        var rr = r + d[0], cc = c + d[1];
+        if (!inBounds(rr, cc)) return;
+        var j = idx(rr, cc);
+        if (isLake(j)) return;
+        if (!board[j]) dests.push({ to: j, attack: false });
+        else if (board[j].owner !== p.owner) dests.push({ to: j, attack: true });
+      });
+    }
+    return dests;
+  }
+  function anyLegalMoves(owner) {
+    for (var i = 0; i < N; i++) { var p = board[i]; if (p && p.owner === owner && legalDestinations(i).length) return true; }
+    return false;
+  }
+  function countRemaining(owner) { var n = 0; for (var i = 0; i < N; i++) if (board[i] && board[i].owner === owner) n++; return n; }
+
+  // ---- Combat ----
+  // returns "attacker" | "defender" | "tie"
+  function fight(attacker, defender) {
+    if (defender.type === "flag") return "attacker";
+    if (defender.type === "bomb") return attacker.type === "miner" ? "attacker" : "defender";
+    if (attacker.type === "spy" && defender.type === "marshal") return "attacker";
+    var ar = RANK_DATA[attacker.type].rank, dr = RANK_DATA[defender.type].rank;
+    if (ar === dr) return "tie";
+    return ar > dr ? "attacker" : "defender";
+  }
+  function doMove(i, dest) {
+    var p = board[i];
+    var capturedFlag = false, fightResult = null;
+    if (dest.attack) {
+      var target = board[dest.to];
+      fightResult = fight(p, target);
+      p.revealed = true; target.revealed = true;
+      if (target.type === "flag" && fightResult === "attacker") capturedFlag = true;
+      if (fightResult === "attacker") { board[dest.to] = p; board[i] = null; }
+      else if (fightResult === "defender") { board[i] = null; }
+      else { board[i] = null; board[dest.to] = null; }
+    } else {
+      board[dest.to] = p; board[i] = null;
+    }
+    return { capturedFlag: capturedFlag, fightResult: fightResult, attackerOwner: p.owner };
+  }
+
+  // ---- Setup phase ----
+  function resetRemaining() {
+    remaining = {};
+    TYPE_ORDER.forEach(function (t) { remaining[t] = RANK_DATA[t].count; });
+  }
+  function setupDone() { return TYPE_ORDER.every(function (t) { return remaining[t] === 0; }); }
+  function ownEmptyCells() {
+    var out = [];
+    for (var i = OWN_ZONE_START; i < N; i++) if (!isLake(i) && !board[i]) out.push(i);
+    return out;
+  }
+  function shuffle(arr) {
+    var a = arr.slice();
+    for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var t = a[i]; a[i] = a[j]; a[j] = t; }
+    return a;
+  }
+  function handleSetupClick(i) {
+    if (!inOwnZone(i) || isLake(i)) return;
+    var p = board[i];
+    if (p) { remaining[p.type]++; board[i] = null; sfxErase(); renderAll(); return; }
+    if (!armed || remaining[armed] <= 0) return;
+    board[i] = { type: armed, owner: "p1", revealed: false };
+    remaining[armed]--;
+    if (remaining[armed] <= 0) armed = null;
+    sfxPlace();
+    renderAll();
+  }
+  function autofillRemaining() {
+    var pool = [];
+    TYPE_ORDER.forEach(function (t) { for (var k = 0; k < remaining[t]; k++) pool.push(t); });
+    var cells = shuffle(ownEmptyCells());
+    pool = shuffle(pool);
+    for (var i = 0; i < pool.length && i < cells.length; i++) {
+      board[cells[i]] = { type: pool[i], owner: "p1", revealed: false };
+      remaining[pool[i]]--;
+    }
+    armed = null;
+    sfxPlace();
+    renderAll();
+  }
+  function randomizeAll() {
+    for (var i = OWN_ZONE_START; i < N; i++) if (!isLake(i)) board[i] = null;
+    resetRemaining();
+    autofillRemaining();
+  }
+  // Mirrors the human's setup: flag tucked in the back row, a defensive
+  // knot of bombs around it, everything else shuffled in behind that.
+  function aiPlace() {
+    var counts = {};
+    TYPE_ORDER.forEach(function (t) { counts[t] = RANK_DATA[t].count; });
+    var backRow = shuffle([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    var flagCol = backRow[0];
+    var flagCell = idx(0, flagCol);
+    board[flagCell] = { type: "flag", owner: "p2", revealed: false };
+    counts.flag--;
+    var neighbors = [[0, flagCol - 1], [0, flagCol + 1], [1, flagCol]]
+      .filter(function (rc) { return inBounds(rc[0], rc[1]); })
+      .map(function (rc) { return idx(rc[0], rc[1]); })
+      .filter(function (j) { return !isLake(j) && !board[j]; });
+    shuffle(neighbors).forEach(function (j) {
+      if (counts.bomb > 0) { board[j] = { type: "bomb", owner: "p2", revealed: false }; counts.bomb--; }
+    });
+    var pool = [];
+    TYPE_ORDER.forEach(function (t) { for (var k = 0; k < counts[t]; k++) pool.push(t); });
+    pool = shuffle(pool);
+    var empties = [];
+    for (var i = 0; i < OWN_ZONE_START; i++) if (i < 40 && !isLake(i) && !board[i]) empties.push(i);
+    empties = shuffle(empties);
+    for (var pi = 0; pi < pool.length && pi < empties.length; pi++) {
+      board[empties[pi]] = { type: pool[pi], owner: "p2", revealed: false };
+    }
+  }
+  function startBattle() {
+    if (!setupDone()) return;
+    aiPlace();
+    phase = "play"; turn = "p1"; turnCount = 0; selected = null;
+    actionsEl.style.display = "none"; trayEl.style.display = "none";
+    renderAll();
+  }
+
+  // ---- AI turn ----
+  // 1-ply lookahead: would any *already-revealed* human piece be able to legally
+  // capture the AI's piece at toIdx next turn? Only considers revealed pieces —
+  // the AI never peeks at hidden human ranks, so this can't "cheat".
+  function wouldExposeToCapture(fromIdx, toIdx, revealedAfter) {
+    var origFrom = board[fromIdx], origTo = board[toIdx];
+    board[fromIdx] = null;
+    board[toIdx] = { type: origFrom.type, owner: "p2", revealed: revealedAfter };
+    var danger = false;
+    for (var i = 0; i < N && !danger; i++) {
+      var q = board[i];
+      if (!q || q.owner !== "p1" || !q.revealed) continue;
+      var dests = legalDestinations(i);
+      for (var k = 0; k < dests.length; k++) {
+        if (dests[k].attack && dests[k].to === toIdx) { danger = true; break; }
+      }
+    }
+    board[fromIdx] = origFrom;
+    board[toIdx] = origTo;
+    return danger;
+  }
+  function scoreMove(i, d) {
+    var p = board[i];
+    if (!d.attack) {
+      var rr = rowOf(d.to), r = rowOf(i);
+      var base = (rr - r) * 0.3 + Math.random() * 0.4;
+      if (wouldExposeToCapture(i, d.to, p.revealed)) base -= 4 + RANK_DATA[p.type].rank;
+      return base;
+    }
+    var target = board[d.to];
+    if (target.revealed) {
+      var outcome = fight(p, target);
+      if (outcome === "attacker") {
+        var s = 6 + Math.random();
+        if (wouldExposeToCapture(i, d.to, true)) s -= 4 + RANK_DATA[p.type].rank;
+        return s;
+      }
+      if (outcome === "tie") return -1 + Math.random() * 0.5;
+      return -8;
+    }
+    var rank = RANK_DATA[p.type].rank;
+    if (p.type === "miner") return 3 + Math.random();
+    if (p.type === "spy") return 1 + Math.random() * 0.5;
+    if (rank <= 4) return 2.5 + Math.random();
+    if (rank <= 7) return 0.5 + Math.random() * 0.6;
+    return -3 + Math.random() * 0.5;
+  }
+  function aiTurn() {
+    var candidates = [];
+    for (var i = 0; i < N; i++) {
+      var p = board[i];
+      if (!p || p.owner !== "p2") continue;
+      legalDestinations(i).forEach(function (d) { candidates.push({ from: i, dest: d, score: scoreMove(i, d) }); });
+    }
+    if (!candidates.length) { endGame("p1"); return; }
+    candidates.sort(function (a, b) { return b.score - a.score; });
+    var choice = candidates[0];
+    var res = doMove(choice.from, choice.dest);
+    turnCount++;
+    if (res.fightResult) { if (res.fightResult === "attacker" && res.attackerOwner === "p2") sfxLoseFight(); else sfxWinFight(); }
+    else sfxMove();
+    renderAll();
+    if (res.capturedFlag) { endGame("p2"); return; }
+    turn = "p1";
+    if (!anyLegalMoves("p1")) { endGame("p2"); return; }
+    renderAll();
+  }
+
+  // ---- Human play input ----
+  function handlePlayClick(i) {
+    if (turn !== "p1") return;
+    var p = board[i];
+    if (selected == null) {
+      if (p && p.owner === "p1" && legalDestinations(i).length) { selected = i; sfxSelect(); renderAll(); }
+      return;
+    }
+    if (i === selected) { selected = null; renderAll(); return; }
+    if (p && p.owner === "p1") {
+      selected = legalDestinations(i).length ? i : null;
+      sfxSelect(); renderAll();
+      return;
+    }
+    var dests = legalDestinations(selected);
+    var match = null;
+    for (var k = 0; k < dests.length; k++) if (dests[k].to === i) { match = dests[k]; break; }
+    if (!match) return;
+    var fromIdx = selected;
+    selected = null;
+    var res = doMove(fromIdx, match);
+    turnCount++;
+    if (res.fightResult) { if (res.fightResult === "attacker") sfxWinFight(); else sfxLoseFight(); }
+    else sfxMove();
+    renderAll();
+    if (res.capturedFlag) { endGame("p1"); return; }
+    if (!anyLegalMoves("p2")) { endGame("p1"); return; }
+    turn = "p2";
+    statusEl.textContent = "The enemy is thinking…";
+    renderAll();
+    setTimeout(aiTurn, 650);
+  }
+
+  function onCellClick(i) {
+    if (phase === "setup") handleSetupClick(i);
+    else if (phase === "play") handlePlayClick(i);
+  }
+
+  // ---- End of game ----
+  function endGame(winner) {
+    phase = "over";
+    renderAll();
+    if (winner === "p1") {
+      sfxWin();
+      var prevBest = Number(localStorage.getItem("tranquil_stratego_best") || 0) || 0;
+      if (prevBest === 0 || turnCount < prevBest) localStorage.setItem("tranquil_stratego_best", String(turnCount));
+      setTimeout(function () {
+        LB.finish({
+          game: "stratego", value: turnCount, resultTitle: "Victory!",
+          subtitle: "Won in " + turnCount + " turns", onPlayAgain: newGame
+        });
+      }, 500);
+    } else {
+      sfxLose();
+      setTimeout(function () {
+        document.getElementById("lose-sub").textContent = "The enemy took it in " + turnCount + " turns.";
+        document.getElementById("lose-overlay").classList.add("show");
+      }, 500);
+    }
+  }
+
+  // ---- Rendering ----
+  function pieceContent(p) {
+    if (!(p.owner === "p1" || p.revealed)) return "?";
+    var rd = RANK_DATA[p.type];
+    var rankBadge = rd.rank <= 10 ? '<span class="p-rank">' + rd.rank + '</span>' : "";
+    return pieceIcon(p.type) + rankBadge;
+  }
+  function renderBoard() {
+    var legal = (phase === "play" && selected != null) ? legalDestinations(selected) : [];
+    var legalMap = {};
+    legal.forEach(function (d) { legalMap[d.to] = d.attack ? "attack" : "move"; });
+    for (var i = 0; i < N; i++) {
+      var el = cellEls[i], p = board[i];
+      var cls = "cell";
+      if (isLake(i)) cls += " lake";
+      else if (phase === "setup" && inOwnZone(i)) cls += " own-zone";
+      if (i === selected) cls += " sel";
+      if (legalMap[i] === "move") cls += " legal-move";
+      if (legalMap[i] === "attack") cls += " legal-attack";
+      el.className = cls;
+      if (p) {
+        var known = p.owner === "p1" || p.revealed;
+        el.innerHTML = '<span class="piece ' + p.owner + (p.owner === "p2" ? (known ? " revealed" : " hidden") : "") + '">' + pieceContent(p) + '</span>';
+      } else el.innerHTML = "";
+    }
+  }
+  function renderTray() {
+    if (phase !== "setup") return;
+    var kids = trayEl.children;
+    TYPE_ORDER.forEach(function (t, i) {
+      var btn = kids[i];
+      btn.classList.toggle("armed", armed === t);
+      btn.classList.toggle("empty", remaining[t] <= 0);
+      btn.querySelector(".t-count").textContent = remaining[t];
+    });
+    document.getElementById("start-btn").disabled = !setupDone();
+  }
+  function renderStatus() {
+    if (phase === "setup") {
+      var left = TYPE_ORDER.reduce(function (s, t) { return s + remaining[t]; }, 0);
+      statusEl.textContent = left > 0 ? left + " pieces left to place" : "All placed — tap Start Battle";
+      statusEl.className = "status-row";
+    } else if (phase === "play") {
+      if (turn === "p1") { statusEl.textContent = "Your turn — tap a piece to move it"; statusEl.className = "status-row mine"; }
+      else { statusEl.textContent = "The enemy is thinking…"; statusEl.className = "status-row theirs"; }
+    } else {
+      statusEl.textContent = "Game over";
+      statusEl.className = "status-row";
+    }
+  }
+  function renderAll() {
+    renderBoard();
+    renderTray();
+    renderStatus();
+    turnCountEl.textContent = String(turnCount);
+    mineLeftEl.textContent = String(countRemaining("p1"));
+    theirsLeftEl.textContent = String(countRemaining("p2"));
+  }
+
+  function buildBoard() {
+    boardEl.innerHTML = "";
+    for (var i = 0; i < N; i++) {
+      var d = document.createElement("div");
+      d.className = "cell";
+      (function (ii) { d.addEventListener("pointerdown", function (e) { e.preventDefault(); audio(); onCellClick(ii); }); })(i);
+      boardEl.appendChild(d);
+      cellEls[i] = d;
+    }
+  }
+  function buildTray() {
+    trayEl.innerHTML = "";
+    TYPE_ORDER.forEach(function (t) {
+      var b = document.createElement("button");
+      b.className = "tray-btn";
+      var rd = RANK_DATA[t];
+      var rankBadge = rd.rank <= 10 ? '<span class="t-rank">' + rd.rank + '</span>' : "";
+      b.innerHTML = '<span class="t-icon"><svg viewBox="0 0 24 24" fill="currentColor">' + ICONS[t] + '</svg>' + rankBadge + '</span><span class="t-count"></span>';
+      b.setAttribute("aria-label", RANK_DATA[t].name);
+      b.addEventListener("click", function () {
+        audio();
+        armed = (armed === t) ? null : t;
+        sfxSelect();
+        renderAll();
+      });
+      trayEl.appendChild(b);
+    });
+  }
+
+  function updateBestLabel() {
+    var v = Number(localStorage.getItem("tranquil_stratego_best") || 0) || 0;
+    bestEl.textContent = v ? v + " turns" : "—";
+  }
+  function newGame() {
+    board = new Array(N).fill(null);
+    resetRemaining();
+    armed = null; phase = "setup"; turn = "p1"; selected = null; turnCount = 0;
+    actionsEl.style.display = "flex"; trayEl.style.display = "grid";
+    document.getElementById("lose-overlay").classList.remove("show");
+    updateBestLabel();
+    renderAll();
+  }
+
+  // ---- Board auto-sizing (largest square that fits) ----
+  function sizeBoard() {
+    var r = playArea.getBoundingClientRect();
+    var s = Math.max(0, Math.floor(Math.min(r.width, r.height)));
+    boardEl.style.width = s + "px";
+    boardEl.style.height = s + "px";
+  }
+  window.addEventListener("resize", sizeBoard);
+  window.addEventListener("orientationchange", function () { setTimeout(sizeBoard, 150); });
+
+  // ---- Settings / sound ----
+  function updateSoundToggle() { document.getElementById("sound-toggle").textContent = muted ? "Off" : "On"; document.getElementById("sound-toggle").classList.toggle("on", !muted); }
+  async function shareGame() {
+    var text = "Stratego — classic hidden-army strategy vs the computer, no ads. Play it:";
+    var url = "https://pete1552.github.io/AGTest/";
+    try { if (navigator.share) { await navigator.share({ title: "Stratego — Tranquil", text: text, url: url }); return; } } catch (e) { return; }
+    try {
+      await navigator.clipboard.writeText(text + " " + url);
+      var b = document.getElementById("settings-share"), old = b.textContent; b.textContent = "Link copied!";
+      setTimeout(function () { b.textContent = old; }, 1500);
+    } catch (e) {}
+  }
+  document.getElementById("sound-toggle").addEventListener("click", function () {
+    muted = !muted; localStorage.setItem("tranquil_muted", muted ? "1" : "0"); updateSoundToggle();
+    if (!muted) { audio(); tone(520, 0.06, "sine", 0.07); }
+  });
+  document.getElementById("settings-btn").addEventListener("click", function () { updateSoundToggle(); document.getElementById("settings-overlay").classList.add("show"); });
+  document.getElementById("settings-close").addEventListener("click", function () { document.getElementById("settings-overlay").classList.remove("show"); });
+  document.getElementById("settings-overlay").addEventListener("click", function (e) { if (e.target === e.currentTarget) e.currentTarget.classList.remove("show"); });
+  document.getElementById("settings-share").addEventListener("click", shareGame);
+  document.getElementById("lb-btn").addEventListener("click", function () { LB.open("stratego"); });
+  document.getElementById("restart").addEventListener("click", newGame);
+  document.getElementById("randomize-btn").addEventListener("click", function () { audio(); randomizeAll(); });
+  document.getElementById("autofill-btn").addEventListener("click", function () { audio(); autofillRemaining(); });
+  document.getElementById("start-btn").addEventListener("click", function () { audio(); startBattle(); });
+  document.getElementById("lose-again").addEventListener("click", function () { document.getElementById("lose-overlay").classList.remove("show"); newGame(); });
+  document.getElementById("lose-home").addEventListener("click", function () { location.href = "index.html"; });
+  document.getElementById("lose-close").addEventListener("click", function () { document.getElementById("lose-overlay").classList.remove("show"); });
+
+  // ---- iOS touch/gesture hardening ----
+  document.addEventListener("gesturestart", function (e) { e.preventDefault(); });
+  var lastTouchEnd = 0;
+  document.addEventListener("touchend", function (e) { var n = Date.now(); if (n - lastTouchEnd <= 320) e.preventDefault(); lastTouchEnd = n; }, { passive: false });
+
+  // test hook for scripted play (harmless in production)
+  window.__st = {
+    state: function () {
+      return {
+        phase: phase, turn: turn, turnCount: turnCount, armed: armed, selected: selected,
+        remaining: Object.assign({}, remaining),
+        mine: countRemaining("p1"), theirs: countRemaining("p2"),
+        board: board.map(function (p) { return p ? { type: p.type, owner: p.owner, revealed: p.revealed } : null; })
+      };
+    },
+    click: function (i) { onCellClick(i); },
+    arm: function (t) { armed = t; renderAll(); },
+    autofill: autofillRemaining,
+    randomize: randomizeAll,
+    start: startBattle,
+    legalDestinations: legalDestinations
+  };
+
+  // ---- Boot ----
+  buildBoard();
+  buildTray();
+  updateSoundToggle();
+  newGame();
+  sizeBoard();
+  requestAnimationFrame(sizeBoard);
+  setTimeout(sizeBoard, 300);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(sizeBoard);
+})();
+</script>
+</body>
+</html>
