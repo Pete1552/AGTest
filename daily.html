@@ -104,7 +104,7 @@
   <div class="foot-note">Every game scores up to 100 points · the set and puzzles are the same for everyone · new set at midnight</div>
 </div>
 
-<script src="leaderboard.js?v=52"></script>
+<script src="leaderboard.js?v=53"></script>
 <script>
 (function () {
   "use strict";
@@ -116,36 +116,10 @@
     return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; });
   }
 
-  // ---- Per-game daily scoring: raw result -> 0..100 points. First-pass
-  // calibration: ~100 is a strong-but-reachable result for each game. ----
-  function clampPts(x) { return Math.max(0, Math.min(100, Math.round(x))); }
-  var GAME_INFO = {
-    blocks: { icon: "🟦", pts: function (v) { return clampPts(v / 8); } },        // 800 score
-    bloom:  { icon: "🌸", pts: function (v) { return clampPts(100 - 12 * v); } }, // over-par
-    ripple: { icon: "💧", pts: function (v) { return clampPts(115 - 3 * v); } },  // ~5 moves
-    trace:  { icon: "✏️", pts: function (v) { return clampPts(140 - v); } },      // ≤40s
-    fuse:   { icon: "🔢", pts: function (v) { return clampPts(v / 40); } },       // 4000 score
-    blend:  { icon: "🌈", pts: function (v) { return clampPts(100 - 8 * v); } },  // over-par
-    mix:    { icon: "🎨", pts: function (v) { return clampPts(v / 6); } },        // 600 max
-    sort:   { icon: "🧪", pts: function (v) { return clampPts(100 - 10 * v); } }, // over-par
-    tower:  { icon: "🏙️", pts: function (v) { return clampPts(4 * v); } },        // 25 high
-    defense:{ icon: "🛡️", pts: function (v) { return clampPts(8 * v); } },        // wave 13
-    lantern:{ icon: "🀄", pts: function (v) { return clampPts(148 - 0.8 * v); } },// ≤60s
-    breaker:{ icon: "🧱", pts: function (v) { return clampPts(v / 6); } },        // 600 score
-    aegis:  { icon: "💥", pts: function (v) { return clampPts(v / 8); } },        // 800 score
-    sweep:  { icon: "💣", pts: function (v) { return clampPts(130 - v); } },      // ≤30s
-    nibble: { icon: "🐍", pts: function (v) { return clampPts(4 * v); } },        // 25 dots
-    runway: { icon: "🛫", pts: function (v) { return clampPts(100 - 12 * v); } }, // over-par
-    jigsaw: { icon: "🧩", pts: function (v) { return clampPts(160 - v); } },      // ≤60s
-    dodge:  { icon: "🥎", pts: function (v) { return clampPts(2 * v); } },        // 50s survived
-    sudoku: { icon: "9️⃣", pts: function (v) { return clampPts(130 - v / 6); } },  // ≤3min = 100, 13min = 0
-    silt:   { icon: "⏳", pts: function (v) { return clampPts(v / 150); } },       // 15k sand score
-    glean:  { icon: "🌾", pts: function (v) { return clampPts(v); } },             // % found maps directly
-    orbit:  { icon: "🪐", pts: function (v) { return clampPts(v / 15); } },        // 1500 merge score
-    hamlet: { icon: "🏡", pts: function (v) { return clampPts(v / 1.6); } },       // 160 village points
-
-    keystone: { icon: "🏛️", pts: function (v) { return clampPts(v * 2.2); } }      // ~4.5 m tower
-  };
+  // ---- Per-game daily scoring: raw result -> 0..100 points, sourced from
+  // leaderboard.js so this stays in sync with World Score's totals. ----
+  var GAME_INFO = {};
+  LB.gameList().forEach(function (g) { if (g.pts) GAME_INFO[g.id] = { icon: g.icon, pts: g.pts }; });
 
   // ---- Dates / deterministic set selection ----
   function mulberry32(a) {
